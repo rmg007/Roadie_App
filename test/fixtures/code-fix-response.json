@@ -1,0 +1,10 @@
+{
+  "intent": "bug_fix",
+  "step": "generate_fix",
+  "targetFile": "src/auth/login.ts",
+  "startLine": 40,
+  "endLine": 45,
+  "originalCode": "const user = await fetchUser(token);\nconsole.log(user.id);",
+  "fixedCode": "const user = await fetchUser(token);\nif (!user) {\n  throw new RoadieError({ code: 'USER_NOT_FOUND', category: 'validation', userFacing: true, message: 'Session expired. Please log in again.' });\n}\nconsole.log(user.id);",
+  "explanation": "Added null-guard after fetchUser() to handle expired sessions gracefully"
+}

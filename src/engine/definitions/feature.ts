@@ -1,0 +1,98 @@
+/**
+ * @module feature
+ * @description Feature Development Workflow — 7 steps.
+ *   (1) Analyze requirements, (2) Present plan for approval (HITL),
+ *   (3) Parallel layer agents (DB/backend/frontend), (4) Integrate,
+ *   (5) Run tests, (6) Quality review, (7) Generate commit messages.
+ */
+
+import type { WorkflowDefinition } from '../../types';
+
+export const FEATURE_WORKFLOW: WorkflowDefinition = {
+  id: 'feature',
+  name: 'Feature Development',
+  steps: [
+    {
+      id: 'analyze-requirements',
+      name: 'Analyzing requirements',
+      type: 'sequential',
+      agentRole: 'planner',
+      modelTier: 'free',
+      toolScope: 'research',
+      promptTemplate: `You are a requirements analyst. Parse the feature request.\n\nFeature Request:\n{user_request}\n\nProject Context:\n{project_context}\n\nReturn:\n1. FEATURE SUMMARY (1 sentence)\n2. KEY REQUIREMENTS (list)\n3. DEPENDENCIES (tech needed)\n4. EXISTING SIMILAR CODE (files/patterns to reference)`,
+      timeoutMs: 30_000,
+      maxRetries: 1,
+    },
+    {
+      id: 'present-plan',
+      name: 'Presenting plan for approval',
+      type: 'sequential',
+      agentRole: 'planner',
+      modelTier: 'free',
+      toolScope: 'research',
+      promptTemplate: `You are a technical planner. Create a detailed execution plan.\n\nFeature Analysis:\n{previous_output}\n\nProject Context:\n{project_context}\n\nCreate a plan with:\n- Database Layer (schema changes, migrations)\n- Backend Layer (endpoints, business logic)\n- Frontend Layer (components, state)\n- Timeline Estimate\n- Risks & Assumptions`,
+      timeoutMs: 45_000,
+      maxRetries: 2,
+    },
+    {
+      id: 'parallel-agents',
+      name: 'Delegating to layer agents',
+      type: 'parallel',
+      agentRole: 'planner',
+      modelTier: 'free',
+      toolScope: 'implementation',
+      promptTemplate: 'Execute the approved plan for your layer.',
+      timeoutMs: 120_000,
+      maxRetries: 2,
+      branches: [
+        { id: 'database-agent', name: 'Database changes', type: 'sequential', agentRole: 'database_agent', modelTier: 'free', toolScope: 'implementation', promptTemplate: 'Implement database layer changes per the approved plan.\n\n{previous_output}', timeoutMs: 60_000, maxRetries: 2 },
+        { id: 'backend-agent', name: 'Backend implementation', type: 'sequential', agentRole: 'backend_agent', modelTier: 'free', toolScope: 'implementation', promptTemplate: 'Implement backend layer changes per the approved plan.\n\n{previous_output}', timeoutMs: 60_000, maxRetries: 2 },
+        { id: 'frontend-agent', name: 'Frontend implementation', type: 'sequential', agentRole: 'frontend_agent', modelTier: 'free', toolScope: 'implementation', promptTemplate: 'Implement frontend layer changes per the approved plan.\n\n{previous_output}', timeoutMs: 60_000, maxRetries: 2 },
+      ],
+    },
+    {
+      id: 'integrate-layers',
+      name: 'Integrating layers',
+      type: 'sequential',
+      agentRole: 'fixer',
+      modelTier: 'free',
+      toolScope: 'implementation',
+      promptTemplate: `Integrate the outputs from all three layer agents.\n\nLayer outputs:\n{previous_output}\n\nEnsure imports are correct, types align, and the feature works end-to-end.`,
+      timeoutMs: 60_000,
+      maxRetries: 1,
+    },
+    {
+      id: 'run-tests',
+      name: 'Running tests',
+      type: 'sequential',
+      agentRole: 'fixer',
+      modelTier: 'free',
+      toolScope: 'implementation',
+      promptTemplate: 'Run the project test suite to verify the feature works.\n\nTest command: {test_command}',
+      timeoutMs: 300_000,
+      maxRetries: 0,
+    },
+    {
+      id: 'quality-review',
+      name: 'Quality review',
+      type: 'sequential',
+      agentRole: 'quality_reviewer',
+      modelTier: 'standard',
+      toolScope: 'review',
+      promptTemplate: `Review the implemented feature for quality, security, and performance.\n\nChanges:\n{previous_output}\n\nCheck for:\n1. Security issues\n2. Performance concerns\n3. Code quality\n4. Test coverage gaps`,
+      timeoutMs: 60_000,
+      maxRetries: 1,
+    },
+    {
+      id: 'generate-commits',
+      name: 'Generating commit messages',
+      type: 'sequential',
+      agentRole: 'documentarian',
+      modelTier: 'free',
+      toolScope: 'research',
+      promptTemplate: `Generate commit messages for the feature implementation.\n\nChanges summary:\n{previous_output}\n\nUse conventional commits format (feat:, fix:, etc.).`,
+      timeoutMs: 15_000,
+      maxRetries: 0,
+    },
+  ],
+};

@@ -1,0 +1,25 @@
+{
+  "intent": "review",
+  "step": "findings",
+  "severity": "medium",
+  "findings": [
+    {
+      "id": "R001",
+      "file": "src/engine/workflow-engine.ts",
+      "line": 78,
+      "category": "error-handling",
+      "description": "Promise rejection not caught — unhandled rejection will crash extension host",
+      "suggestion": "Add .catch() or wrap in try/catch"
+    },
+    {
+      "id": "R002",
+      "file": "src/classifier/local-classifier.ts",
+      "line": 31,
+      "category": "performance",
+      "description": "RegExp compiled inside loop — move to module scope for <10ms target",
+      "suggestion": "Hoist regex constants to file top-level"
+    }
+  ],
+  "summary": "2 findings: 0 critical, 1 medium, 1 low",
+  "approveForMerge": false
+}

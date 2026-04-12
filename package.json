@@ -5,7 +5,7 @@
   "version": "0.5.0",
   "publisher": "roadie",
   "engines": {
-    "vscode": "^1.84.0",
+    "vscode": "^1.93.0",
     "node": ">=20.0.0"
   },
   "categories": [
@@ -24,7 +24,8 @@
   ],
   "activationEvents": [
     "onChat:roadie",
-    "workspaceContains:.github/.roadie/project-model.db"
+    "workspaceContains:.github/.roadie/project-model.db",
+    "onStartupFinished"
   ],
   "main": "./out/extension.js",
   "contributes": {

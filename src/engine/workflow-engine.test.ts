@@ -1,0 +1,256 @@
+import { describe, it, expect, vi } from 'vitest';
+import { WorkflowEngine } from './workflow-engine';
+import { StepExecutor, type StepHandlerFn } from './step-executor';
+import { WorkflowState } from '../types';
+import type { WorkflowDefinition, WorkflowContext, WorkflowStep, StepResult } from '../types';
+
+// ---- Helpers ----
+
+function makeStep(id: string, name: string, overrides: Partial<WorkflowStep> = {}): WorkflowStep {
+  return {
+    id,
+    name,
+    type: 'sequential',
+    agentRole: 'fixer',
+    modelTier: 'free',
+    toolScope: 'implementation',
+    promptTemplate: `Execute ${name}`,
+    timeoutMs: 5_000,
+    maxRetries: 2,
+    ...overrides,
+  };
+}
+
+function makeDefinition(steps: WorkflowStep[], overrides: Partial<WorkflowDefinition> = {}): WorkflowDefinition {
+  return {
+    id: 'test_workflow',
+    name: 'Test Workflow',
+    steps,
+    ...overrides,
+  };
+}
+
+function makeContext(overrides: Partial<WorkflowContext> = {}): WorkflowContext {
+  return {
+    prompt: 'test prompt',
+    intent: { intent: 'bug_fix', confidence: 0.9, signals: [], requiresLLM: false },
+    projectModel: {} as WorkflowContext['projectModel'],
+    chatResponseStream: {
+      progress: vi.fn(),
+      markdown: vi.fn(),
+      button: vi.fn(),
+      push: vi.fn(),
+    } as unknown as WorkflowContext['chatResponseStream'],
+    cancellationToken: {
+      isCancellationRequested: false,
+      onCancellationRequested: vi.fn(),
+    } as unknown as WorkflowContext['cancellationToken'],
+    ...overrides,
+  };
+}
+
+function successResult(stepId: string): StepResult {
+  return {
+    stepId,
+    status: 'success',
+    output: `Output from ${stepId}`,
+    tokenUsage: { input: 100, output: 50 },
+    attempts: 1,
+    modelUsed: 'gpt-4.1',
+  };
+}
+
+function failResult(stepId: string): StepResult {
+  return {
+    stepId,
+    status: 'failed',
+    output: '',
+    tokenUsage: { input: 100, output: 50 },
+    attempts: 3,
+    modelUsed: 'gpt-4.1',
+    error: `Step ${stepId} failed after 3 attempts`,
+  };
+}
+
+function createEngine(handler: StepHandlerFn): WorkflowEngine {
+  return new WorkflowEngine(new StepExecutor(handler));
+}
+
+// ---- Tests ----
+
+describe('WorkflowEngine', () => {
+  it('completes a 4-step sequential workflow', async () => {
+    const handler: StepHandlerFn = vi.fn().mockImplementation(
+      (step: WorkflowStep) => Promise.resolve(successResult(step.id)),
+    );
+    const engine = createEngine(handler);
+    const steps = [
+      makeStep('s1', 'Locate'),
+      makeStep('s2', 'Diagnose'),
+      makeStep('s3', 'Fix'),
+      makeStep('s4', 'Verify'),
+    ];
+
+    const result = await engine.execute(makeDefinition(steps), makeContext());
+
+    expect(result.state).toBe(WorkflowState.COMPLETED);
+    expect(result.stepResults).toHaveLength(4);
+    expect(result.stepResults.every((r) => r.status === 'success')).toBe(true);
+    expect(handler).toHaveBeenCalledTimes(4);
+  });
+
+  it('passes step results to next step via context.previousStepResults', async () => {
+    const contexts: WorkflowContext[] = [];
+    const handler: StepHandlerFn = vi.fn().mockImplementation(
+      (step: WorkflowStep, ctx: WorkflowContext) => {
+        contexts.push({ ...ctx });
+        return Promise.resolve(successResult(step.id));
+      },
+    );
+    const engine = createEngine(handler);
+    const steps = [makeStep('s1', 'Step 1'), makeStep('s2', 'Step 2'), makeStep('s3', 'Step 3')];
+
+    await engine.execute(makeDefinition(steps), makeContext());
+
+    // Step 2 should see step 1's result
+    expect(contexts[1].previousStepResults).toHaveLength(1);
+    expect(contexts[1].previousStepResults![0].stepId).toBe('s1');
+    // Step 3 should see both prior results
+    expect(contexts[2].previousStepResults).toHaveLength(2);
+  });
+
+  it('transitions to PAUSED when a step fails after retries', async () => {
+    const handler: StepHandlerFn = vi.fn()
+      .mockImplementationOnce((step: WorkflowStep) => Promise.resolve(successResult(step.id)))
+      .mockResolvedValue(failResult('s2'));
+    const engine = createEngine(handler);
+    const steps = [makeStep('s1', 'Step 1'), makeStep('s2', 'Step 2', { maxRetries: 0 })];
+
+    const result = await engine.execute(makeDefinition(steps), makeContext());
+
+    expect(result.state).toBe(WorkflowState.PAUSED);
+    expect(engine.getState()).toBe(WorkflowState.PAUSED);
+    expect(result.stepResults).toHaveLength(2);
+    expect(result.stepResults[1].status).toBe('failed');
+  });
+
+  it('transitions to CANCELLED when cancellation is requested', async () => {
+    let callCount = 0;
+    const cancellationToken = {
+      isCancellationRequested: false,
+      onCancellationRequested: vi.fn(),
+    };
+    const handler: StepHandlerFn = vi.fn().mockImplementation((step: WorkflowStep) => {
+      callCount++;
+      if (callCount === 2) {
+        // Simulate cancellation after step 2 starts
+        cancellationToken.isCancellationRequested = true;
+      }
+      return Promise.resolve(successResult(step.id));
+    });
+
+    const engine = createEngine(handler);
+    const steps = [makeStep('s1', 'Step 1'), makeStep('s2', 'Step 2'), makeStep('s3', 'Step 3')];
+    const ctx = makeContext({
+      cancellationToken: cancellationToken as unknown as WorkflowContext['cancellationToken'],
+    });
+
+    const result = await engine.execute(makeDefinition(steps), ctx);
+
+    expect(result.state).toBe(WorkflowState.CANCELLED);
+    // Step 3 should never execute (cancellation checked at boundary)
+    expect(result.stepResults.length).toBeLessThanOrEqual(2);
+  });
+
+  it('streams progress for each step', async () => {
+    const handler: StepHandlerFn = vi.fn().mockImplementation(
+      (step: WorkflowStep) => Promise.resolve(successResult(step.id)),
+    );
+    const engine = createEngine(handler);
+    const ctx = makeContext();
+    const steps = [makeStep('s1', 'Locate Error'), makeStep('s2', 'Apply Fix')];
+
+    await engine.execute(makeDefinition(steps), ctx);
+
+    const progress = ctx.chatResponseStream.progress as ReturnType<typeof vi.fn>;
+    expect(progress).toHaveBeenCalledWith('Running: Locate Error...');
+    expect(progress).toHaveBeenCalledWith('Running: Apply Fix...');
+  });
+
+  it('tracks workflow duration', async () => {
+    const handler: StepHandlerFn = vi.fn().mockImplementation(
+      (step: WorkflowStep) => Promise.resolve(successResult(step.id)),
+    );
+    const engine = createEngine(handler);
+    const result = await engine.execute(
+      makeDefinition([makeStep('s1', 'Step 1')]),
+      makeContext(),
+    );
+
+    expect(result.duration).toBeGreaterThanOrEqual(0);
+    expect(result.duration).toBeLessThan(1000); // Should be near-instant with mocks
+  });
+
+  it('builds a human-readable summary', async () => {
+    const handler: StepHandlerFn = vi.fn().mockImplementation(
+      (step: WorkflowStep) => Promise.resolve(successResult(step.id)),
+    );
+    const engine = createEngine(handler);
+    const result = await engine.execute(
+      makeDefinition([makeStep('s1', 'Step 1')], { name: 'Bug Fix' }),
+      makeContext(),
+    );
+
+    expect(result.summary).toContain('Bug Fix');
+    expect(result.summary).toContain('1/1');
+    expect(result.summary).toContain('COMPLETED');
+  });
+
+  it('does not execute remaining steps after failure', async () => {
+    const handler: StepHandlerFn = vi.fn()
+      .mockResolvedValueOnce(failResult('s1'))
+      .mockResolvedValueOnce(successResult('s2'));
+    const engine = createEngine(handler);
+    const steps = [makeStep('s1', 'Step 1', { maxRetries: 0 }), makeStep('s2', 'Step 2')];
+
+    const result = await engine.execute(makeDefinition(steps), makeContext());
+
+    expect(result.state).toBe(WorkflowState.PAUSED);
+    expect(result.stepResults).toHaveLength(1); // Step 2 never executed
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls onComplete hook when workflow completes', async () => {
+    const handler: StepHandlerFn = vi.fn().mockImplementation(
+      (step: WorkflowStep) => Promise.resolve(successResult(step.id)),
+    );
+    const onComplete = vi.fn().mockResolvedValue({
+      workflowId: 'custom',
+      state: WorkflowState.COMPLETED,
+      stepResults: [],
+      duration: 42,
+      modelTiersUsed: [],
+      summary: 'Custom summary',
+    });
+    const engine = createEngine(handler);
+    const result = await engine.execute(
+      makeDefinition([makeStep('s1', 'Step 1')], { onComplete }),
+      makeContext(),
+    );
+
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(result.summary).toBe('Custom summary');
+  });
+
+  it('does not call onComplete when workflow is paused', async () => {
+    const handler: StepHandlerFn = vi.fn().mockResolvedValue(failResult('s1'));
+    const onComplete = vi.fn();
+    const engine = createEngine(handler);
+    await engine.execute(
+      makeDefinition([makeStep('s1', 'Step 1', { maxRetries: 0 })], { onComplete }),
+      makeContext(),
+    );
+
+    expect(onComplete).not.toHaveBeenCalled();
+  });
+});

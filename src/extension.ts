@@ -1,28 +1,65 @@
 /**
  * @module extension
- * @description VS Code extension entry point. Bootstrap stub — real activation
- *   logic is introduced in Step 2 (Scaffolding) of the Module Build Order.
- *   This file exists so `npm run build` produces a valid bundle during the
- *   environment bootstrap (Phase 0), before any modules are implemented.
+ * @description VS Code extension entry point. Creates the DI container,
+ *   registers the @roadie Chat Participant, status bar, configuration
+ *   reader, and command palette commands. Routes deactivation through
+ *   the container's dispose().
  * @inputs vscode.ExtensionContext (provided by VS Code at activation time)
- * @outputs void (side effects: registers chat participant, commands, etc. — to be added)
- * @depends-on vscode
+ * @outputs Side effects: registered chat participant, status bar, commands
+ * @depends-on container.ts, shell/chat-participant.ts, shell/status-bar.ts, shell/commands.ts
+ * @depended-on-by VS Code (activation/deactivation lifecycle)
  */
 
 import * as vscode from 'vscode';
+import { Container } from './container';
+import { registerChatParticipant } from './shell/chat-participant';
+import { createStatusBar } from './shell/status-bar';
+import { registerCommands, readConfiguration } from './shell/commands';
+
+let container: Container | undefined;
 
 /**
  * Called by VS Code when the extension is activated.
- * Activation triggers are declared in package.json under `activationEvents`.
+ * Activation triggers: onChat:roadie, workspaceContains:.github/.roadie/project-model.db,
+ * onStartupFinished.
  */
-export function activate(_context: vscode.ExtensionContext): void {
-  // Intentionally empty. Real activation logic is added in Step 2.
+export function activate(context: vscode.ExtensionContext): void {
+  container = new Container();
+
+  // Read configuration
+  const _config = readConfiguration();
+
+  // Chat Participant — classifies intent and routes to workflows
+  container.register(registerChatParticipant());
+
+  // Status bar — shows "Roadie active"
+  container.register(createStatusBar());
+
+  // Command palette commands (roadie.init, roadie.rescan, roadie.reset)
+  const commands = registerCommands({
+    onInit: () => {
+      // Phase 1: no-op (project model initializes lazily)
+    },
+    onRescan: () => {
+      // Phase 1: no-op (project analyzer will be wired here)
+    },
+    onReset: () => {
+      // Phase 1: no-op (database reset will be wired here)
+    },
+  });
+  for (const cmd of commands) {
+    container.register(cmd);
+  }
+
+  // Container itself is disposed on deactivation
+  context.subscriptions.push(container);
 }
 
 /**
  * Called by VS Code when the extension is deactivated.
- * Use this to dispose of any long-lived resources.
+ * Container.dispose() handles all cleanup.
  */
 export function deactivate(): void {
-  // Intentionally empty.
+  container?.dispose();
+  container = undefined;
 }
