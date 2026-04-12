@@ -4,6 +4,10 @@
   "description": "VS Code extension that makes GitHub Copilot smarter. Transforms chat into autonomous workflows: bug fix, feature development, refactoring, code review, documentation, dependency management, onboarding.",
   "version": "0.5.0",
   "publisher": "roadie",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rmg007/Roadie_App.git"
+  },
   "engines": {
     "vscode": "^1.93.0",
     "node": ">=20.0.0"
@@ -120,7 +124,7 @@
     "test": "vitest run",
     "test:watch": "vitest watch",
     "test:coverage": "vitest run --coverage",
-    "package": "vsce package --no-dependencies",
+    "package": "vsce package",
     "publish": "vsce publish",
     "prepublish:test": "npm run test && npm run lint && npm run build"
   },
@@ -143,8 +147,14 @@
     "typescript": "^5.2.0",
     "vitest": "^0.34.0"
   },
+  "bundleDependencies": [
+    "better-sqlite3",
+    "fast-glob",
+    "zod"
+  ],
   "files": [
     "out",
+    "node_modules",
     "package.json",
     "README.md",
     "LICENSE"
