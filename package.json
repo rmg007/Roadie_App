@@ -25,7 +25,10 @@
   "activationEvents": [
     "onChat:roadie",
     "workspaceContains:.github/.roadie/project-model.db",
-    "onStartupFinished"
+    "onStartupFinished",
+    "onCommand:roadie.init",
+    "onCommand:roadie.rescan",
+    "onCommand:roadie.reset"
   ],
   "main": "./out/extension.js",
   "contributes": {
