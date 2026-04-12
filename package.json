@@ -1,0 +1,148 @@
+{
+  "name": "roadie",
+  "displayName": "Roadie — The Invisible AI Workflow Engine",
+  "description": "VS Code extension that makes GitHub Copilot smarter. Transforms chat into autonomous workflows: bug fix, feature development, refactoring, code review, documentation, dependency management, onboarding.",
+  "version": "0.5.0",
+  "publisher": "roadie",
+  "engines": {
+    "vscode": "^1.84.0",
+    "node": ">=20.0.0"
+  },
+  "categories": [
+    "AI",
+    "Code Quality",
+    "Productivity"
+  ],
+  "keywords": [
+    "copilot",
+    "ai",
+    "workflow",
+    "automation",
+    "bug fix",
+    "refactoring",
+    "code review"
+  ],
+  "activationEvents": [
+    "onChat:roadie",
+    "workspaceContains:.github/.roadie/project-model.db"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "chatParticipants": [
+      {
+        "id": "roadie",
+        "name": "Roadie",
+        "description": "The invisible AI workflow engine. Chat naturally—Roadie handles the rest.",
+        "isSticky": true
+      }
+    ],
+    "commands": [
+      {
+        "command": "roadie.init",
+        "title": "Roadie: Initialize",
+        "description": "Manually initialize Roadie in the workspace"
+      },
+      {
+        "command": "roadie.rescan",
+        "title": "Roadie: Rescan Project",
+        "description": "Force a full project rescan"
+      },
+      {
+        "command": "roadie.reset",
+        "title": "Roadie: Reset",
+        "description": "Delete local database and reset Roadie"
+      }
+    ],
+    "configuration": {
+      "title": "Roadie",
+      "properties": {
+        "roadie.telemetry": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable anonymous, aggregate telemetry (workflow types, model tiers, success rates). Never sends code, file names, or project details."
+        },
+        "roadie.editTracking": {
+          "type": "boolean",
+          "default": false,
+          "description": "Track edits to Roadie-generated files for learning preferences. Phase 1.5 only."
+        },
+        "roadie.workflowHistory": {
+          "type": "boolean",
+          "default": false,
+          "description": "Persist workflow outcomes (success/failure, escalation patterns). Phase 1.5 only."
+        },
+        "roadie.modelPreference": {
+          "type": "string",
+          "enum": [
+            "economy",
+            "balanced",
+            "quality"
+          ],
+          "default": "balanced",
+          "enumDescriptions": [
+            "Use Tier 0 only (cheapest, lower quality)",
+            "Tier 0 → escalate to Tier 1 on failure (default)",
+            "Start at Tier 1 (most expensive, highest quality)"
+          ],
+          "description": "Model tier preference for workflows. Does not affect escalation logic."
+        },
+        "roadie.autoCommit": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically stage and commit Roadie-generated .github/ files. Phase 1.5 only."
+        },
+        "roadie.testCommand": {
+          "type": "string",
+          "default": "",
+          "description": "Custom test command override. If empty, Roadie auto-detects from package.json scripts (e.g., 'npm test', 'pnpm test')."
+        },
+        "roadie.testTimeout": {
+          "type": "number",
+          "default": 300,
+          "minimum": 10,
+          "maximum": 3600,
+          "description": "Maximum seconds to wait for test suite execution before timeout."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "tsup src/extension.ts --outDir out --format cjs --external vscode",
+    "build:watch": "npm run build -- --watch",
+    "lint": "eslint src --ext ts",
+    "lint:fix": "npm run lint -- --fix",
+    "format": "prettier --write src",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "test:coverage": "vitest run --coverage",
+    "package": "vsce package --no-dependencies",
+    "publish": "vsce publish",
+    "prepublish:test": "npm run test && npm run lint && npm run build"
+  },
+  "dependencies": {
+    "better-sqlite3": "^9.4.3",
+    "fast-glob": "^3.3.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.84.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "@vscode/test-cli": "^0.0.4",
+    "@vscode/test-electron": "^2.3.0",
+    "eslint": "^8.50.0",
+    "prettier": "^3.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.2.0",
+    "vitest": "^0.34.0"
+  },
+  "files": [
+    "out",
+    "package.json",
+    "README.md",
+    "LICENSE"
+  ]
+}
