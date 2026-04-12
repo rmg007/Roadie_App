@@ -407,6 +407,76 @@ export interface ProjectModelDelta {
 }
 
 // =====================================================================
+// Phase 1.5: Persistent Project Model Extension
+// =====================================================================
+
+/**
+ * Classified file change from the File Watcher.
+ */
+export interface ClassifiedFileChange {
+  filePath: string;
+  eventType: 'create' | 'change' | 'delete';
+  classifiedAs: ChangeType;
+  timestamp: Date;
+}
+
+export type ChangeType =
+  | 'DEPENDENCY_CHANGE'
+  | 'CONFIG_CHANGE'
+  | 'STRUCTURE_CHANGE'
+  | 'SOURCE_ADDITION'
+  | 'USER_EDIT'
+  | 'OTHER';
+
+/**
+ * Result of model reconciliation with the file system at startup.
+ */
+export interface ReconciliationResult {
+  status: 'in-sync' | 'reconciled' | 'rebuilt';
+  changesDetected: number;
+  categoriesUpdated: string[];
+  durationMs: number;
+}
+
+/**
+ * Phase 1.5 extension of ProjectModel with SQLite persistence,
+ * incremental updates, and change event subscriptions.
+ * Extends (does not modify) the Phase 1 ProjectModel interface.
+ */
+export interface PersistentProjectModel extends ProjectModel {
+  /** Load model state from SQLite. Called at activation. */
+  loadFromDb(): Promise<void>;
+  /** Flush pending changes to SQLite. Called at deactivation and periodically. */
+  saveToDb(): Promise<void>;
+  /** Compare model state against current file system. Fix discrepancies. */
+  reconcileWithFileSystem(): Promise<ReconciliationResult>;
+  /** Apply incremental update from file watcher event. */
+  applyFileChange(change: ClassifiedFileChange): Promise<void>;
+  /** Check if the model has been populated (vs empty/first-run). */
+  isPopulated(): boolean;
+  /** Get timestamp of last successful analysis. */
+  getLastAnalyzedAt(): Date | null;
+  /** Subscribe to model change events (used by generators). */
+  onModelChanged(listener: (delta: ProjectModelDelta) => void): Disposable;
+  /** Deactivate: flush and cleanup. */
+  deactivate(): Promise<void>;
+}
+
+/**
+ * Disposable subscription handle.
+ */
+export interface Disposable {
+  dispose(): void;
+}
+
+/**
+ * Type guard: checks if a ProjectModel is a PersistentProjectModel.
+ */
+export function isPhase15Active(model: ProjectModel): model is PersistentProjectModel {
+  return 'loadFromDb' in model && (model as PersistentProjectModel).isPopulated();
+}
+
+// =====================================================================
 // File Generation Types
 // =====================================================================
 
