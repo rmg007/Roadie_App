@@ -1,4 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
+
+// Mock vscode so the module can be imported in test environments
+vi.mock('vscode', () => ({
+  window: { createOutputChannel: vi.fn(() => ({ appendLine: vi.fn(), dispose: vi.fn(), show: vi.fn() })) },
+}));
+
 import { BUG_FIX_WORKFLOW } from './bug-fix';
 import { WorkflowEngine } from '../workflow-engine';
 import { StepExecutor, type StepHandlerFn } from '../step-executor';
@@ -12,16 +18,14 @@ function makeContext(overrides: Partial<WorkflowContext> = {}): WorkflowContext 
     prompt: 'The login page throws a 500 error',
     intent: { intent: 'bug_fix', confidence: 0.9, signals: ['keyword:fix', 'signal:500-error'], requiresLLM: false },
     projectModel: {} as WorkflowContext['projectModel'],
-    chatResponseStream: {
-      progress: vi.fn(),
-      markdown: vi.fn(),
-      button: vi.fn(),
-      push: vi.fn(),
-    } as unknown as WorkflowContext['chatResponseStream'],
-    cancellationToken: {
-      isCancellationRequested: false,
-      onCancellationRequested: vi.fn(),
-    } as unknown as WorkflowContext['cancellationToken'],
+    progress: {
+      report: vi.fn(),
+      reportMarkdown: vi.fn(),
+    },
+    cancellation: {
+      isCancelled: false,
+      onCancelled: vi.fn(),
+    },
     ...overrides,
   };
 }
@@ -112,12 +116,12 @@ describe('Bug Fix Workflow Execution', () => {
     const ctx = makeContext();
     await engine.execute(BUG_FIX_WORKFLOW, ctx);
 
-    const progress = ctx.chatResponseStream.progress as ReturnType<typeof vi.fn>;
-    expect(progress).toHaveBeenCalledWith('Running: Locating error source...');
-    expect(progress).toHaveBeenCalledWith('Running: Diagnosing root cause...');
-    expect(progress).toHaveBeenCalledWith('Running: Generating fix...');
-    expect(progress).toHaveBeenCalledWith('Running: Running tests to verify fix...');
-    expect(progress).toHaveBeenCalledWith('Running: Generating summary...');
+    const report = ctx.progress.report as ReturnType<typeof vi.fn>;
+    expect(report).toHaveBeenCalledWith(expect.stringContaining('Locating error source'));
+    expect(report).toHaveBeenCalledWith(expect.stringContaining('Diagnosing root cause'));
+    expect(report).toHaveBeenCalledWith(expect.stringContaining('Generating fix'));
+    expect(report).toHaveBeenCalledWith(expect.stringContaining('Running tests to verify fix'));
+    expect(report).toHaveBeenCalledWith(expect.stringContaining('Generating summary'));
   });
 
   it('passes step results to subsequent steps', async () => {

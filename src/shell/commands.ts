@@ -2,7 +2,8 @@
  * @module commands
  * @description Command palette registrations and configuration reader.
  *   Reads roadie.* settings from vscode.workspace.getConfiguration().
- *   Registers roadie.init, roadie.rescan, roadie.reset commands.
+ *   Registers roadie.init, roadie.rescan, roadie.reset, roadie.stats,
+ *   roadie.enableWorkflowHistory, roadie.disableWorkflowHistory commands.
  * @inputs vscode.workspace configuration API
  * @outputs RoadieConfig, command disposables
  * @depends-on types.ts (DeveloperPreferences), vscode
@@ -38,14 +39,27 @@ const DEFAULTS: RoadieConfig = {
 export function readConfiguration(): RoadieConfig {
   const raw = vscode.workspace.getConfiguration('roadie');
   return {
-    testCommand: raw.get<string>('testCommand') || undefined,
-    modelPreference: raw.get<'economy' | 'balanced' | 'quality'>('modelPreference', DEFAULTS.modelPreference!),
+    testCommand:      raw.get<string>('testCommand') || undefined,
+    modelPreference:  raw.get<'economy' | 'balanced' | 'quality'>('modelPreference', DEFAULTS.modelPreference!),
     telemetryEnabled: raw.get<boolean>('telemetry', DEFAULTS.telemetryEnabled),
-    autoCommit: raw.get<boolean>('autoCommit', DEFAULTS.autoCommit),
-    testTimeout: raw.get<number>('testTimeout', DEFAULTS.testTimeout),
-    editTracking: raw.get<boolean>('editTracking', DEFAULTS.editTracking),
-    workflowHistory: raw.get<boolean>('workflowHistory', DEFAULTS.workflowHistory),
+    autoCommit:       raw.get<boolean>('autoCommit', DEFAULTS.autoCommit),
+    testTimeout:      raw.get<number>('testTimeout', DEFAULTS.testTimeout),
+    editTracking:     raw.get<boolean>('editTracking', DEFAULTS.editTracking),
+    workflowHistory:  raw.get<boolean>('workflowHistory', DEFAULTS.workflowHistory),
   };
+}
+
+/**
+ * Write a single roadie.* setting to the user's global VS Code settings
+ * (ConfigurationTarget.Global = persists across workspaces).
+ */
+export async function updateSetting(
+  key: string,
+  value: unknown,
+): Promise<void> {
+  await vscode.workspace
+    .getConfiguration('roadie')
+    .update(key, value, vscode.ConfigurationTarget.Global);
 }
 
 /**
@@ -56,16 +70,21 @@ export function registerCommands(callbacks: {
   onInit: () => void | Promise<void>;
   onRescan: () => void | Promise<void>;
   onReset: () => void | Promise<void>;
+  onStats: () => void | Promise<void>;
+  onEnableWorkflowHistory: () => void | Promise<void>;
+  onDisableWorkflowHistory: () => void | Promise<void>;
 }): vscode.Disposable[] {
   return [
     vscode.commands.registerCommand('roadie.init', async () => {
       await callbacks.onInit();
       void vscode.window.showInformationMessage('Roadie: Initialized');
     }),
+
     vscode.commands.registerCommand('roadie.rescan', async () => {
       await callbacks.onRescan();
       void vscode.window.showInformationMessage('Roadie: Project rescanned');
     }),
+
     vscode.commands.registerCommand('roadie.reset', async () => {
       const confirm = await vscode.window.showWarningMessage(
         'Roadie: This will delete the local database and reset all state. Continue?',
@@ -76,6 +95,18 @@ export function registerCommands(callbacks: {
         await callbacks.onReset();
         void vscode.window.showInformationMessage('Roadie: Reset complete');
       }
+    }),
+
+    vscode.commands.registerCommand('roadie.stats', async () => {
+      await callbacks.onStats();
+    }),
+
+    vscode.commands.registerCommand('roadie.enableWorkflowHistory', async () => {
+      await callbacks.onEnableWorkflowHistory();
+    }),
+
+    vscode.commands.registerCommand('roadie.disableWorkflowHistory', async () => {
+      await callbacks.onDisableWorkflowHistory();
     }),
   ];
 }

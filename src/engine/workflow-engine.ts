@@ -8,7 +8,7 @@
  *   type 'parallel' with branches.
  * @inputs WorkflowDefinition, WorkflowContext
  * @outputs WorkflowResult
- * @depends-on step-executor.ts, types.ts
+ * @depends-on step-executor.ts, types.ts, shell/logger.ts
  * @depended-on-by shell/chat-participant.ts (workflow dispatch)
  */
 
@@ -22,6 +22,7 @@ import type {
 } from '../types';
 import { WorkflowState } from '../types';
 import { StepExecutor } from './step-executor';
+import { getLogger } from '../shell/logger';
 
 export class WorkflowEngine {
   private state: WorkflowState = WorkflowState.PENDING;
@@ -47,31 +48,43 @@ export class WorkflowEngine {
     definition: WorkflowDefinition,
     context: WorkflowContext,
   ): Promise<WorkflowResult> {
-    this.state = WorkflowState.RUNNING;
+    const log = getLogger();
+    const totalSteps = definition.steps.length;
+
+    this.transition(definition.id, WorkflowState.PENDING, WorkflowState.RUNNING, log);
+
     const stepResults: StepResult[] = [];
     const tiersUsed = new Set<ModelTier>();
     const startTime = Date.now();
 
-    for (const step of definition.steps) {
+    for (let i = 0; i < definition.steps.length; i++) {
+      const step = definition.steps[i];
+
       // Check cancellation at step boundary
-      if (context.cancellationToken.isCancellationRequested) {
-        this.state = WorkflowState.CANCELLED;
+      if (context.cancellation.isCancelled) {
+        this.transition(definition.id, this.state, WorkflowState.CANCELLED, log);
+        log.info(`[${definition.id}] Cancelled before step ${i + 1}/${totalSteps}: "${step.name}"`);
         break;
       }
 
-      // Stream progress
-      context.chatResponseStream.progress(`Running: ${step.name}...`);
+      log.info(`[${definition.id}] Step ${i + 1}/${totalSteps}: "${step.name}" — starting`);
+
+      // Stream progress to chat
+      context.progress.report(`Running: ${step.name}…`);
 
       // Execute step (sequential or parallel branches)
       let result: StepResult;
+      const stepStart = Date.now();
 
       if (step.type === 'parallel' && step.branches && step.branches.length > 0) {
-        this.state = WorkflowState.WAITING_PARALLEL;
+        this.transition(definition.id, this.state, WorkflowState.WAITING_PARALLEL, log);
+        log.info(`[${definition.id}] Parallel branches: ${step.branches.length}`);
         result = await this.executeParallelBranches(step, context, tiersUsed);
       } else {
         result = await this.stepExecutor.executeStep(step, context);
       }
 
+      const stepMs = Date.now() - stepStart;
       stepResults.push(result);
 
       // Track model tier
@@ -84,9 +97,20 @@ export class WorkflowEngine {
 
       // Handle step failure
       if (result.status === 'failed') {
-        this.state = WorkflowState.PAUSED;
+        this.transition(definition.id, this.state, WorkflowState.PAUSED, log);
+        log.warn(
+          `[${definition.id}] Step ${i + 1}/${totalSteps}: "${step.name}" — ` +
+          `FAILED after ${result.attempts} attempt(s), ${stepMs}ms` +
+          (result.error ? ` — ${result.error}` : ''),
+        );
         break;
       }
+
+      log.info(
+        `[${definition.id}] Step ${i + 1}/${totalSteps}: "${step.name}" — ` +
+        `done (${result.status}, ${result.attempts} attempt(s), ` +
+        `model: ${result.modelUsed || 'n/a'}, ${stepMs}ms)`,
+      );
 
       // Back to RUNNING for next step
       this.state = WorkflowState.RUNNING;
@@ -94,16 +118,23 @@ export class WorkflowEngine {
 
     // Final state
     if (this.state === WorkflowState.RUNNING) {
-      this.state = WorkflowState.COMPLETED;
+      this.transition(definition.id, this.state, WorkflowState.COMPLETED, log);
     }
 
+    const totalMs = Date.now() - startTime;
+    const succeeded = stepResults.filter((r) => r.status === 'success').length;
+    log.info(
+      `[${definition.id}] Final state: ${this.state} — ` +
+      `${succeeded}/${stepResults.length} steps, ${totalMs}ms`,
+    );
+
     const workflowResult: WorkflowResult = {
-      workflowId: definition.id,
-      state: this.state,
+      workflowId:      definition.id,
+      state:           this.state,
       stepResults,
-      duration: Date.now() - startTime,
-      modelTiersUsed: [...tiersUsed],
-      summary: this.buildSummary(definition, stepResults),
+      duration:        totalMs,
+      modelTiersUsed:  [...tiersUsed],
+      summary:         this.buildSummary(definition, stepResults),
     };
 
     // Call onComplete hook if defined and workflow completed
@@ -120,7 +151,11 @@ export class WorkflowEngine {
     context: WorkflowContext,
     tiersUsed: Set<ModelTier>,
   ): Promise<StepResult> {
+    const log = getLogger();
     const branches = step.branches!;
+
+    log.debug(`[parallel] Spawning ${branches.length} branches: [${branches.map((b) => b.id).join(', ')}]`);
+
     const results = await Promise.allSettled(
       branches.map((branch) => this.stepExecutor.executeStep(branch, context)),
     );
@@ -133,32 +168,42 @@ export class WorkflowEngine {
       if (r.status === 'fulfilled') {
         branchResults.push(r.value);
         if (r.value.modelUsed) tiersUsed.add(branches[i].modelTier);
-        if (r.value.status === 'failed') anyFailed = true;
+        if (r.value.status === 'failed') {
+          anyFailed = true;
+          log.warn(`[parallel] Branch "${branches[i].id}" failed: ${r.value.error ?? '(no detail)'}`);
+        } else {
+          log.debug(`[parallel] Branch "${branches[i].id}" succeeded`);
+        }
       } else {
         anyFailed = true;
+        const errMsg = r.reason instanceof Error ? r.reason.message : String(r.reason);
+        log.warn(`[parallel] Branch "${branches[i].id}" rejected: ${errMsg}`);
         branchResults.push({
-          stepId: branches[i].id,
-          status: 'failed',
-          output: '',
+          stepId:     branches[i].id,
+          status:     'failed',
+          output:     '',
           tokenUsage: { input: 0, output: 0 },
-          attempts: 1,
-          modelUsed: '',
-          error: r.reason instanceof Error ? r.reason.message : String(r.reason),
+          attempts:   1,
+          modelUsed:  '',
+          error:      errMsg,
         });
       }
     }
 
+    const passed = branchResults.filter((r) => r.status === 'success').length;
+    log.info(`[parallel] ${passed}/${branches.length} branches succeeded`);
+
     // Aggregate into a single StepResult for the parent parallel step
     return {
-      stepId: step.id,
-      status: anyFailed ? 'failed' : 'success',
-      output: branchResults.map((r) => r.output).join('\n---\n'),
+      stepId:     step.id,
+      status:     anyFailed ? 'failed' : 'success',
+      output:     branchResults.map((r) => r.output).join('\n---\n'),
       toolResults: branchResults.flatMap((r) => r.toolResults ?? []),
       tokenUsage: {
-        input: branchResults.reduce((sum, r) => sum + r.tokenUsage.input, 0),
+        input:  branchResults.reduce((sum, r) => sum + r.tokenUsage.input, 0),
         output: branchResults.reduce((sum, r) => sum + r.tokenUsage.output, 0),
       },
-      attempts: 1,
+      attempts:  1,
       modelUsed: branchResults.map((r) => r.modelUsed).join(', '),
     };
   }
@@ -167,5 +212,15 @@ export class WorkflowEngine {
     const succeeded = results.filter((r) => r.status === 'success').length;
     const total = results.length;
     return `Workflow '${definition.name}': ${succeeded}/${total} steps completed. State: ${this.state}`;
+  }
+
+  private transition(
+    workflowId: string,
+    from: WorkflowState,
+    to: WorkflowState,
+    log: ReturnType<typeof getLogger>,
+  ): void {
+    log.debug(`[${workflowId}] ${from} → ${to}`);
+    this.state = to;
   }
 }

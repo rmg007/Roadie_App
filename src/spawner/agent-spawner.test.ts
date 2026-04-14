@@ -1,17 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// Mock vscode so the module can be imported in test environments
 vi.mock('vscode', () => ({
-  lm: { selectChatModels: vi.fn() },
-  LanguageModelChatMessage: { User: (text: string) => ({ role: 1, content: text }) },
-  CancellationTokenSource: class { token = { isCancellationRequested: false, onCancellationRequested: vi.fn() }; },
+  window: { createOutputChannel: vi.fn(() => ({ appendLine: vi.fn(), dispose: vi.fn(), show: vi.fn() })) },
 }));
 
-import * as vscode from 'vscode';
 import { AgentSpawner } from './agent-spawner';
-import { ModelResolver } from '../engine/model-resolver';
+import type { ModelProvider, ModelInfo, ModelSelector, ModelRequestOptions, ModelResponse } from '../providers';
 import type { AgentConfig } from '../types';
-
-const mockSelectChatModels = vi.mocked(vscode.lm.selectChatModels);
 
 function makeConfig(overrides: Partial<AgentConfig> = {}): AgentConfig {
   return {
@@ -25,24 +21,26 @@ function makeConfig(overrides: Partial<AgentConfig> = {}): AgentConfig {
   };
 }
 
-function makeMockModel(response = 'Fixed the bug') {
+function makeMockProvider(responseText = 'Fixed the bug'): ModelProvider {
   return {
-    id: 'copilot-gpt-4.1',
+    selectModels: vi.fn().mockResolvedValue([
+      { id: 'copilot-gpt-4.1', name: 'gpt-4.1', vendor: 'openai', family: 'gpt-4', maxInputTokens: 10000 } satisfies ModelInfo,
+    ]),
     sendRequest: vi.fn().mockResolvedValue({
-      text: (async function* () { yield response; })(),
-      stream: (async function* () { yield { value: response }; })(),
-    }),
+      text: responseText,
+      toolCalls: [],
+      usage: { inputTokens: responseText.length, outputTokens: responseText.length },
+    } satisfies ModelResponse),
   };
 }
 
 describe('AgentSpawner', () => {
+  let provider: ModelProvider;
   let spawner: AgentSpawner;
 
   beforeEach(() => {
-    mockSelectChatModels.mockReset();
-    const mockModel = makeMockModel();
-    mockSelectChatModels.mockResolvedValue([mockModel] as unknown as vscode.LanguageModelChat[]);
-    spawner = new AgentSpawner(new ModelResolver());
+    provider = makeMockProvider();
+    spawner = new AgentSpawner(provider);
   });
 
   it('spawns an agent and returns success result', async () => {
@@ -52,26 +50,31 @@ describe('AgentSpawner', () => {
     expect(result.model).toBe('copilot-gpt-4.1');
   });
 
-  it('tracks token usage (approximate from string lengths)', async () => {
+  it('tracks token usage from provider response', async () => {
     const result = await spawner.spawn(makeConfig());
     expect(result.tokenUsage.input).toBeGreaterThan(0);
     expect(result.tokenUsage.output).toBeGreaterThan(0);
   });
 
   it('returns failed status when model is unavailable', async () => {
-    mockSelectChatModels.mockResolvedValue([]);
+    const emptyProvider: ModelProvider = {
+      selectModels: vi.fn().mockResolvedValue([]),
+      sendRequest: vi.fn(),
+    };
+    spawner = new AgentSpawner(emptyProvider);
     const result = await spawner.spawn(makeConfig());
     expect(result.status).toBe('failed');
     expect(result.error).toBeDefined();
   });
 
   it('returns failed status when sendRequest throws', async () => {
-    const badModel = {
-      id: 'copilot-gpt-4.1',
+    const badProvider: ModelProvider = {
+      selectModels: vi.fn().mockResolvedValue([
+        { id: 'copilot-gpt-4.1', name: 'gpt-4.1', vendor: 'openai', family: 'gpt-4', maxInputTokens: 10000 },
+      ]),
       sendRequest: vi.fn().mockRejectedValue(new Error('LLM error')),
     };
-    mockSelectChatModels.mockResolvedValue([badModel] as unknown as vscode.LanguageModelChat[]);
-    spawner = new AgentSpawner(new ModelResolver());
+    spawner = new AgentSpawner(badProvider);
 
     const result = await spawner.spawn(makeConfig());
     expect(result.status).toBe('failed');
@@ -91,15 +94,16 @@ describe('AgentSpawner', () => {
   });
 
   it('one failing parallel branch does not block others', async () => {
-    const failModel = {
-      id: 'copilot-gpt-4.1',
+    const mixedProvider: ModelProvider = {
+      selectModels: vi.fn().mockResolvedValue([
+        { id: 'copilot-gpt-4.1', name: 'gpt-4.1', vendor: 'openai', family: 'gpt-4', maxInputTokens: 10000 },
+      ]),
       sendRequest: vi.fn()
-        .mockResolvedValueOnce({ text: (async function* () { yield 'OK 1'; })(), stream: (async function* () {})() })
+        .mockResolvedValueOnce({ text: 'OK 1', toolCalls: [], usage: { inputTokens: 4, outputTokens: 4 } })
         .mockRejectedValueOnce(new Error('branch 2 failed'))
-        .mockResolvedValueOnce({ text: (async function* () { yield 'OK 3'; })(), stream: (async function* () {})() }),
+        .mockResolvedValueOnce({ text: 'OK 3', toolCalls: [], usage: { inputTokens: 4, outputTokens: 4 } }),
     };
-    mockSelectChatModels.mockResolvedValue([failModel] as unknown as vscode.LanguageModelChat[]);
-    spawner = new AgentSpawner(new ModelResolver());
+    spawner = new AgentSpawner(mixedProvider);
 
     const results = await spawner.spawnParallel([
       makeConfig({ role: 'database_agent' }),

@@ -4,10 +4,6 @@
   "description": "VS Code extension that makes GitHub Copilot smarter. Transforms chat into autonomous workflows: bug fix, feature development, refactoring, code review, documentation, dependency management, onboarding.",
   "version": "0.5.0",
   "publisher": "roadie",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/rmg007/Roadie_App.git"
-  },
   "engines": {
     "vscode": "^1.93.0",
     "node": ">=20.0.0"
@@ -29,10 +25,7 @@
   "activationEvents": [
     "onChat:roadie",
     "workspaceContains:.github/.roadie/project-model.db",
-    "onStartupFinished",
-    "onCommand:roadie.init",
-    "onCommand:roadie.rescan",
-    "onCommand:roadie.reset"
+    "onStartupFinished"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -59,6 +52,21 @@
         "command": "roadie.reset",
         "title": "Roadie: Reset",
         "description": "Delete local database and reset Roadie"
+      },
+      {
+        "command": "roadie.stats",
+        "title": "Roadie: Show Stats",
+        "description": "Show workflow history statistics from the learning database"
+      },
+      {
+        "command": "roadie.enableWorkflowHistory",
+        "title": "Roadie: Enable Workflow History",
+        "description": "Start recording every @roadie run to the local learning database"
+      },
+      {
+        "command": "roadie.disableWorkflowHistory",
+        "title": "Roadie: Disable Workflow History",
+        "description": "Stop recording @roadie runs to the local learning database"
       }
     ],
     "configuration": {
@@ -116,8 +124,8 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run build",
-    "build": "tsup src/extension.ts --outDir out --format cjs --external vscode",
-    "build:watch": "npm run build -- --watch",
+    "build": "tsup",
+    "build:watch": "tsup --watch",
     "lint": "eslint src --ext ts",
     "lint:fix": "npm run lint -- --fix",
     "format": "prettier --write src",
@@ -129,7 +137,8 @@
     "prepublish:test": "npm run test && npm run lint && npm run build"
   },
   "dependencies": {
-    "better-sqlite3": "^9.4.3",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "better-sqlite3": "^12.9.0",
     "fast-glob": "^3.3.0",
     "zod": "^3.22.4"
   },
@@ -148,15 +157,6 @@
     "vitest": "^0.34.0"
   },
   "bundleDependencies": [
-    "better-sqlite3",
-    "fast-glob",
-    "zod"
-  ],
-  "files": [
-    "out",
-    "node_modules",
-    "package.json",
-    "README.md",
-    "LICENSE"
+    "better-sqlite3"
   ]
 }

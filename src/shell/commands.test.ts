@@ -21,6 +21,7 @@ vi.mock('vscode', () => {
         dispose: vi.fn(),
       })),
     },
+    ConfigurationTarget: { Global: 1 },
   };
 });
 
@@ -49,20 +50,26 @@ describe('registerCommands', () => {
     onInit: vi.fn(),
     onRescan: vi.fn(),
     onReset: vi.fn(),
+    onStats: vi.fn(),
+    onEnableWorkflowHistory: vi.fn(),
+    onDisableWorkflowHistory: vi.fn(),
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('registers 3 commands', () => {
+  it('registers 6 commands', () => {
     const disposables = registerCommands(mockCallbacks);
-    expect(disposables).toHaveLength(3);
+    expect(disposables).toHaveLength(6);
 
     const register = vi.mocked(vscode.commands.registerCommand);
     expect(register).toHaveBeenCalledWith('roadie.init', expect.any(Function));
     expect(register).toHaveBeenCalledWith('roadie.rescan', expect.any(Function));
     expect(register).toHaveBeenCalledWith('roadie.reset', expect.any(Function));
+    expect(register).toHaveBeenCalledWith('roadie.stats', expect.any(Function));
+    expect(register).toHaveBeenCalledWith('roadie.enableWorkflowHistory', expect.any(Function));
+    expect(register).toHaveBeenCalledWith('roadie.disableWorkflowHistory', expect.any(Function));
   });
 
   it('roadie.init calls onInit callback', async () => {

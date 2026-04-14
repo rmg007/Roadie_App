@@ -7,11 +7,12 @@
  *   Enforces per-step timeout via Promise.race.
  * @inputs WorkflowStep, WorkflowContext, StepHandlerFn
  * @outputs StepResult
- * @depends-on types.ts (WorkflowStep, StepResult, ModelTier)
+ * @depends-on types.ts (WorkflowStep, StepResult, ModelTier), shell/logger.ts
  * @depended-on-by workflow-engine.ts
  */
 
 import type { WorkflowStep, WorkflowContext, StepResult, ModelTier } from '../types';
+import { getLogger } from '../shell/logger';
 
 /**
  * Callback invoked by StepExecutor for each attempt.
@@ -26,12 +27,9 @@ export type StepHandlerFn = (
 /** Escalate to the next model tier. Premium cannot escalate further. */
 function escalateTier(tier: ModelTier): ModelTier {
   switch (tier) {
-    case 'free':
-      return 'standard';
-    case 'standard':
-      return 'premium';
-    case 'premium':
-      return 'premium';
+    case 'free':     return 'standard';
+    case 'standard': return 'premium';
+    case 'premium':  return 'premium';
   }
 }
 
@@ -39,7 +37,10 @@ function escalateTier(tier: ModelTier): ModelTier {
 async function withTimeout<T>(promise: Promise<T>, ms: number, stepId: string): Promise<T> {
   let timerId: ReturnType<typeof setTimeout> | undefined;
   const timer = new Promise<never>((_resolve, reject) => {
-    timerId = setTimeout(() => reject(new Error(`Step '${stepId}' timed out after ${ms}ms`)), ms);
+    timerId = setTimeout(
+      () => reject(new Error(`Step '${stepId}' timed out after ${ms}ms`)),
+      ms,
+    );
   });
   try {
     return await Promise.race([promise, timer]);
@@ -61,20 +62,22 @@ export class StepExecutor {
    *   After maxRetries+1 total attempts: return failed
    */
   async executeStep(step: WorkflowStep, context: WorkflowContext): Promise<StepResult> {
+    const log = getLogger();
     const maxAttempts = step.maxRetries + 1;
     let currentTier = step.modelTier;
     let previousError: string | undefined;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       // Check cancellation before each attempt
-      if (context.cancellationToken.isCancellationRequested) {
+      if (context.cancellation.isCancelled) {
+        log.info(`[${step.id}] Cancelled before attempt ${attempt}`);
         return {
-          stepId: step.id,
-          status: 'cancelled',
-          output: '',
+          stepId:     step.id,
+          status:     'cancelled',
+          output:     '',
           tokenUsage: { input: 0, output: 0 },
-          attempts: attempt,
-          modelUsed: '',
+          attempts:   attempt,
+          modelUsed:  '',
         };
       }
 
@@ -82,10 +85,17 @@ export class StepExecutor {
       //   Attempts 1-2: original tier
       //   Attempts 3-4: one tier up  (free→standard, standard→premium)
       //   Attempts 5+:  two tiers up (free→premium)
+      const prevTier = currentTier;
       if (attempt >= 5) {
         currentTier = escalateTier(escalateTier(step.modelTier));
       } else if (attempt >= 3) {
         currentTier = escalateTier(step.modelTier);
+      }
+
+      if (currentTier !== prevTier) {
+        log.warn(`[${step.id}] Attempt ${attempt}: escalating tier ${prevTier} → ${currentTier}`);
+      } else {
+        log.debug(`[${step.id}] Attempt ${attempt}/${maxAttempts} (tier: ${currentTier})`);
       }
 
       try {
@@ -96,26 +106,42 @@ export class StepExecutor {
         );
 
         if (result.status === 'success') {
+          if (attempt > 1) {
+            log.info(`[${step.id}] Succeeded on attempt ${attempt}/${maxAttempts}`);
+          }
           return { ...result, attempts: attempt };
         }
 
         // Step returned failure — prepare for retry
         previousError = result.error ?? result.output;
+        log.warn(
+          `[${step.id}] Attempt ${attempt}/${maxAttempts} failed: ` +
+          `${previousError?.slice(0, 120) ?? '(no detail)'}`,
+        );
       } catch (err) {
         // Timeout or unexpected error
         previousError = err instanceof Error ? err.message : String(err);
+        const isTimeout = previousError.includes('timed out');
+        if (isTimeout) {
+          log.warn(`[${step.id}] Attempt ${attempt}/${maxAttempts} timed out (${step.timeoutMs}ms)`);
+        } else {
+          log.error(`[${step.id}] Attempt ${attempt}/${maxAttempts} threw`, err);
+        }
       }
     }
 
     // All attempts exhausted
+    const errMsg = `Step '${step.id}' failed after ${maxAttempts} attempts. Last error: ${previousError}`;
+    log.error(`[${step.id}] All ${maxAttempts} attempts exhausted — step failed`);
+
     return {
-      stepId: step.id,
-      status: 'failed',
-      output: '',
+      stepId:     step.id,
+      status:     'failed',
+      output:     '',
       tokenUsage: { input: 0, output: 0 },
-      attempts: maxAttempts,
-      modelUsed: '',
-      error: `Step '${step.id}' failed after ${maxAttempts} attempts. Last error: ${previousError}`,
+      attempts:   maxAttempts,
+      modelUsed:  '',
+      error:      errMsg,
     };
   }
 }

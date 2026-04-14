@@ -5,10 +5,12 @@
  *   Types flow outward — no circular imports.
  * @inputs None (type-only module)
  * @outputs All shared TypeScript interfaces and types
- * @depends-on vscode (for ChatResponseStream, CancellationToken, LanguageModelChat)
+ * @depends-on providers (for ProgressReporter, CancellationHandle)
  * @depended-on-by Every module in the project
  */
 
+import type { ProgressReporter, CancellationHandle } from './providers';
+// Keep vscode import for wrapper types at bottom of file
 import * as vscode from 'vscode';
 
 // =====================================================================
@@ -135,6 +137,7 @@ export interface WorkflowStep {
 
 /**
  * Context passed to workflow engine and threaded through each step.
+ * Phase 2: uses provider abstractions instead of direct VS Code API types.
  */
 export interface WorkflowContext {
   /** The developer's original prompt */
@@ -144,9 +147,9 @@ export interface WorkflowContext {
   /** Project model (for context injection) */
   projectModel: ProjectModel;
   /** Stream for sending progress updates to chat UI */
-  chatResponseStream: vscode.ChatResponseStream;
-  /** Token for cancelling the workflow */
-  cancellationToken: vscode.CancellationToken;
+  progress: ProgressReporter;
+  /** Handle for cancelling the workflow */
+  cancellation: CancellationHandle;
   /** Results from previous step (if any) */
   previousStepResults?: StepResult[];
 }

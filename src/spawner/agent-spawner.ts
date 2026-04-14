@@ -2,79 +2,97 @@
  * @module agent-spawner
  * @description Creates ephemeral subagents. Accepts AgentConfig, resolves
  *   the model via ModelResolver, constructs prompt via PromptBuilder,
- *   scopes tools via ToolRegistry, sends request via vscode.lm, and
+ *   scopes tools via ToolRegistry, sends request via ModelProvider, and
  *   returns AgentResult. Supports parallel spawning via Promise.allSettled.
  * @inputs AgentConfig
  * @outputs AgentResult
- * @depends-on model-resolver.ts, prompt-builder.ts, tool-registry.ts, vscode LM API
+ * @depends-on model-resolver.ts, prompt-builder.ts, tool-registry.ts,
+ *   providers.ts, shell/logger.ts
  * @depended-on-by step-executor.ts (via StepHandlerFn wiring)
  */
 
-import * as vscode from 'vscode';
 import type { AgentConfig, AgentResult } from '../types';
+import type { ModelProvider } from '../providers';
 import { ModelResolver } from '../engine/model-resolver';
 import { PromptBuilder } from './prompt-builder';
 import { ToolRegistry } from './tool-registry';
+import { getLogger } from '../shell/logger';
 
 export class AgentSpawner {
+  private modelProvider: ModelProvider;
   private modelResolver: ModelResolver;
   private promptBuilder: PromptBuilder;
   private toolRegistry: ToolRegistry;
 
   constructor(
-    modelResolver: ModelResolver,
+    modelProvider: ModelProvider,
     promptBuilder?: PromptBuilder,
     toolRegistry?: ToolRegistry,
   ) {
-    this.modelResolver = modelResolver;
+    this.modelProvider = modelProvider;
+    this.modelResolver = new ModelResolver(modelProvider);
     this.promptBuilder = promptBuilder ?? new PromptBuilder();
-    this.toolRegistry = toolRegistry ?? new ToolRegistry();
+    this.toolRegistry  = toolRegistry  ?? new ToolRegistry();
   }
 
   /**
    * Spawn a single subagent and return its result.
    */
   async spawn(config: AgentConfig): Promise<AgentResult> {
+    const log = getLogger();
+
+    log.debug(`[${config.role}] Resolving model for tier: ${config.modelTier}`);
 
     try {
       // 1. Resolve model for the requested tier
-      const model = await this.modelResolver.resolve(config.modelTier);
+      const modelInfo = await this.modelResolver.resolve(config.modelTier);
+      log.info(`[${config.role}] Model resolved: ${modelInfo.id}`);
 
       // 2. Build the three-layer prompt
       const prompt = this.promptBuilder.build(config);
+      log.debug(`[${config.role}] Prompt built (${prompt.length} chars)`);
 
       // 3. Scope tools
       const toolNames = this.toolRegistry.getToolNames(config.tools);
+      log.debug(`[${config.role}] Tools scoped: [${toolNames.join(', ')}]`);
 
-      // 4. Send request via vscode LM API
-      const messages = [vscode.LanguageModelChatMessage.User(prompt)];
-      const response = await model.sendRequest(
-        messages,
-        { tools: toolNames.map((name) => ({ name })) } as vscode.LanguageModelChatRequestOptions,
-        new vscode.CancellationTokenSource().token,
+      // 4. Send request via ModelProvider
+      log.info(`[${config.role}] Sending request (tools: ${config.tools})`);
+      const response = await this.modelProvider.sendRequest(
+        modelInfo.id,
+        [{ role: 'user', content: prompt }],
+        {
+          tools: toolNames.map((name) => ({
+            name,
+            description: name,
+            inputSchema: {},
+          })),
+        },
       );
 
-      // 5. Collect response text from AsyncIterable<string>
-      let text = '';
-      for await (const chunk of response.text) {
-        text += chunk;
-      }
+      log.info(`[${config.role}] Response received (${response.text.length} chars)`);
 
       return {
-        output: text,
+        output:      response.text,
         toolResults: [],
-        tokenUsage: { input: prompt.length, output: text.length }, // approximate
-        status: 'success',
-        model: model.id,
+        tokenUsage:  { input: response.usage.inputTokens, output: response.usage.outputTokens },
+        status:      'success',
+        model:       modelInfo.id,
       };
     } catch (err) {
+      const isTimeout = err instanceof Error && err.message.includes('timed out');
+      const status: AgentResult['status'] = isTimeout ? 'timeout' : 'failed';
+      const errMsg = err instanceof Error ? err.message : String(err);
+
+      log.error(`[${config.role}] ${isTimeout ? 'Timed out' : 'Failed'}: ${errMsg}`);
+
       return {
-        output: '',
+        output:      '',
         toolResults: [],
-        tokenUsage: { input: 0, output: 0 },
-        status: err instanceof Error && err.message.includes('timed out') ? 'timeout' : 'failed',
-        model: '',
-        error: err instanceof Error ? err.message : String(err),
+        tokenUsage:  { input: 0, output: 0 },
+        status,
+        model:       '',
+        error:       errMsg,
       };
     }
   }
@@ -83,18 +101,28 @@ export class AgentSpawner {
    * Spawn multiple agents in parallel. One failing branch does not block others.
    */
   async spawnParallel(configs: AgentConfig[]): Promise<AgentResult[]> {
+    const log = getLogger();
+    log.info(`Spawning ${configs.length} agents in parallel: [${configs.map((c) => c.role).join(', ')}]`);
+
     const results = await Promise.allSettled(configs.map((c) => this.spawn(c)));
 
-    return results.map((r, _i) => {
+    const mapped = results.map((r, i) => {
       if (r.status === 'fulfilled') return r.value;
+      const errMsg = r.reason instanceof Error ? r.reason.message : String(r.reason);
+      log.warn(`Parallel spawn [${configs[i].role}] rejected: ${errMsg}`);
       return {
-        output: '',
+        output:      '',
         toolResults: [],
-        tokenUsage: { input: 0, output: 0 },
-        status: 'failed' as const,
-        model: '',
-        error: r.reason instanceof Error ? r.reason.message : String(r.reason),
+        tokenUsage:  { input: 0, output: 0 },
+        status:      'failed' as const,
+        model:       '',
+        error:       errMsg,
       };
     });
+
+    const succeeded = mapped.filter((r) => r.status === 'success').length;
+    log.info(`Parallel spawn complete: ${succeeded}/${configs.length} succeeded`);
+
+    return mapped;
   }
 }

@@ -1,4 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
+
+// Mock vscode so the module can be imported in test environments
+vi.mock('vscode', () => ({
+  window: { createOutputChannel: vi.fn(() => ({ appendLine: vi.fn(), dispose: vi.fn(), show: vi.fn() })) },
+}));
+
 import { WorkflowEngine } from './workflow-engine';
 import { StepExecutor, type StepHandlerFn } from './step-executor';
 import { WorkflowState } from '../types';
@@ -35,16 +41,14 @@ function makeContext(overrides: Partial<WorkflowContext> = {}): WorkflowContext 
     prompt: 'test prompt',
     intent: { intent: 'bug_fix', confidence: 0.9, signals: [], requiresLLM: false },
     projectModel: {} as WorkflowContext['projectModel'],
-    chatResponseStream: {
-      progress: vi.fn(),
-      markdown: vi.fn(),
-      button: vi.fn(),
-      push: vi.fn(),
-    } as unknown as WorkflowContext['chatResponseStream'],
-    cancellationToken: {
-      isCancellationRequested: false,
-      onCancellationRequested: vi.fn(),
-    } as unknown as WorkflowContext['cancellationToken'],
+    progress: {
+      report: vi.fn(),
+      reportMarkdown: vi.fn(),
+    },
+    cancellation: {
+      isCancelled: false,
+      onCancelled: vi.fn(),
+    },
     ...overrides,
   };
 }
@@ -136,15 +140,15 @@ describe('WorkflowEngine', () => {
 
   it('transitions to CANCELLED when cancellation is requested', async () => {
     let callCount = 0;
-    const cancellationToken = {
-      isCancellationRequested: false,
-      onCancellationRequested: vi.fn(),
+    const cancellation = {
+      isCancelled: false,
+      onCancelled: vi.fn(),
     };
     const handler: StepHandlerFn = vi.fn().mockImplementation((step: WorkflowStep) => {
       callCount++;
       if (callCount === 2) {
         // Simulate cancellation after step 2 starts
-        cancellationToken.isCancellationRequested = true;
+        cancellation.isCancelled = true;
       }
       return Promise.resolve(successResult(step.id));
     });
@@ -152,7 +156,7 @@ describe('WorkflowEngine', () => {
     const engine = createEngine(handler);
     const steps = [makeStep('s1', 'Step 1'), makeStep('s2', 'Step 2'), makeStep('s3', 'Step 3')];
     const ctx = makeContext({
-      cancellationToken: cancellationToken as unknown as WorkflowContext['cancellationToken'],
+      cancellation,
     });
 
     const result = await engine.execute(makeDefinition(steps), ctx);
@@ -172,9 +176,9 @@ describe('WorkflowEngine', () => {
 
     await engine.execute(makeDefinition(steps), ctx);
 
-    const progress = ctx.chatResponseStream.progress as ReturnType<typeof vi.fn>;
-    expect(progress).toHaveBeenCalledWith('Running: Locate Error...');
-    expect(progress).toHaveBeenCalledWith('Running: Apply Fix...');
+    const report = ctx.progress.report as ReturnType<typeof vi.fn>;
+    expect(report).toHaveBeenCalledWith('Running: Locate Error…');
+    expect(report).toHaveBeenCalledWith('Running: Apply Fix…');
   });
 
   it('tracks workflow duration', async () => {

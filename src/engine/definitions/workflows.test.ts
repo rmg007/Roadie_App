@@ -1,4 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
+
+// Mock vscode so the module can be imported in test environments
+vi.mock('vscode', () => ({
+  window: { createOutputChannel: vi.fn(() => ({ appendLine: vi.fn(), dispose: vi.fn(), show: vi.fn() })) },
+}));
+
 import { FEATURE_WORKFLOW } from './feature';
 import { REFACTOR_WORKFLOW } from './refactor';
 import { REVIEW_WORKFLOW } from './review';
@@ -18,16 +24,14 @@ function makeContext(): WorkflowContext {
     prompt: 'test prompt',
     intent: { intent: 'general_chat', confidence: 0.9, signals: [], requiresLLM: false },
     projectModel: {} as WorkflowContext['projectModel'],
-    chatResponseStream: {
-      progress: vi.fn(),
-      markdown: vi.fn(),
-      button: vi.fn(),
-      push: vi.fn(),
-    } as unknown as WorkflowContext['chatResponseStream'],
-    cancellationToken: {
-      isCancellationRequested: false,
-      onCancellationRequested: vi.fn(),
-    } as unknown as WorkflowContext['cancellationToken'],
+    progress: {
+      report: vi.fn(),
+      reportMarkdown: vi.fn(),
+    },
+    cancellation: {
+      isCancelled: false,
+      onCancelled: vi.fn(),
+    },
   };
 }
 

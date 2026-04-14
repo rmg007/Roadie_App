@@ -1,4 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
+
+// Mock vscode so the module can be imported in test environments
+vi.mock('vscode', () => ({
+  window: { createOutputChannel: vi.fn(() => ({ appendLine: vi.fn(), dispose: vi.fn(), show: vi.fn() })) },
+}));
+
 import { StepExecutor, type StepHandlerFn } from './step-executor';
 import type { WorkflowStep, WorkflowContext, StepResult } from '../types';
 
@@ -24,8 +30,8 @@ function makeContext(overrides: Partial<WorkflowContext> = {}): WorkflowContext 
     prompt: 'fix the login error',
     intent: { intent: 'bug_fix', confidence: 0.9, signals: ['keyword:fix'], requiresLLM: false },
     projectModel: {} as WorkflowContext['projectModel'],
-    chatResponseStream: { progress: vi.fn(), markdown: vi.fn(), button: vi.fn() } as unknown as WorkflowContext['chatResponseStream'],
-    cancellationToken: { isCancellationRequested: false, onCancellationRequested: vi.fn() } as unknown as WorkflowContext['cancellationToken'],
+    progress: { report: vi.fn(), reportMarkdown: vi.fn() },
+    cancellation: { isCancelled: false, onCancelled: vi.fn() },
     ...overrides,
   };
 }
@@ -132,10 +138,7 @@ describe('StepExecutor', () => {
     const handler: StepHandlerFn = vi.fn().mockResolvedValue(successResult());
     const executor = new StepExecutor(handler);
     const ctx = makeContext({
-      cancellationToken: {
-        isCancellationRequested: true,
-        onCancellationRequested: vi.fn(),
-      } as unknown as WorkflowContext['cancellationToken'],
+      cancellation: { isCancelled: true, onCancelled: vi.fn() },
     });
 
     const result = await executor.executeStep(makeStep(), ctx);

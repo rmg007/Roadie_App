@@ -154,7 +154,7 @@ function extractEntities(content: string): ExtractedEntity[] {
       }
 
       const name = match[1];
-      let kind = pattern.kind;
+      const kind = pattern.kind;
 
       // For constant pattern, skip if already captured as arrow function
       const key = `${name}::${kind}`;

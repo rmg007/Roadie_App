@@ -127,6 +127,19 @@ export class LearningDatabase {
     this.db = null;
   }
 
+  /**
+   * Hot-update the workflowHistory flag without re-initialising.
+   * Called when the user runs "Roadie: Enable/Disable Workflow History".
+   */
+  setWorkflowHistory(enabled: boolean): void {
+    this.config = { ...this.config, workflowHistory: enabled };
+  }
+
+  /** Return whether workflow history recording is currently active. */
+  isWorkflowHistoryEnabled(): boolean {
+    return this.config.workflowHistory === true;
+  }
+
   // ---- File Snapshots ----
 
   recordSnapshot(filePath: string, content: string, source: 'roadie' | 'human'): void {
@@ -209,7 +222,7 @@ export class LearningDatabase {
       const isSuccess = row.status === 'completed' || row.status === 'success';
       if (isSuccess) successCount++;
       else failureCount++;
-      if (row.duration_ms != null) { totalDuration += row.duration_ms; durationCount++; }
+      if (row.duration_ms !== null && row.duration_ms !== undefined) { totalDuration += row.duration_ms; durationCount++; }
       const entry = byType[row.workflow_type] ??= { count: 0, successCount: 0 };
       entry.count++;
       if (isSuccess) entry.successCount++;

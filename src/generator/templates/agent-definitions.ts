@@ -63,5 +63,42 @@ export function generateAgentDefinitions(model: ProjectModel): GeneratedSection[
     content: `## Available Workflows\n\n${wfTable.join('\n')}`,
   });
 
+  // MCP integration section
+  sections.push({
+    id: 'mcp-integration',
+    content: [
+      '## MCP Integration',
+      '',
+      'Roadie exposes all functionality as MCP (Model Context Protocol) tools.',
+      'Add the following to your `.mcp.json` to enable Roadie in Claude Code:',
+      '',
+      '```json',
+      '{',
+      '  "mcpServers": {',
+      '    "roadie": {',
+      '      "command": "node",',
+      '      "args": ["./node_modules/.bin/roadie-mcp", "--project", "."]',
+      '    }',
+      '  }',
+      '}',
+      '```',
+      '',
+      '### Available MCP Tools',
+      '',
+      '| Tool | Description |',
+      '|------|-------------|',
+      '| `roadie/analyze_project` | Scan project structure and detect tech stack |',
+      '| `roadie/get_project_context` | Return serialized context for LLM injection |',
+      '| `roadie/rescan_project` | Force full re-scan |',
+      '| `roadie/run_workflow` | Execute a named workflow (bug_fix, feature, etc.) |',
+      '| `roadie/get_workflow_status` | Check workflow execution status |',
+      '| `roadie/generate_file` | Generate a specific .github/ file |',
+      '| `roadie/generate_all_files` | Regenerate all managed files |',
+      '| `roadie/query_patterns` | Query detected coding patterns |',
+      '| `roadie/query_workflow_history` | Retrieve past workflow outcomes |',
+      '| `roadie/get_recommendations` | Get AI configuration improvement tips |',
+    ].join('\n'),
+  });
+
   return sections;
 }
