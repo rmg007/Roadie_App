@@ -229,6 +229,14 @@ export class RoadieDatabase {
     }));
   }
 
+  /**
+   * Expose the raw better-sqlite3 Database instance so other services
+   * (e.g. LearningDatabase) can share the same connection and WAL journal.
+   */
+  getRawDb(): Database.Database {
+    return this.db;
+  }
+
   /** Close the database connection. */
   close(): void {
     this.db.close();

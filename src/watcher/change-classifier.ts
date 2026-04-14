@@ -56,6 +56,7 @@ const DEPENDENCY_FILES = new Set([
   'package-lock.json',
   'yarn.lock',
   'pnpm-lock.yaml',
+  'bun.lockb',
   'go.mod',
   'go.sum',
   'Cargo.toml',

@@ -24,7 +24,10 @@
  *   generator/file-generator.ts
  */
 
-import * as vscode from 'vscode';
+// NOTE: `vscode` is intentionally NOT imported at module top-level. This
+// module is loaded by code paths that also run in the standalone MCP server
+// (no vscode runtime). The RoadieLogger class lazy-requires vscode only when
+// instantiated — which only happens from extension.ts under VS Code.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Public interface
@@ -52,10 +55,13 @@ class NullLogger implements Logger {
 // Real OutputChannel implementation
 // ─────────────────────────────────────────────────────────────────────────────
 
-export class RoadieLogger implements Logger, vscode.Disposable {
-  private readonly channel: vscode.OutputChannel;
+export class RoadieLogger implements Logger {
+  private readonly channel: { appendLine(s: string): void; show(preserveFocus?: boolean): void; dispose(): void };
 
   constructor() {
+    // Lazy require so this file is safe to import outside VS Code.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const vscode = require('vscode');
     this.channel = vscode.window.createOutputChannel('Roadie');
   }
 

@@ -1,33 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-
-// Mock better-sqlite3 native module to avoid ERR_DLOPEN_FAILED in test environments
-vi.mock('better-sqlite3', () => {
-  const rows = new Map<string, unknown[]>();
-
-  class MockStatement {
-    private sql: string;
-    constructor(sql: string) { this.sql = sql; }
-    run(..._args: unknown[]): void {}
-    get(..._args: unknown[]): unknown { return undefined; }
-    all(..._args: unknown[]): unknown[] { return []; }
-  }
-
-  class MockDatabase {
-    private stmts: MockStatement[] = [];
-    prepare(sql: string): MockStatement { return new MockStatement(sql); }
-    pragma(_sql: string): unknown { return null; }
-    exec(_sql: string): void {}
-    close(): void {}
-    transaction(fn: (...args: unknown[]) => unknown): (...args: unknown[]) => unknown {
-      return fn;
-    }
-  }
-
-  return {
-    default: MockDatabase,
-  };
-});
-
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import Database from 'better-sqlite3';
 import { DictionaryQueryImpl } from './dictionary-query';
 import { EntityWriterImpl } from './entity-writer';

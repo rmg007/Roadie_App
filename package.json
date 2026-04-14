@@ -123,9 +123,11 @@
     }
   },
   "scripts": {
+    "postinstall": "node scripts/rebuild-native.js || true",
     "vscode:prepublish": "npm run build",
     "build": "tsup",
     "build:watch": "tsup --watch",
+    "postbuild": "node -e \"try{require('fs').chmodSync('out/bin/roadie-mcp.js', 0o755)}catch(e){}\"",
     "lint": "eslint src --ext ts",
     "lint:fix": "npm run lint -- --fix",
     "format": "prettier --write src",
@@ -134,7 +136,16 @@
     "test:coverage": "vitest run --coverage",
     "package": "vsce package",
     "publish": "vsce publish",
-    "prepublish:test": "npm run test && npm run lint && npm run build"
+    "prepublish:test": "npm run test && npm run lint && npm run build",
+    "install:all": "node scripts/install.js",
+    "uninstall:all": "node scripts/install.js --uninstall",
+    "doctor": "node scripts/doctor.js",
+    "verify:phase2": "node scripts/verify-phase2.js"
+  },
+  "bin": {
+    "roadie-mcp": "out/bin/roadie-mcp.js",
+    "roadie-install": "scripts/install.js",
+    "roadie-doctor": "scripts/doctor.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
