@@ -16,6 +16,7 @@ import {
   CONFIDENCE_THRESHOLDS,
 } from './intent-patterns';
 import { LLMClassificationResponseSchema } from '../schemas';
+import type { WorkflowStats } from '../learning/learning-database';
 
 /**
  * Two-tier intent classifier implementing the IntentClassifier interface.
@@ -38,6 +39,15 @@ export class IntentClassifier {
     // (e.g., /TypeError:/, /README/, /TypeScript/). Patterns that need
     // case-insensitivity already have the /i flag.
     const normalized = prompt.trim();
+
+    if (normalized.length > 10_000) {
+      return {
+        intent: 'general_chat',
+        confidence: CONFIDENCE_THRESHOLDS.unknown,
+        signals: ['prompt-too-long'],
+        requiresLLM: true,
+      };
+    }
 
     // 1. Score each intent by summing matched pattern weights.
     //    Track earliest match position for tie-breaking (if two intents
@@ -71,6 +81,15 @@ export class IntentClassifier {
       if (b[1].score !== a[1].score) return b[1].score - a[1].score;
       return a[1].firstMatchIdx - b[1].firstMatchIdx; // earlier mention wins
     });
+    if (sorted.length === 0) {
+      return {
+        intent: 'general_chat',
+        confidence: CONFIDENCE_THRESHOLDS.unknown,
+        signals: [],
+        requiresLLM: true,
+      };
+    }
+
     const topEntry = sorted[0];
     const topIntent = topEntry[0];
     const topData = topEntry[1];
@@ -159,6 +178,42 @@ export class IntentClassifier {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Adjust a ClassificationResult's confidence using per-repo learning data.
+   * Pure function — no DB access. Caller fetches stats and passes them in.
+   *
+   * Gate: fewer than 5 runs for the classified intent → returns result unchanged.
+   * Formula:
+   *   successBias   = (successRate - 0.5) * 0.20   // -0.10 … +0.10
+   *   cancelPenalty = cancelRate * 0.15              // 0 … -0.15
+   *   adjusted      = clamp(base + successBias - cancelPenalty, 0.30, 0.95)
+   */
+  adjustWithLearning(
+    result: ClassificationResult,
+    stats: WorkflowStats,
+    cancelStats: Array<{ workflowType: string; totalRuns: number; cancelledRuns: number }>,
+  ): ClassificationResult {
+    const intentType = result.intent;
+    const byType = stats.byType[intentType];
+
+    // Gate: not enough data
+    if (!byType || byType.count < 5) return result;
+
+    const runs = byType.count;
+    const successRate = runs > 0 ? byType.successCount / runs : 0;
+
+    const cancelRow = cancelStats.find((r) => r.workflowType === intentType);
+    const cancelRate = cancelRow && cancelRow.totalRuns > 0
+      ? cancelRow.cancelledRuns / cancelRow.totalRuns
+      : 0;
+
+    const successBias = (successRate - 0.5) * 0.20;
+    const cancelPenalty = cancelRate * 0.15;
+    const adjusted = Math.max(0.30, Math.min(0.95, result.confidence + successBias - cancelPenalty));
+
+    return { ...result, confidence: adjusted };
   }
 
   /**

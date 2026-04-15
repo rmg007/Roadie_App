@@ -15,13 +15,17 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import type { ProjectModel, GeneratedFile, GeneratedFileType } from '../types';
+import type { ProjectModel, GeneratedFile, GeneratedFileType, WriteReason } from '../types';
 import { buildSectionedFile, hashContent, type GeneratedSection } from './section-manager';
 import {
   generateCopilotInstructions,
   COPILOT_INSTRUCTIONS_PATH,
 } from './templates/copilot-instructions';
 import { generateAgentDefinitions, AGENTS_MD_PATH } from './templates/agent-definitions';
+import { generateClaudeMd, CLAUDE_MD_PATH } from './templates/claude-md';
+import { generateCursorRules, buildCursorRulesPreamble, CURSOR_RULES_PATH } from './templates/cursor-rules';
+import { generatePathInstructions, PATH_INSTRUCTIONS_DIR } from './templates/path-instructions';
+import { generateCursorRulesDir, CURSOR_RULES_DIR } from './templates/cursor-rules-dir';
 import type { LearningDatabase } from '../learning/learning-database';
 import type { FileSystemProvider } from '../providers';
 import { getLogger } from '../shell/logger';
@@ -30,23 +34,39 @@ interface FileSpec {
   type: GeneratedFileType;
   path: string;
   generate: (model: ProjectModel) => GeneratedSection[];
+  /** Optional preamble prepended before the roadie marker block */
+  preamble?: () => string;
 }
 
-const FILE_SPECS: FileSpec[] = [
-  {
-    type:     'copilot_instructions',
-    path:     COPILOT_INSTRUCTIONS_PATH,
-    generate: generateCopilotInstructions,
-  },
-  {
-    type:     'agents_md',
-    path:     AGENTS_MD_PATH,
-    generate: generateAgentDefinitions,
-  },
-];
+function buildFileSpecs(learningDb?: LearningDatabase): FileSpec[] {
+  return [
+    {
+      type:     'copilot_instructions',
+      path:     COPILOT_INSTRUCTIONS_PATH,
+      generate: generateCopilotInstructions,
+    },
+    {
+      type:     'agents_md',
+      path:     AGENTS_MD_PATH,
+      generate: (model) => generateAgentDefinitions(model, learningDb),
+    },
+    {
+      type:     'claude_md',
+      path:     CLAUDE_MD_PATH,
+      generate: generateClaudeMd,
+    },
+    {
+      type:     'cursor_rules',
+      path:     CURSOR_RULES_PATH,
+      generate: generateCursorRules,
+      preamble: buildCursorRulesPreamble,
+    },
+  ];
+}
 
 export class FileGenerator {
   private fileSystem: FileSystemProvider | null;
+  private fileSpecs: FileSpec[];
 
   constructor(
     private workspaceRoot: string,
@@ -54,6 +74,7 @@ export class FileGenerator {
     fileSystem?: FileSystemProvider,
   ) {
     this.fileSystem = fileSystem ?? null;
+    this.fileSpecs  = buildFileSpecs(learningDb);
   }
 
   /**
@@ -72,10 +93,184 @@ export class FileGenerator {
     await this.ensureGitignore();
 
     const results: GeneratedFile[] = [];
-    for (const spec of FILE_SPECS) {
+    for (const spec of this.fileSpecs) {
       const result = await this.generateFile(spec, model);
       results.push(result);
     }
+
+    // Path-instructions: multi-file output
+    const pathResults = await this.generatePathInstructionFiles(model);
+    results.push(...pathResults);
+
+    // Cursor per-directory MDC rules: multi-file output
+    const cursorDirResults = await this.generateCursorRulesDirFiles(model);
+    results.push(...cursorDirResults);
+
+    return results;
+  }
+
+  /**
+   * Generate per-directory .github/instructions/ files.
+   */
+  private async generatePathInstructionFiles(model: ProjectModel): Promise<GeneratedFile[]> {
+    const { generatePathInstructions: _gen } = await import('./templates/path-instructions');
+    const files = generatePathInstructions(model);
+    const results: GeneratedFile[] = [];
+
+    for (const file of files) {
+      const { buildSectionedFile: bsf } = await import('./section-manager');
+      const content = bsf(file.sections);
+      const fullPath = path.join(this.workspaceRoot, file.filePath);
+      const newHash  = hashContent(content);
+
+      let existingContent: string | null = null;
+      try {
+        existingContent = await fs.readFile(fullPath, 'utf8');
+      } catch { /* new file */ }
+
+      if (existingContent !== null && hashContent(existingContent) === newHash) {
+        results.push({
+          type: 'path_instructions',
+          path: file.filePath,
+          content: existingContent,
+          contentHash: `sha256:${newHash}`,
+          written: false,
+          writeReason: 'unchanged',
+        });
+        continue;
+      }
+
+      if (this.isFileOpenInEditor(fullPath)) {
+        results.push({
+          type: 'path_instructions',
+          path: file.filePath,
+          content,
+          contentHash: `sha256:${newHash}`,
+          written: false,
+          writeReason: 'deferred',
+        });
+        continue;
+      }
+
+      const writeReason: WriteReason = existingContent === null ? 'new' : 'updated';
+      try {
+        await fs.mkdir(path.dirname(fullPath), { recursive: true });
+        await fs.writeFile(fullPath, content, 'utf8');
+      } catch (err: unknown) {
+        const log = getLogger();
+        log.warn(`FileGenerator: failed to write ${file.filePath}`, err);
+        results.push({
+          type: 'path_instructions',
+          path: file.filePath,
+          content,
+          contentHash: `sha256:${newHash}`,
+          written: false,
+          writeReason: 'error' as WriteReason,
+        });
+        continue;
+      }
+
+      const log = getLogger();
+      log.info(`FileGenerator: wrote ${file.filePath} (reason=${writeReason})`);
+
+      if (this.learningDb) {
+        try {
+          this.learningDb.recordSnapshot(file.filePath, content, 'roadie');
+        } catch { /* snapshots are non-critical */ }
+      }
+
+      results.push({
+        type: 'path_instructions',
+        path: file.filePath,
+        content,
+        contentHash: `sha256:${newHash}`,
+        written: true,
+        writeReason,
+      });
+    }
+
+    return results;
+  }
+
+  /**
+   * Generate per-directory .cursor/rules/ MDC files.
+   */
+  private async generateCursorRulesDirFiles(model: ProjectModel): Promise<GeneratedFile[]> {
+    const files = generateCursorRulesDir(model);
+    const results: GeneratedFile[] = [];
+
+    for (const file of files) {
+      const { buildSectionedFile: bsf } = await import('./section-manager');
+      const content = file.preamble + bsf(file.sections);
+      const fullPath = path.join(this.workspaceRoot, file.filePath);
+      const newHash  = hashContent(content);
+
+      let existingContent: string | null = null;
+      try {
+        existingContent = await fs.readFile(fullPath, 'utf8');
+      } catch { /* new file */ }
+
+      if (existingContent !== null && hashContent(existingContent) === newHash) {
+        results.push({
+          type: 'cursor_rules_dir' as GeneratedFileType,
+          path: file.filePath,
+          content: existingContent,
+          contentHash: `sha256:${newHash}`,
+          written: false,
+          writeReason: 'unchanged',
+        });
+        continue;
+      }
+
+      if (this.isFileOpenInEditor(fullPath)) {
+        results.push({
+          type: 'cursor_rules_dir' as GeneratedFileType,
+          path: file.filePath,
+          content,
+          contentHash: `sha256:${newHash}`,
+          written: false,
+          writeReason: 'deferred',
+        });
+        continue;
+      }
+
+      const writeReason: WriteReason = existingContent === null ? 'new' : 'updated';
+      try {
+        await fs.mkdir(path.dirname(fullPath), { recursive: true });
+        await fs.writeFile(fullPath, content, 'utf8');
+      } catch (err: unknown) {
+        const log = getLogger();
+        log.warn(`FileGenerator: failed to write ${file.filePath}`, err);
+        results.push({
+          type: 'cursor_rules_dir' as GeneratedFileType,
+          path: file.filePath,
+          content,
+          contentHash: `sha256:${newHash}`,
+          written: false,
+          writeReason: 'error' as WriteReason,
+        });
+        continue;
+      }
+
+      const log = getLogger();
+      log.info(`FileGenerator: wrote ${file.filePath} (reason=${writeReason})`);
+
+      if (this.learningDb) {
+        try {
+          this.learningDb.recordSnapshot(file.filePath, content, 'roadie');
+        } catch { /* snapshots are non-critical */ }
+      }
+
+      results.push({
+        type: 'cursor_rules_dir' as GeneratedFileType,
+        path: file.filePath,
+        content,
+        contentHash: `sha256:${newHash}`,
+        written: true,
+        writeReason,
+      });
+    }
+
     return results;
   }
 
@@ -83,7 +278,7 @@ export class FileGenerator {
    * Generate a single file type.
    */
   async generate(fileType: GeneratedFileType, model: ProjectModel): Promise<GeneratedFile> {
-    const spec = FILE_SPECS.find((s) => s.type === fileType);
+    const spec = this.fileSpecs.find((s) => s.type === fileType);
     if (!spec) {
       getLogger().warn(`FileGenerator: unknown file type "${fileType}" — skipping`);
       return {
@@ -92,6 +287,7 @@ export class FileGenerator {
         content:     '',
         contentHash: '',
         written:     false,
+        writeReason: 'unchanged',
       };
     }
     await this.ensureGitignore();
@@ -104,7 +300,8 @@ export class FileGenerator {
 
     // 1. Generate sections from template
     const sections = spec.generate(model);
-    const content  = buildSectionedFile(sections);
+    const preamble = spec.preamble ? spec.preamble() : '';
+    const content  = preamble + buildSectionedFile(sections);
     const newHash  = hashContent(content);
 
     // 2. Read existing file (if any)
@@ -118,13 +315,18 @@ export class FileGenerator {
 
     // 3. Hash-compare — skip write if identical
     if (existingContent !== null && hashContent(existingContent) === newHash) {
-      log.debug(`FileGenerator: ${spec.type} unchanged — skipped`);
+      log.debug(
+        `FileGenerator: ${spec.type} unchanged (hash=${newHash.slice(0, 8)}…) — skipped. ` +
+        `Hash inputs: generated content. ` +
+        `Note: version-only changes in package.json do not affect generated content.`,
+      );
       return {
         type:        spec.type,
         path:        spec.path,
         content:     existingContent,
         contentHash: `sha256:${newHash}`,
         written:     false,
+        writeReason: 'unchanged' as WriteReason,
       };
     }
 
@@ -137,17 +339,36 @@ export class FileGenerator {
         content,
         contentHash: `sha256:${newHash}`,
         written:     false,
+        writeReason: 'deferred' as WriteReason,
       };
     }
 
-    // 5. Write file
-    await fs.mkdir(path.dirname(fullPath), { recursive: true });
-    await fs.writeFile(fullPath, content, 'utf8');
+    // 5. Determine write reason before writing
+    const writeReason: WriteReason = existingContent === null ? 'new' : 'updated';
+
+    // 6. Write file
+    try {
+      await fs.mkdir(path.dirname(fullPath), { recursive: true });
+      await fs.writeFile(fullPath, content, 'utf8');
+    } catch (err: unknown) {
+      log.warn(`FileGenerator: write failed for ${spec.type} -> ${spec.path}`, err);
+      return {
+        type:        spec.type,
+        path:        spec.path,
+        content,
+        contentHash: `sha256:${newHash}`,
+        written:     false,
+        writeReason: 'error' as WriteReason,
+      };
+    }
 
     const kb = (Buffer.byteLength(content, 'utf8') / 1024).toFixed(1);
-    log.info(`FileGenerator: wrote ${spec.path} (${kb} KB)`);
+    log.info(
+      `FileGenerator: wrote ${spec.path} (${kb} KB, reason=${writeReason}, ` +
+      `hash=${newHash.slice(0, 8)}…)`,
+    );
 
-    // 6. Record snapshot in LearningDatabase (if available)
+    // 7. Record snapshot in LearningDatabase (if available)
     if (this.learningDb) {
       try {
         this.learningDb.recordSnapshot(spec.path, content, 'roadie');
@@ -163,6 +384,7 @@ export class FileGenerator {
       content,
       contentHash: `sha256:${newHash}`,
       written:     true,
+      writeReason,
     };
   }
 

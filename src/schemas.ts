@@ -275,6 +275,25 @@ export const EditRecordSchema = z.object({
 });
 
 // =====================================================================
+// PHASE 2 — NOT YET IMPLEMENTED
+// =====================================================================
+// Everything below this line is the schema contract for the Phase 2 MCP
+// server (roadie-mcp). The MCP server binary does not yet exist. These
+// schemas are defined here so that the Phase 2 build can start from a
+// validated contract, not a blank slate.
+//
+// DO NOT import from this section for Phase 1 / Phase 1.5 code.
+// Use src/types.ts for all runtime types used by the extension today.
+//
+// Note: The WorkflowStepSchema and WorkflowDefinitionSchema below describe
+// a DIFFERENT structure from the types.ts WorkflowStep/WorkflowDefinition
+// interfaces. The schemas.ts versions are the Phase 2 redesign (hitl steps,
+// llm/tool/shell step types, dependsOn graph). The types.ts versions are
+// what the current workflow engine actually uses (sequential/parallel/
+// conditional, promptTemplate, modelTier, maxRetries).
+// =====================================================================
+
+// =====================================================================
 // MCP Tool Input / Output Schemas
 // =====================================================================
 
@@ -634,32 +653,45 @@ export const DictionaryContextSchema = z.object({
 // =====================================================================
 // z.infer Canonical Type Exports
 // =====================================================================
-
+//
+// Phase 1 / Phase 1.5 types — these match types.ts exactly (same shape).
+// Safe to import from either file; prefer types.ts for non-validation code.
+//
 export type ClassificationResult = z.infer<typeof ClassificationResultSchema>;
 export type LLMClassificationResponse = z.infer<typeof LLMClassificationResponseSchema>;
 export type ModelTier = z.infer<typeof ModelTierSchema>;
 export type ToolScope = z.infer<typeof ToolScopeSchema>;
 export type AgentRole = z.infer<typeof AgentRoleSchema>;
-export type WorkflowContext = z.infer<typeof WorkflowContextSchema>;
-export type StepResult = z.infer<typeof StepResultSchema>;
-export type WorkflowStep = z.infer<typeof WorkflowStepSchema>;
-export type WorkflowDefinition = z.infer<typeof WorkflowDefinitionSchema>;
 export type TechStackEntry = z.infer<typeof TechStackEntrySchema>;
 export type ProjectCommand = z.infer<typeof ProjectCommandSchema>;
 export type DetectedPattern = z.infer<typeof DetectedPatternSchema>;
 export type DeveloperPreferences = z.infer<typeof DeveloperPreferencesSchema>;
-export type ProjectModel = z.infer<typeof ProjectModelSchema>;
 export type GeneratedSection = z.infer<typeof GeneratedSectionSchema>;
 export type MergeConflict = z.infer<typeof MergeConflictSchema>;
 export type RoadieError = z.infer<typeof RoadieErrorSchema>;
 export type FileChange = z.infer<typeof FileChangeSchema>;
 export type EditRecord = z.infer<typeof EditRecordSchema>;
-export type GeneratedFileType = z.infer<typeof GeneratedFileTypeSchema>;
 export type CodeEntity = z.infer<typeof CodeEntitySchema>;
 export type EntityRelationship = z.infer<typeof EntityRelationshipSchema>;
 export type RecordEntitiesParams = z.infer<typeof RecordEntitiesParamsSchema>;
 export type DictionaryContextOptions = z.infer<typeof DictionaryContextOptionsSchema>;
 export type DictionaryContext = z.infer<typeof DictionaryContextSchema>;
+
+// Phase 1 validation-only types — subset shapes used at trust boundaries.
+// These are NOT the same as the types.ts interfaces of the same name.
+// WorkflowContextSchema only validates { prompt, intent } (VS Code objects
+// are not Zod-serialisable). StepResultSchema matches types.ts StepResult.
+export type StepResult = z.infer<typeof StepResultSchema>;
+export type WorkflowContextInput = z.infer<typeof WorkflowContextSchema>; // renamed: avoids shadowing types.ts WorkflowContext
+
+// Phase 2 redesign types — different structure from types.ts equivalents.
+// WorkflowStep2 and WorkflowDefinition2 describe the Phase 2 step graph
+// (hitl, llm, tool, shell step types; dependsOn DAG; intent field).
+// Do NOT use these in Phase 1/1.5 code — use types.ts WorkflowStep instead.
+export type WorkflowStep2 = z.infer<typeof WorkflowStepSchema>;
+export type WorkflowDefinition2 = z.infer<typeof WorkflowDefinitionSchema>;
+export type ProjectModel2 = z.infer<typeof ProjectModelSchema>; // flattened object; types.ts ProjectModel is method-based
+export type GeneratedFileType = z.infer<typeof GeneratedFileTypeSchema>; // Phase 2 extended set (mcp-config, hooks, etc.)
 
 // =====================================================================
 // Validation Utilities

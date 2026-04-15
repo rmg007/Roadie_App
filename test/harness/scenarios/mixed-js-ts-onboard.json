@@ -1,0 +1,13 @@
+{
+  "$schema": "test/harness/scenarios/schema.json",
+  "version": 1,
+  "id": "mixed-js-ts-onboard",
+  "name": "Onboard intent on mixed JS/TS project",
+  "workspaceFixture": "mixed-js-ts",
+  "prompt": "@roadie help me understand this project",
+  "expect": {
+    "intent": { "type": "onboard", "confidence": ">= 0.6" },
+    "workflow": "onboard",
+    "stepsExecuted": { ">=": 4, "<=": 10 }
+  }
+}

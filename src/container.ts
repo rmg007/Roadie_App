@@ -1,15 +1,12 @@
 /**
  * @module container
  * @description Dependency injection container for the Roadie extension.
- *   Phase 2: Supports RuntimeMode ('extension' | 'standalone') and wires
- *   appropriate providers for each mode.
- *   The Container class doubles as a disposable tracker (used by extension.ts)
- *   and as a services holder (used by mcp/server.ts).
- * @inputs RuntimeMode, ContainerConfig, provider instances
+ *   The Container class doubles as a disposable tracker (used by extension.ts).
+ * @inputs ContainerConfig, provider instances
  * @outputs Container with typed service accessors
  * @depends-on providers.ts, model/*, analyzer/*, engine/*, generator/*,
  *   learning/learning-database.ts
- * @depended-on-by extension.ts, mcp/server.ts
+ * @depended-on-by extension.ts
  */
 
 import * as path from 'node:path';
@@ -24,16 +21,12 @@ import { ProjectAnalyzer } from './analyzer/project-analyzer';
 import { FileGenerator } from './generator/file-generator';
 
 // =====================================================================
-// Runtime mode + config
+// Config
 // =====================================================================
-
-export type RuntimeMode = 'extension' | 'standalone';
 
 export interface ContainerConfig {
   projectRoot: string;
   dbPath?: string;
-  apiKey?: string;
-  apiProvider?: 'anthropic' | 'openai';
 }
 
 // =====================================================================
@@ -83,16 +76,13 @@ export class Container {
 }
 
 // =====================================================================
-// createContainer — factory for MCP server / standalone mode
+// createContainer — factory for VS Code extension mode
 // =====================================================================
 
 /**
- * Create a container wired for the given runtime mode.
- * - 'extension': uses VS Code provider implementations (lazy import)
- * - 'standalone': uses Node.js provider implementations
+ * Create a container wired for extension mode (VS Code providers).
  */
 export async function createContainer(
-  mode: RuntimeMode,
   config: ContainerConfig,
 ): Promise<Container> {
   const projectRoot = config.projectRoot;
@@ -117,28 +107,11 @@ export async function createContainer(
   const projectModel = new InMemoryProjectModel(roadieDb);
   const projectAnalyzer = new ProjectAnalyzer(projectModel);
 
-  let modelProvider: ModelProvider;
-  let fileSystemProvider: FileSystemProvider;
-  let configProvider: ConfigProvider;
-
-  if (mode === 'extension') {
-    const { VSCodeModelProvider, VSCodeFileSystemProvider, VSCodeConfigProvider } =
-      await import('./shell/vscode-providers.js');
-    modelProvider = new VSCodeModelProvider();
-    fileSystemProvider = new VSCodeFileSystemProvider([]);
-    configProvider = new VSCodeConfigProvider();
-  } else {
-    const { NullModelProvider, NodeFileSystemProvider, FileConfigProvider, DirectAPIModelProvider } =
-      await import('./mcp/standalone-providers.js');
-
-    if (config.apiKey) {
-      modelProvider = new DirectAPIModelProvider(config.apiKey, config.apiProvider ?? 'anthropic');
-    } else {
-      modelProvider = new NullModelProvider();
-    }
-    fileSystemProvider = new NodeFileSystemProvider();
-    configProvider = new FileConfigProvider(projectRoot);
-  }
+  const { VSCodeModelProvider, VSCodeFileSystemProvider, VSCodeConfigProvider } =
+    await import('./shell/vscode-providers.js');
+  const modelProvider: ModelProvider = new VSCodeModelProvider();
+  const fileSystemProvider: FileSystemProvider = new VSCodeFileSystemProvider([]);
+  const configProvider: ConfigProvider = new VSCodeConfigProvider();
 
   const fileGenerator = new FileGenerator(projectRoot, learningDb ?? undefined, fileSystemProvider);
 

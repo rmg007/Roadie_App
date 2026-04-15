@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "test/harness/scenarios/schema.json",
+  "type": "object",
+  "required": [
+    "version",
+    "id",
+    "name",
+    "workspaceFixture",
+    "prompt",
+    "expect"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "version": {
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "workspaceFixture": {
+      "type": "string",
+      "minLength": 1
+    },
+    "prompt": {
+      "type": "string",
+      "minLength": 1
+    },
+    "seed": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "workflowHistory": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["type", "status", "count"],
+            "additionalProperties": false,
+            "properties": {
+              "type": { "type": "string", "minLength": 1 },
+              "status": { "type": "string", "minLength": 1 },
+              "count": { "type": "integer", "minimum": 1 }
+            }
+          }
+        },
+        "patternObservations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["patternId", "count"],
+            "additionalProperties": false,
+            "properties": {
+              "patternId": { "type": "string", "minLength": 1 },
+              "count": { "type": "integer", "minimum": 1 }
+            }
+          }
+        }
+      }
+    },
+    "expect": {
+      "type": "object",
+      "required": ["intent", "workflow", "stepsExecuted"],
+      "additionalProperties": false,
+      "properties": {
+        "intent": {
+          "type": "object",
+          "required": ["type", "confidence"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "type": "string", "minLength": 1 },
+            "confidence": { "type": "string", "minLength": 1 }
+          }
+        },
+        "workflow": {
+          "type": "string",
+          "minLength": 1
+        },
+        "stepsExecuted": {
+          "type": "object",
+          "required": [">=", "<="],
+          "additionalProperties": false,
+          "properties": {
+            ">=": { "type": "integer", "minimum": 0 },
+            "<=": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "faultExpected": {
+          "type": "boolean"
+        },
+        "fileMutations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path", "mustContain"],
+            "additionalProperties": false,
+            "properties": {
+              "path": { "type": "string", "minLength": 1 },
+              "mustContain": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "contextMustContain": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "assertions": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "faultInjection": {
+      "type": "object",
+      "required": ["onStep", "mode"],
+      "additionalProperties": false,
+      "properties": {
+        "onStep": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "timeout",
+            "throw",
+            "partial",
+            "rate-limit",
+            "token-exceeded",
+            "stream-corruption"
+          ]
+        }
+      }
+    },
+    "cassette": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*\\.cassette\\.jsonl$"
+    }
+  }
+}

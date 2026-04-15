@@ -1,0 +1,15 @@
+{
+  "$schema": "test/harness/scenarios/schema.json",
+  "version": 1,
+  "id": "review-codebase-summary",
+  "name": "Review codebase summary includes hot files",
+  "workspaceFixture": "ts-calculator",
+  "prompt": "@roadie review this codebase and summarize risks",
+  "expect": {
+    "intent": { "type": "review", "confidence": ">= 0.7" },
+    "workflow": "review",
+    "stepsExecuted": { ">=": 2, "<=": 2 },
+    "contextMustContain": ["## Most-Edited Files"]
+  },
+  "cassette": "review-codebase-summary.cassette.jsonl"
+}

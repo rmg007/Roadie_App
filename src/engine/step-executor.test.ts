@@ -96,6 +96,19 @@ describe('StepExecutor', () => {
     expect(secondCall[2].previousError).toBe('SyntaxError in output');
   });
 
+  it('truncates very large previous errors before retrying', async () => {
+    const longError = 'x'.repeat(10_000);
+    const handler: StepHandlerFn = vi.fn()
+      .mockResolvedValueOnce(failResult('test-step', longError))
+      .mockResolvedValueOnce(successResult());
+    const executor = new StepExecutor(handler);
+    await executor.executeStep(makeStep(), makeContext());
+
+    const secondCall = (handler as ReturnType<typeof vi.fn>).mock.calls[1];
+    expect(secondCall[2].previousError).toHaveLength(2000);
+    expect(secondCall[2].previousError).toBe(longError.slice(0, 2000));
+  });
+
   it('escalates tier on attempt 3', async () => {
     const handler: StepHandlerFn = vi.fn()
       .mockResolvedValueOnce(failResult())

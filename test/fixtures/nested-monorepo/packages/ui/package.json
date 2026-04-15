@@ -1,0 +1,1 @@
+{ "name": "@sample/ui", "version": "1.0.0", "dependencies": { "react": "^18.0.0" }, "devDependencies": { "typescript": "^5.4.0" } }

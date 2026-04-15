@@ -2,8 +2,10 @@
  * @module commands
  * @description Command palette registrations and configuration reader.
  *   Reads roadie.* settings from vscode.workspace.getConfiguration().
- *   Registers roadie.init, roadie.rescan, roadie.reset, roadie.stats,
- *   roadie.enableWorkflowHistory, roadie.disableWorkflowHistory commands.
+ *   Registers:
+ *     roadie.init, roadie.rescan, roadie.reset, roadie.stats,
+ *     roadie.enableWorkflowHistory, roadie.disableWorkflowHistory,
+ *     roadie.getScanSummary, roadie.runWorkflow, roadie.doctor
  * @inputs vscode.workspace configuration API
  * @outputs RoadieConfig, command disposables
  * @depends-on types.ts (DeveloperPreferences), vscode
@@ -12,6 +14,7 @@
 
 import * as vscode from 'vscode';
 import type { DeveloperPreferences } from '../types';
+import { getLogger } from './logger';
 
 /**
  * Full Roadie configuration (extends DeveloperPreferences with all settings).
@@ -20,6 +23,7 @@ export interface RoadieConfig extends DeveloperPreferences {
   testTimeout: number;
   editTracking: boolean;
   workflowHistory: boolean;
+  contextLensLevel: 'off' | 'summary' | 'full';
 }
 
 const DEFAULTS: RoadieConfig = {
@@ -30,7 +34,29 @@ const DEFAULTS: RoadieConfig = {
   testTimeout: 300,
   editTracking: false,
   workflowHistory: false,
+  contextLensLevel: 'summary',
 };
+
+function validateModelPreference(value: unknown): 'economy' | 'balanced' | 'quality' {
+  if (value === 'economy' || value === 'balanced' || value === 'quality') {
+    return value;
+  }
+  getLogger().warn(`commands: invalid roadie.modelPreference value '${String(value)}' — falling back to balanced`);
+  return DEFAULTS.modelPreference;
+}
+
+function validateTestTimeout(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return value;
+  }
+  getLogger().warn(`commands: invalid roadie.testTimeout value '${String(value)}' — falling back to ${DEFAULTS.testTimeout}`);
+  return DEFAULTS.testTimeout;
+}
+
+function validateContextLensLevel(value: unknown): 'off' | 'summary' | 'full' {
+  if (value === 'off' || value === 'summary' || value === 'full') return value;
+  return DEFAULTS.contextLensLevel;
+}
 
 /**
  * Read roadie.* configuration from VS Code settings.
@@ -39,13 +65,14 @@ const DEFAULTS: RoadieConfig = {
 export function readConfiguration(): RoadieConfig {
   const raw = vscode.workspace.getConfiguration('roadie');
   return {
-    testCommand:      raw.get<string>('testCommand') || undefined,
-    modelPreference:  raw.get<'economy' | 'balanced' | 'quality'>('modelPreference', DEFAULTS.modelPreference!),
-    telemetryEnabled: raw.get<boolean>('telemetry', DEFAULTS.telemetryEnabled),
-    autoCommit:       raw.get<boolean>('autoCommit', DEFAULTS.autoCommit),
-    testTimeout:      raw.get<number>('testTimeout', DEFAULTS.testTimeout),
-    editTracking:     raw.get<boolean>('editTracking', DEFAULTS.editTracking),
-    workflowHistory:  raw.get<boolean>('workflowHistory', DEFAULTS.workflowHistory),
+    testCommand:       raw.get<string>('testCommand') || undefined,
+    modelPreference:   validateModelPreference(raw.get('modelPreference', DEFAULTS.modelPreference)),
+    telemetryEnabled:  raw.get<boolean>('telemetry', DEFAULTS.telemetryEnabled),
+    autoCommit:        raw.get<boolean>('autoCommit', DEFAULTS.autoCommit),
+    testTimeout:       validateTestTimeout(raw.get('testTimeout', DEFAULTS.testTimeout)),
+    editTracking:      raw.get<boolean>('editTracking', DEFAULTS.editTracking),
+    workflowHistory:   raw.get<boolean>('workflowHistory', DEFAULTS.workflowHistory),
+    contextLensLevel:  validateContextLensLevel(raw.get('contextLensLevel', DEFAULTS.contextLensLevel)),
   };
 }
 
@@ -66,6 +93,21 @@ export async function updateSetting(
  * Register roadie.* command palette commands.
  * Returns disposables for cleanup.
  */
+function wrapCommand(handler: () => void | Promise<void>, successMessage?: string): () => Promise<void> {
+  return async () => {
+    try {
+      await handler();
+      if (successMessage) {
+        void vscode.window.showInformationMessage(successMessage);
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      getLogger().error(`roadie command failed: ${message}`, err);
+      void vscode.window.showErrorMessage(`Roadie command failed — ${message}`);
+    }
+  };
+}
+
 export function registerCommands(callbacks: {
   onInit: () => void | Promise<void>;
   onRescan: () => void | Promise<void>;
@@ -73,17 +115,16 @@ export function registerCommands(callbacks: {
   onStats: () => void | Promise<void>;
   onEnableWorkflowHistory: () => void | Promise<void>;
   onDisableWorkflowHistory: () => void | Promise<void>;
+  onGetScanSummary: () => void | Promise<void>;
+  onRunWorkflow: () => void | Promise<void>;
+  onDoctor: () => void | Promise<void>;
+  onShowLastContext: () => void | Promise<void>;
+  onShowMyStats: () => void | Promise<void>;
 }): vscode.Disposable[] {
   return [
-    vscode.commands.registerCommand('roadie.init', async () => {
-      await callbacks.onInit();
-      void vscode.window.showInformationMessage('Roadie: Initialized');
-    }),
+    vscode.commands.registerCommand('roadie.init', wrapCommand(callbacks.onInit, 'Roadie: Initialized')),
 
-    vscode.commands.registerCommand('roadie.rescan', async () => {
-      await callbacks.onRescan();
-      void vscode.window.showInformationMessage('Roadie: Project rescanned');
-    }),
+    vscode.commands.registerCommand('roadie.rescan', wrapCommand(callbacks.onRescan, 'Roadie: Project rescanned')),
 
     vscode.commands.registerCommand('roadie.reset', async () => {
       const confirm = await vscode.window.showWarningMessage(
@@ -92,21 +133,33 @@ export function registerCommands(callbacks: {
         'Cancel',
       );
       if (confirm === 'Reset') {
-        await callbacks.onReset();
-        void vscode.window.showInformationMessage('Roadie: Reset complete');
+        try {
+          await callbacks.onReset();
+          void vscode.window.showInformationMessage('Roadie: Reset complete');
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err);
+          getLogger().error(`roadie.reset failed: ${message}`, err);
+          void vscode.window.showErrorMessage(`Roadie: Reset failed — ${message}`);
+        }
       }
     }),
 
-    vscode.commands.registerCommand('roadie.stats', async () => {
-      await callbacks.onStats();
-    }),
+    vscode.commands.registerCommand('roadie.stats', wrapCommand(callbacks.onStats)),
 
-    vscode.commands.registerCommand('roadie.enableWorkflowHistory', async () => {
-      await callbacks.onEnableWorkflowHistory();
-    }),
+    vscode.commands.registerCommand('roadie.enableWorkflowHistory', wrapCommand(callbacks.onEnableWorkflowHistory)),
 
-    vscode.commands.registerCommand('roadie.disableWorkflowHistory', async () => {
-      await callbacks.onDisableWorkflowHistory();
-    }),
+    vscode.commands.registerCommand('roadie.disableWorkflowHistory', wrapCommand(callbacks.onDisableWorkflowHistory)),
+
+    // ── New diagnostic and workflow commands ─────────────────────────────────
+
+    vscode.commands.registerCommand('roadie.getScanSummary', wrapCommand(callbacks.onGetScanSummary)),
+
+    vscode.commands.registerCommand('roadie.runWorkflow', wrapCommand(callbacks.onRunWorkflow)),
+
+    vscode.commands.registerCommand('roadie.doctor', wrapCommand(callbacks.onDoctor)),
+
+    vscode.commands.registerCommand('roadie.showLastContext', wrapCommand(callbacks.onShowLastContext)),
+
+    vscode.commands.registerCommand('roadie.showMyStats', wrapCommand(callbacks.onShowMyStats)),
   ];
 }

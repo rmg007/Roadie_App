@@ -19,7 +19,7 @@ export interface IntentPattern {
 export const INTENT_PATTERNS: Record<string, IntentPattern[]> = {
   bug_fix: [
     { regex: /\bfix\b/i,                                    weight: 0.35, label: 'keyword:fix' },
-    { regex: /\bbug\b/i,                                    weight: 0.35, label: 'keyword:bug' },
+    { regex: /\bbugs?\b/i,                                  weight: 0.35, label: 'keyword:bug' },
     { regex: /\bbroken\b/i,                                 weight: 0.30, label: 'keyword:broken' },
     { regex: /\berror\b/i,                                  weight: 0.25, label: 'keyword:error' },
     { regex: /\bnot working\b/i,                            weight: 0.30, label: 'keyword:not-working' },
@@ -38,10 +38,12 @@ export const INTENT_PATTERNS: Record<string, IntentPattern[]> = {
     { regex: /\bbuild\b/i,                                  weight: 0.20, label: 'keyword:build' },
     { regex: /\bnew feature\b/i,                            weight: 0.40, label: 'keyword:new-feature' },
     { regex: /\bimplement\b/i,                              weight: 0.35, label: 'keyword:implement' },
-    { regex: /\bmake\b.*\bwork\b/i,                         weight: 0.20, label: 'keyword:make-work' },
+    { regex: /\bmake\b[\s\S]{0,200}?\bwork\b/i,         weight: 0.20, label: 'keyword:make-work' },
     { regex: /\bsupport\b/i,                                weight: 0.20, label: 'keyword:support' },
     { regex: /\benable\b/i,                                 weight: 0.20, label: 'keyword:enable' },
     { regex: /dark mode|export|search|filter|pagination/i,  weight: 0.25, label: 'signal:feature-name' },
+    { regex: /\bupdate\b/i,                                 weight: 0.20, label: 'keyword:update' },
+    { regex: /\bgenerate\b/i,                               weight: 0.20, label: 'keyword:generate' },
   ],
 
   refactor: [
@@ -65,6 +67,10 @@ export const INTENT_PATTERNS: Record<string, IntentPattern[]> = {
     { regex: /\bany issues\b/i,                             weight: 0.30, label: 'signal:any-issues' },
     { regex: /\bPR\b|\bpull request\b/i,                    weight: 0.25, label: 'signal:PR' },
     { regex: /\bmy (code|changes)\b/i,                      weight: 0.20, label: 'signal:my-code' },
+    { regex: /any bugs?/i,                                  weight: 0.25, label: 'signal:any-bugs' },
+    { regex: /\bedge cases?\b/i,                            weight: 0.25, label: 'signal:edge-cases' },
+    { regex: /\bunhandled\b/i,                              weight: 0.25, label: 'signal:unhandled' },
+    { regex: /\bcheck\b/i,                                  weight: 0.15, label: 'keyword:check' },
   ],
 
   document: [
@@ -101,6 +107,12 @@ export const INTENT_PATTERNS: Record<string, IntentPattern[]> = {
     { regex: /\bexplain the project\b/i,                    weight: 0.45, label: 'signal:explain-project' },
     { regex: /\bstarter task\b|\bfirst task\b/i,            weight: 0.35, label: 'signal:starter-task' },
     { regex: /\bget up to speed\b/i,                        weight: 0.40, label: 'signal:up-to-speed' },
+    { regex: /\bhow is\b/i,                                 weight: 0.25, label: 'keyword:how-is' },
+    { regex: /\bdescribe\b/i,                               weight: 0.20, label: 'keyword:describe' },
+    { regex: /\bstructured?\b/i,                            weight: 0.25, label: 'keyword:structured' },
+    { regex: /\bresponsibilit/i,                            weight: 0.20, label: 'keyword:responsibilities' },
+    { regex: /\bwhat (is|are|does)\b/i,                    weight: 0.20, label: 'keyword:what-is-are-does' },
+    { regex: /\bgetting started\b/i,                        weight: 0.35, label: 'keyword:getting-started' },
   ],
 
   // general_chat is the fallback — no patterns. It is returned when no other intent scores >= 0.3.

@@ -34,6 +34,20 @@ const IGNORED_PREFIXES = [
   'vendor/',
   'venv/',
   '.venv/',
+  '.cursor/',      // Roadie-generated cursor rules
+];
+
+/** Generated file paths that must be ignored to prevent self-regeneration loops. */
+const IGNORED_EXACT_PATHS = new Set([
+  'AGENTS.md',
+  'CLAUDE.md',
+  '.github/copilot-instructions.md',
+]);
+
+/** Path prefixes for generated files (instructions/, etc.) */
+const IGNORED_GENERATED_PREFIXES = [
+  '.github/instructions/',
+  '.cursor/rules/',
 ];
 
 /**
@@ -42,9 +56,29 @@ const IGNORED_PREFIXES = [
  */
 export function isIgnoredPath(filePath: string): boolean {
   const normalized = filePath.replace(/\\/g, '/');
-  return IGNORED_PREFIXES.some(
+  // Strip leading drive/absolute prefix to get workspace-relative path
+  const relative = normalized.replace(/^.*\/(AGENTS\.md|CLAUDE\.md|\.github\/|\.cursor\/)/, (_, p1) => p1)
+    .replace(/^[^/]+\/[^/]+\/[^/]+\//, '') // trim deep absolute prefixes
+    || normalized;
+
+  if (IGNORED_PREFIXES.some(
     (prefix) => normalized.includes(`/${prefix}`) || normalized.startsWith(prefix),
-  );
+  )) {
+    return true;
+  }
+
+  // Exact generated-file paths (basename check + suffix check)
+  const basename = normalized.split('/').pop() ?? '';
+  for (const exact of IGNORED_EXACT_PATHS) {
+    if (normalized.endsWith(exact) || basename === exact) return true;
+  }
+
+  // Generated directory prefixes
+  for (const prefix of IGNORED_GENERATED_PREFIXES) {
+    if (normalized.includes(prefix)) return true;
+  }
+
+  return false;
 }
 
 // ---------------------------------------------------------------------------

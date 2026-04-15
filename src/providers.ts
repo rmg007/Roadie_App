@@ -82,6 +82,7 @@ export interface ProgressReporter {
 
 export interface CancellationHandle {
   readonly isCancelled: boolean;
+  readonly signal?: AbortSignal;
   onCancelled(callback: () => void): void;
 }
 

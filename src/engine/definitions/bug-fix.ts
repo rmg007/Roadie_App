@@ -20,6 +20,7 @@ const STEP_1_LOCATE: WorkflowStep = {
   agentRole: 'diagnostician',
   modelTier: 'free',
   toolScope: 'research',
+  contextScope: 'structure',
   promptTemplate: `You are a diagnostic agent. Your job is to LOCATE the source of this error.
 Do not diagnose the root cause yet—just find where it occurs.
 
@@ -47,6 +48,7 @@ const STEP_2_DIAGNOSE: WorkflowStep = {
   agentRole: 'diagnostician',
   modelTier: 'standard',
   toolScope: 'research',
+  contextScope: 'full',
   promptTemplate: `You are a diagnostic expert. Diagnose the ROOT CAUSE.
 
 Error Location (from Step 1):
@@ -77,6 +79,7 @@ const STEP_3_FIX: WorkflowStep = {
   agentRole: 'fixer',
   modelTier: 'free',
   toolScope: 'implementation',
+  contextScope: 'patterns',
   promptTemplate: `You are a fixer. Generate and apply a fix.
 
 Diagnosis (from Step 2):
@@ -104,9 +107,10 @@ const STEP_4_VERIFY: WorkflowStep = {
   id: 'verify-tests',
   name: 'Running tests to verify fix',
   type: 'sequential',
-  agentRole: 'fixer', // shell step, but needs a role for typing
+  agentRole: 'fixer',
   modelTier: 'free',
   toolScope: 'implementation',
+  contextScope: 'commands',
   promptTemplate: `Run the project test suite to verify the fix.
 
 Test command: {test_command}
@@ -124,6 +128,7 @@ const STEP_5_SCAN_SIBLINGS: WorkflowStep = {
   agentRole: 'diagnostician',
   modelTier: 'free',
   toolScope: 'research',
+  contextScope: 'structure',
   promptTemplate: `Search the codebase for similar patterns that might have the same bug.
 
 Original bug:
@@ -146,6 +151,7 @@ const STEP_6_FIX_SIBLINGS: WorkflowStep = {
   agentRole: 'fixer',
   modelTier: 'free',
   toolScope: 'implementation',
+  contextScope: 'patterns',
   promptTemplate: `Apply the same fix pattern to similar bugs found in the codebase.
 
 Original fix:
@@ -163,6 +169,7 @@ const STEP_7_REGRESSION_GUARD: WorkflowStep = {
   agentRole: 'fixer',
   modelTier: 'free',
   toolScope: 'implementation',
+  contextScope: 'patterns',
   promptTemplate: `Write a test that would catch this bug if it were reintroduced.
 
 Bug description:
@@ -189,6 +196,7 @@ const STEP_8_SUMMARY: WorkflowStep = {
   agentRole: 'documentarian',
   modelTier: 'free',
   toolScope: 'research',
+  contextScope: 'full',
   promptTemplate: `Summarize the bug fix workflow results.
 
 Include:

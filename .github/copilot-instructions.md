@@ -24,3 +24,9 @@
 - **publish**: `npm run publish`
 - **prepublish:test**: `npm run prepublish:test`
 <!-- roadie:end:commands -->
+
+## Release Policy
+
+- Treat Marketplace publish as tag-driven.
+- When preparing a release commit, create and push a matching semantic version tag (`vX.Y.Z`).
+- Prefer `git push origin master --follow-tags` so commit and tag move together.

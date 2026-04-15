@@ -63,7 +63,28 @@ describe('InMemoryProjectModel', () => {
       { category: 'language', name: 'TypeScript', version: '5.2', sourceFile: 'package.json' },
     ]);
     const ctx = model.toContext({ maxTokens: 5 }); // very small budget
-    expect(ctx.serialized).toContain('[truncated]');
+    // priorityTrim drops sections cleanly rather than mid-content slicing
+    const charBudget = 5 * 4; // maxTokens * 4 chars/token
+    expect(ctx.serialized.length).toBeLessThanOrEqual(charBudget);
+  });
+
+  it('toContext() with maxTokens=0 returns empty serialized', () => {
+    const model = new InMemoryProjectModel(null);
+    model.setTechStack([
+      { category: 'language', name: 'TypeScript', version: '5.2', sourceFile: 'package.json' },
+    ]);
+    const ctx = model.toContext({ maxTokens: 0 });
+    expect(ctx.serialized).toBe('');
+  });
+
+  it('toContext() with single large section and small budget truncates correctly', () => {
+    const model = new InMemoryProjectModel(null);
+    model.setCommands([
+      { name: 'test', command: 'vitest run --reporter verbose --all-tests', sourceFile: 'package.json', type: 'test' },
+    ]);
+    // Budget of 10 tokens = 40 chars — section header alone is ~12 chars
+    const ctx = model.toContext({ maxTokens: 10 });
+    expect(ctx.serialized.length).toBeLessThanOrEqual(40);
   });
 
   it('dispose() cancels debounce timer without error', () => {

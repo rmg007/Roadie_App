@@ -38,6 +38,7 @@ export interface Logger {
   warn(msg: string, err?: unknown): void;
   error(msg: string, err?: unknown): void;
   debug(msg: string): void;
+  appendRaw(text: string): void;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -49,6 +50,7 @@ class NullLogger implements Logger {
   warn(_msg: string, _err?: unknown): void {}
   error(_msg: string, _err?: unknown): void {}
   debug(_msg: string): void {}
+  appendRaw(_text: string): void {}
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -98,6 +100,10 @@ export class RoadieLogger implements Logger {
 
   debug(msg: string): void {
     this.channel.appendLine(`[DEBUG] ${timestamp()} ${msg}`);
+  }
+
+  appendRaw(text: string): void {
+    this.channel.appendLine(text);
   }
 
   /** Reveal the Output panel and switch to the Roadie channel. */

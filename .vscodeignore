@@ -1,5 +1,7 @@
 # ── Source & config (never ship) ─────────────────────────────────────────────
 src/**
+docs/**
+scripts/**
 tsconfig.json
 tsup.config.ts
 tsup.config.js
@@ -15,6 +17,11 @@ test/
 .vscode/
 .gitignore
 AGENTS.md
+
+# ── Explicitly include Marketplace listing assets ────────────────────────────
+!README.md
+!CHANGELOG.md
+!images/**
 
 # ── Generated .github/ files (not needed in the extension package) ────────────
 .github/

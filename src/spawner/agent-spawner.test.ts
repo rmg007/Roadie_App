@@ -81,6 +81,21 @@ describe('AgentSpawner', () => {
     expect(result.error).toContain('LLM error');
   });
 
+  it('passes cancellation signal to model provider', async () => {
+    const provider = makeMockProvider();
+    spawner = new AgentSpawner(provider);
+    const signal = new AbortController().signal;
+
+    const config = makeConfig({ cancellation: signal });
+    await spawner.spawn(config);
+
+    expect(provider.sendRequest).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(Array),
+      expect.objectContaining({ cancellation: signal }),
+    );
+  });
+
   it('spawnParallel runs 3 agents concurrently', async () => {
     const configs = [
       makeConfig({ role: 'database_agent' }),

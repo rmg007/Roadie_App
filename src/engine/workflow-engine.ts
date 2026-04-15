@@ -49,6 +49,9 @@ export class WorkflowEngine {
     context: WorkflowContext,
   ): Promise<WorkflowResult> {
     const log = getLogger();
+    if (!definition.steps || definition.steps.length === 0) {
+      throw new Error(`Workflow '${definition.id}' has no steps defined.`);
+    }
     const totalSteps = definition.steps.length;
 
     this.transition(definition.id, WorkflowState.PENDING, WorkflowState.RUNNING, log);
@@ -139,7 +142,13 @@ export class WorkflowEngine {
 
     // Call onComplete hook if defined and workflow completed
     if (this.state === WorkflowState.COMPLETED && definition.onComplete) {
-      return definition.onComplete(stepResults);
+      try {
+        return await definition.onComplete(stepResults);
+      } catch (err: unknown) {
+        const error = err instanceof Error ? err.message : String(err);
+        getLogger().warn(`Workflow onComplete hook failed: ${error}`, err);
+        return workflowResult;
+      }
     }
 
     return workflowResult;
@@ -157,7 +166,12 @@ export class WorkflowEngine {
     log.debug(`[parallel] Spawning ${branches.length} branches: [${branches.map((b) => b.id).join(', ')}]`);
 
     const results = await Promise.allSettled(
-      branches.map((branch) => this.stepExecutor.executeStep(branch, context)),
+      branches.map((branch) => this.stepExecutor.executeStep(branch, {
+        ...context,
+        previousStepResults: context.previousStepResults
+          ? [...context.previousStepResults]
+          : undefined,
+      })),
     );
 
     const branchResults: StepResult[] = [];

@@ -59,4 +59,12 @@ describe('PromptBuilder', () => {
     const reviewer = builder.build(makeConfig({ role: 'security_reviewer' }));
     expect(reviewer).toContain('security expert');
   });
+
+  it('builds chat messages with a system role and user prompt', () => {
+    const messages = builder.buildMessages(makeConfig());
+    expect(messages[0].role).toBe('system');
+    expect(messages[0].content).toContain('code fixer');
+    expect(messages[1].role).toBe('user');
+    expect(messages[1].content).toContain('Fix the bug in src/auth.ts');
+  });
 });

@@ -63,7 +63,8 @@ export class StepExecutor {
    */
   async executeStep(step: WorkflowStep, context: WorkflowContext): Promise<StepResult> {
     const log = getLogger();
-    const maxAttempts = step.maxRetries + 1;
+    const maxAttempts = Math.max(1, (step.maxRetries ?? 0) + 1);
+    const timeoutMs = Math.max(1000, step.timeoutMs ?? 30_000);
     let currentTier = step.modelTier;
     let previousError: string | undefined;
 
@@ -101,7 +102,7 @@ export class StepExecutor {
       try {
         const result = await withTimeout(
           this.handler(step, context, { attempt, tier: currentTier, previousError }),
-          step.timeoutMs,
+          timeoutMs,
           step.id,
         );
 
@@ -114,6 +115,9 @@ export class StepExecutor {
 
         // Step returned failure — prepare for retry
         previousError = result.error ?? result.output;
+        if (previousError && previousError.length > 2_000) {
+          previousError = previousError.slice(0, 2_000);
+        }
         log.warn(
           `[${step.id}] Attempt ${attempt}/${maxAttempts} failed: ` +
           `${previousError?.slice(0, 120) ?? '(no detail)'}`,

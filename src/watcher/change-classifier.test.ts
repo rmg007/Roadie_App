@@ -212,7 +212,6 @@ describe('isIgnoredPath', () => {
     'package.json',
     'lib/utils.js',
     'test/helpers.ts',
-    '.github/copilot-instructions.md',
   ];
 
   for (const p of allowedPaths) {
@@ -220,6 +219,26 @@ describe('isIgnoredPath', () => {
       expect(isIgnoredPath(p)).toBe(false);
     });
   }
+
+  it('ignores generated file .github/copilot-instructions.md', () => {
+    expect(isIgnoredPath('.github/copilot-instructions.md')).toBe(true);
+  });
+
+  it('ignores generated file AGENTS.md', () => {
+    expect(isIgnoredPath('AGENTS.md')).toBe(true);
+  });
+
+  it('ignores generated file CLAUDE.md', () => {
+    expect(isIgnoredPath('CLAUDE.md')).toBe(true);
+  });
+
+  it('ignores generated path-instructions files', () => {
+    expect(isIgnoredPath('.github/instructions/src.instructions.md')).toBe(true);
+  });
+
+  it('ignores cursor rules files', () => {
+    expect(isIgnoredPath('.cursor/rules/project.mdc')).toBe(true);
+  });
 
   it('handles Windows backslash paths in ignored check', () => {
     expect(isIgnoredPath('project\\node_modules\\pkg\\index.js')).toBe(true);

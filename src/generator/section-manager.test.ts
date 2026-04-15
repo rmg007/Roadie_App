@@ -1,9 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { buildSectionedFile, mergeSections, hashContent, type GeneratedSection } from './section-manager';
 import { SectionManagerService, type WriteSectionResult, type ParsedSection } from './section-manager-service';
+import { getLogger } from '../shell/logger';
 
 describe('SectionManager', () => {
   describe('hashContent', () => {
@@ -148,6 +149,19 @@ describe('SectionManagerService', () => {
       const sections = svc.parseSections(content, 'markdown');
       expect(sections[0].hash).toBeNull();
       expect(sections[0].content).toBe('No hash here');
+    });
+
+    it('warns when a start marker has no matching end marker', () => {
+      const loggerWarn = vi.spyOn(getLogger(), 'warn');
+      const content = [
+        '<!-- roadie:start:missing -->',
+        'Unfinished section',
+      ].join('\n');
+
+      const sections = svc.parseSections(content, 'markdown');
+      expect(sections).toHaveLength(0);
+      expect(loggerWarn).toHaveBeenCalledWith('Unclosed section marker: missing');
+      loggerWarn.mockRestore();
     });
   });
 

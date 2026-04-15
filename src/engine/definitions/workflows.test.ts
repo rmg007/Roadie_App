@@ -89,6 +89,15 @@ describe('All Workflow Definitions — structure', () => {
     const ids = wf.steps.map((s) => s.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
+
+  it.each(ALL_WORKFLOWS)('%s steps all have a non-empty contextScope', (_name, wf) => {
+    const validScopes = ['full', 'stack', 'structure', 'commands', 'patterns'];
+    for (const step of wf.steps) {
+      if (step.type !== 'parallel') {
+        expect(validScopes, `Step ${step.id} has invalid contextScope '${step.contextScope}'`).toContain(step.contextScope);
+      }
+    }
+  });
 });
 
 // ---- Per-workflow specific tests ----

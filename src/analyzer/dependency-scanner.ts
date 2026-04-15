@@ -11,6 +11,7 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { getLogger } from '../shell/logger';
 import type { TechStackEntry, ProjectCommand } from '../types';
 
 /** Detect package manager from lock file presence. */
@@ -56,23 +57,41 @@ export async function scanDependencies(workspaceRoot: string): Promise<Dependenc
   }
 
   const raw = await fs.readFile(pkgPath, 'utf8');
-  const pkg = JSON.parse(raw) as Record<string, unknown>;
+  let pkg: Record<string, unknown>;
+  try {
+    pkg = JSON.parse(raw) as Record<string, unknown>;
+  } catch (err: unknown) {
+    getLogger().warn(
+      `dependency-scanner: malformed package.json at ${pkgPath} — skipping dependency scan`,
+      err,
+    );
+    return { techStack: entries, commands };
+  }
 
   // Package manager
   const pm = await detectPackageManager(workspaceRoot);
   entries.push({ category: 'package_manager', name: pm, sourceFile: 'package.json' });
 
+  const safeStringMap = (value: unknown): Record<string, string> => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    const record: Record<string, string> = {};
+    for (const [key, item] of Object.entries(value)) {
+      if (typeof item === 'string') record[key] = item;
+    }
+    return record;
+  };
+
   // TypeScript detection
   const allDeps = {
-    ...(pkg.dependencies as Record<string, string> | undefined),
-    ...(pkg.devDependencies as Record<string, string> | undefined),
+    ...safeStringMap(pkg.dependencies),
+    ...safeStringMap(pkg.devDependencies),
   };
 
   if (allDeps.typescript || (await exists(path.join(workspaceRoot, 'tsconfig.json')))) {
     entries.push({
       category: 'language',
       name: 'TypeScript',
-      version: allDeps.typescript?.replace(/[\^~]/, ''),
+      version: allDeps.typescript?.replace(/^[\^~]/, ''),
       sourceFile: 'package.json',
     });
   }
@@ -97,8 +116,8 @@ export async function scanDependencies(workspaceRoot: string): Promise<Dependenc
   }
 
   // Commands from scripts
-  const scripts = pkg.scripts as Record<string, string> | undefined;
-  if (scripts) {
+  const scripts = safeStringMap(pkg.scripts);
+  if (Object.keys(scripts).length > 0) {
     const scriptMap: Record<string, ProjectCommand['type']> = {
       build: 'build', test: 'test', dev: 'dev', start: 'dev',
       lint: 'lint', format: 'format',

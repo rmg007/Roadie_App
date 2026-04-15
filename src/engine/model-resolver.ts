@@ -16,6 +16,8 @@ import { TIER_PREFERENCE } from './model-priority';
 import { ModelUnavailableError } from './errors';
 
 export class ModelResolver {
+  private cachedModelsPromise: Promise<ModelInfo[]> | null = null;
+
   constructor(private modelProvider: ModelProvider) {}
 
   /**
@@ -32,13 +34,20 @@ export class ModelResolver {
    * Time budget: <= 50 ms (selectModels is cached after first call).
    */
   async resolve(tier: ModelTier): Promise<ModelInfo> {
-    const availableModels = await this.modelProvider.selectModels({});
+    if (!this.cachedModelsPromise) {
+      this.cachedModelsPromise = this.modelProvider.selectModels({}).catch((err) => {
+        this.cachedModelsPromise = null;
+        throw err;
+      });
+    }
+
+    const availableModels = await this.cachedModelsPromise;
     const tried: string[] = [];
 
     // 1. Try all preferences for the current tier in declared order.
     for (const preference of TIER_PREFERENCE[tier]) {
       tried.push(preference);
-      const match = availableModels.find((m) => m.id.includes(preference));
+      const match = availableModels.find((m) => matchesPreference(m.id, preference));
       if (match) return match;
     }
 
@@ -65,4 +74,12 @@ export class ModelResolver {
       throw err;
     }
   }
+}
+
+function matchesPreference(modelId: string, preference: string): boolean {
+  if (modelId === preference) return true;
+  if (modelId.endsWith(`-${preference}`)) return true;
+  if (modelId.startsWith(`${preference}-`)) return true;
+  if (modelId.includes(`-${preference}-`)) return true;
+  return modelId.includes(preference);
 }

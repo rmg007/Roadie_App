@@ -57,6 +57,26 @@ export class PromptBuilder {
     return layers.join('\n\n');
   }
 
+  /**
+   * Build chat messages with a pinned system prompt and user task.
+   */
+  buildMessages(config: AgentConfig): Array<{ role: 'system' | 'user' | 'assistant'; content: string }> {
+    const systemPrompt = ROLE_PROMPTS[config.role];
+    const contextBlock = this.serializeContext(config.context);
+    const taskPrompt = this.substituteVariables(config.promptTemplate, config.context);
+
+    const messages = [
+      { role: 'system' as const, content: systemPrompt },
+    ];
+
+    const userContent = contextBlock
+      ? `${contextBlock}\n\n${taskPrompt}`
+      : taskPrompt;
+
+    messages.push({ role: 'user' as const, content: userContent });
+    return messages;
+  }
+
   /** Serialize the context record into a readable block for the LLM. */
   private serializeContext(context: Record<string, unknown>): string {
     if (Object.keys(context).length === 0) return '';
@@ -64,10 +84,15 @@ export class PromptBuilder {
     const parts: string[] = ['Project Context:'];
     for (const [key, value] of Object.entries(context)) {
       if (value === undefined || value === null) continue;
-      const formatted = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+      const formatted = this.formatContextValue(value);
       parts.push(`${key}: ${formatted}`);
     }
     return parts.join('\n');
+  }
+
+  private formatContextValue(value: unknown): string {
+    if (typeof value === 'string') return value;
+    return JSON.stringify(value);
   }
 
   /** Replace {variable} placeholders in the template with context values. */

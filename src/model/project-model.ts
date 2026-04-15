@@ -105,9 +105,10 @@ export class InMemoryProjectModel implements ProjectModel {
     }
 
     let serialized = parts.join('\n');
-    const truncated = options?.maxTokens !== undefined && serialized.length > options.maxTokens * 4;
-    if (truncated) {
-      serialized = serialized.slice(0, options!.maxTokens! * 4) + '\n[truncated]';
+    if (options?.maxTokens !== undefined) {
+      // Priority-ordered trimming: commands → patterns → structure → stack
+      // Build priority sections independently and drop/trim lower-priority ones first
+      serialized = priorityTrim(parts, options.maxTokens);
     }
 
     return {
@@ -154,6 +155,12 @@ export class InMemoryProjectModel implements ProjectModel {
     this.scheduleDebouncedWrite();
   }
 
+  setPatterns(patterns: DetectedPattern[]): void {
+    this.patterns = patterns;
+    this.dirty = true;
+    this.scheduleDebouncedWrite();
+  }
+
   /** Immediately flush dirty state to SQLite. */
   flush(): void {
     if (!this.dirty || !this.database) return;
@@ -192,4 +199,64 @@ export class InMemoryProjectModel implements ProjectModel {
       }
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Priority-ordered token trimmer (module-level helper)
+// ---------------------------------------------------------------------------
+
+/**
+ * Trims a serialized context string to fit within a token budget.
+ * Sections are ordered by priority: commands > patterns > structure > stack.
+ * Lower-priority sections are dropped or truncated first.
+ */
+function priorityTrim(parts: string[], maxTokens: number): string {
+  if (maxTokens <= 0) return '';
+  const budget = maxTokens * 4; // 4 chars per token approximation
+
+  // Extract named sections from parts array
+  const sections = splitIntoSections(parts.join('\n'));
+
+  // Priority order (highest first): commands > patterns > structure > stack
+  const PRIORITY: string[] = ['## Commands', '## Detected Patterns', '## Directory Structure', '## Tech Stack'];
+
+  // Build the output by adding sections from highest to lowest priority
+  const selected: string[] = [];
+  let remaining = budget;
+
+  for (const header of PRIORITY) {
+    const section = sections.find((s) => s.startsWith(header));
+    if (!section) continue;
+
+    if (section.length <= remaining) {
+      selected.push(section);
+      remaining -= section.length;
+    } else if (remaining > header.length + 20) {
+      // Partial include with truncation marker
+      selected.push(section.slice(0, remaining - 12) + '\n[truncated]');
+      remaining = 0;
+      break;
+    }
+    // else: skip section entirely — budget exhausted
+  }
+
+  return selected.join('\n\n');
+}
+
+function splitIntoSections(text: string): string[] {
+  const lines = text.split('\n');
+  const results: string[] = [];
+  let current: string[] = [];
+
+  for (const line of lines) {
+    if (line.startsWith('## ') && current.length > 0) {
+      results.push(current.join('\n').trim());
+      current = [];
+    }
+    current.push(line);
+  }
+  if (current.length > 0) {
+    results.push(current.join('\n').trim());
+  }
+  return results.filter((s) => s.length > 0);
 }

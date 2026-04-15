@@ -58,8 +58,7 @@ export class VSCodeModelProvider implements ModelProvider {
     const vsMessages = messages.map((m) => {
       if (m.role === 'user') return vscode.LanguageModelChatMessage.User(m.content);
       if (m.role === 'assistant') return vscode.LanguageModelChatMessage.Assistant(m.content);
-      // system: prepend as user message with system prefix
-      return vscode.LanguageModelChatMessage.User(`[System]: ${m.content}`);
+      return vscode.LanguageModelChatMessage.System(m.content);
     });
 
     const cancellationSource = new vscode.CancellationTokenSource();
@@ -67,9 +66,10 @@ export class VSCodeModelProvider implements ModelProvider {
       options.cancellation.addEventListener('abort', () => cancellationSource.cancel());
     }
 
+    const requestOptions = (options.modelOptions ?? {}) as Record<string, unknown>;
     const response = await model.sendRequest(
       vsMessages,
-      {},
+      requestOptions,
       cancellationSource.token,
     );
 
@@ -78,12 +78,13 @@ export class VSCodeModelProvider implements ModelProvider {
       text += chunk;
     }
 
+    const usage = response.usage ?? { inputTokens: 0, outputTokens: 0 };
     return {
       text,
       toolCalls: [],
       usage: {
-        inputTokens: messages.reduce((sum, m) => sum + m.content.length, 0),
-        outputTokens: text.length,
+        inputTokens: usage.inputTokens ?? 0,
+        outputTokens: usage.outputTokens ?? 0,
       },
     };
   }
@@ -110,10 +111,21 @@ export class VSCodeProgressReporter implements ProgressReporter {
 // =====================================================================
 
 export class VSCodeCancellationHandle implements CancellationHandle {
-  constructor(private token: vscode.CancellationToken) {}
+  private readonly abortController = new AbortController();
+
+  constructor(private token: vscode.CancellationToken) {
+    this.token.onCancellationRequested(() => this.abortController.abort());
+    if (this.token.isCancellationRequested) {
+      this.abortController.abort();
+    }
+  }
 
   get isCancelled(): boolean {
     return this.token.isCancellationRequested;
+  }
+
+  get signal(): AbortSignal {
+    return this.abortController.signal;
   }
 
   onCancelled(callback: () => void): void {

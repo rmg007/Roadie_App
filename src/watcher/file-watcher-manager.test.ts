@@ -317,6 +317,23 @@ describe('FileWatcherManager', () => {
 
       manager.dispose();
     });
+
+    it('emits FULL_RESCAN immediately when pending event count overflows', () => {
+      const manager = createManager({ maxBatchSize: 1000 });
+      const batches = collectBatches(manager);
+
+      for (let i = 0; i < 2001; i++) {
+        manager.handleFileEvent(`src/file-${i}.ts`, 'change');
+      }
+
+      expect(batches).toHaveLength(1);
+      const payload = batches[0] as [FullRescanEvent];
+      expect(payload[0].type).toBe('FULL_RESCAN');
+      expect(payload[0].eventCount).toBe(2001);
+      expect(manager.getStatus().pendingCount).toBe(0);
+
+      manager.dispose();
+    });
   });
 
   // -------------------------------------------------------------------

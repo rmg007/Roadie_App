@@ -35,7 +35,7 @@ export interface GenerationResult {
 export interface FileTypeGenerator {
   fileType: string;
   triggers: string[];
-  generate(model: ProjectModel): Promise<GeneratedContent>;
+  generate(model: ProjectModel, options?: { simplified?: boolean }): Promise<GeneratedContent>;
 }
 
 export interface GeneratedContent {
@@ -71,8 +71,11 @@ export class FileGeneratorManager {
     this.generators.set(generator.fileType, generator);
   }
 
-  /** Run a single generator through the full pipeline. */
-  async generate(fileType: string, model: ProjectModel): Promise<GenerationResult> {
+  /** Run a single generator through the full pipeline.
+   *  If the first attempt fails, retries with { simplified: true } to emit
+   *  only required sections, preventing files from being left empty.
+   */
+  async generate(fileType: string, model: ProjectModel, options?: { simplified?: boolean }): Promise<GenerationResult> {
     const generator = this.generators.get(fileType);
     if (!generator) {
       return {
@@ -92,7 +95,7 @@ export class FileGeneratorManager {
     try {
       // Run generator with timeout
       const content = await Promise.race<GeneratedContent>([
-        generator.generate(model),
+        generator.generate(model, options),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('GENERATOR_TIMEOUT')), this.timeoutMs),
         ),
@@ -134,6 +137,11 @@ export class FileGeneratorManager {
       const durationMs = Date.now() - start;
       const message = err instanceof Error ? err.message : String(err);
       const code = message === 'GENERATOR_TIMEOUT' ? 'GENERATOR_TIMEOUT' : 'GENERATOR_ERROR';
+
+      // Self-healing retry: if this is the first attempt, retry with simplified=true
+      if (!options?.simplified) {
+        return this.generate(fileType, model, { simplified: true });
+      }
 
       return {
         fileType,

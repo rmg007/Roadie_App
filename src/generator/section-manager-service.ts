@@ -12,6 +12,7 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { hashContent, mergeSections, type GeneratedSection } from './section-manager.js';
+import { getLogger } from '../shell/logger.js';
 
 // Re-export for convenience
 export { hashContent, GeneratedSection };
@@ -141,6 +142,7 @@ export class SectionManagerService {
 
       if (endLine === -1) {
         // Malformed — no closing marker. Skip this start marker.
+        getLogger().warn(`Unclosed section marker: ${id}`);
         i++;
         continue;
       }
@@ -285,10 +287,21 @@ export class SectionManagerService {
     }
 
     // Atomic write: write to temp, then rename
-    const tmpPath = `${filePath}.roadie-tmp-${process.pid}`;
-    await fs.mkdir(path.dirname(filePath), { recursive: true });
-    await fs.writeFile(tmpPath, finalContent, 'utf-8');
-    await fs.rename(tmpPath, filePath);
+    const tmpPath = `${filePath}.roadie-tmp-${process.pid}-${Date.now()}`;
+    try {
+      await fs.mkdir(path.dirname(filePath), { recursive: true });
+      await fs.writeFile(tmpPath, finalContent, 'utf-8');
+      await fs.rename(tmpPath, filePath);
+    } catch (err: unknown) {
+      try { await fs.unlink(tmpPath); } catch { /* best effort cleanup */ }
+      return {
+        written: false,
+        deferred: false,
+        reason: 'write_error',
+        contentHash: `sha256:${hashContent(finalContent)}`,
+        mergeConflicts,
+      };
+    }
 
     return {
       written: true,

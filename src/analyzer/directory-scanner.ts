@@ -60,5 +60,22 @@ export async function scanDirectories(workspaceRoot: string): Promise<DirectoryN
     });
   }
 
+  // Apply role inheritance: subdirectories that have no explicit role inherit
+  // from their closest named ancestor (e.g. src/operations → source via src/).
+  // Only propagate 'source' and 'test' roles — not 'config', 'output', or 'static'.
+  const inheritableRoles = new Set(['source', 'test']);
+  for (const node of root.children!) {
+    if (node.role !== undefined) continue;
+    const parentPath = path.dirname(node.path);
+    // Walk up: check direct parent first, then root children (flat structure)
+    const parentNode = root.children!.find((n) => n.path === parentPath);
+    if (parentNode?.role && inheritableRoles.has(parentNode.role)) {
+      node.role = parentNode.role;
+      continue;
+    }
+    // Also check root itself (top-level children of the workspace root get
+    // roles from assignRole only; skip root inheritance to avoid false positives)
+  }
+
   return root;
 }

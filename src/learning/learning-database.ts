@@ -59,6 +59,7 @@ export interface WorkflowStats {
 export interface PruneResult {
   snapshotsRemoved: number;
   historyEntriesRemoved: number;
+  deletedPatternObservations: number;
 }
 
 export interface LearningDatabaseConfig {
@@ -101,6 +102,17 @@ const LEARNING_SCHEMA = `
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (file_path, section_id)
   );
+
+  CREATE TABLE IF NOT EXISTS pattern_observations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    pattern_id TEXT NOT NULL,
+    observed_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_pattern_obs ON pattern_observations(pattern_id);
+  CREATE INDEX IF NOT EXISTS idx_workflow_type ON workflow_history(workflow_type);
+  CREATE TABLE IF NOT EXISTS learning_schema_version (
+    version INTEGER NOT NULL
+  );
 `;
 
 // ---- Helper ----
@@ -117,13 +129,29 @@ export class LearningDatabase {
 
   /** Attach to an existing better-sqlite3 Database and create tables. */
   initialize(db: Database.Database, config?: LearningDatabaseConfig): void {
+    if (this.db) {
+      this.close();
+    }
     this.db = db;
     this.config = config ?? {};
     this.db.exec(LEARNING_SCHEMA);
+
+    const current = this.db.prepare('SELECT version FROM learning_schema_version LIMIT 1').get() as { version: number } | undefined;
+    if (!current) {
+      this.db.prepare('INSERT INTO learning_schema_version (version) VALUES (?)').run(1);
+    }
+
     this.prune();
   }
 
   close(): void {
+    if (this.db) {
+      try {
+        this.db.close();
+      } catch {
+        // Ignore close failures; releasing the reference is still safe.
+      }
+    }
     this.db = null;
   }
 
@@ -265,16 +293,17 @@ export class LearningDatabase {
     let historyEntriesRemoved = 0;
 
     // Prune snapshots: keep last MAX_SNAPSHOTS_PER_FILE per file
-    const files = db.prepare('SELECT DISTINCT file_path FROM file_snapshots').all() as Array<{ file_path: string }>;
-    const deleteStmt = db.prepare(
-      `DELETE FROM file_snapshots WHERE file_path = ? AND id NOT IN (
-        SELECT id FROM file_snapshots WHERE file_path = ? ORDER BY id DESC LIMIT ?
-      )`,
-    );
-    for (const { file_path } of files) {
-      const result = deleteStmt.run(file_path, file_path, MAX_SNAPSHOTS_PER_FILE);
-      snapshotsRemoved += result.changes;
-    }
+    const result = db.prepare(
+      `DELETE FROM file_snapshots WHERE id IN (
+         SELECT id FROM (
+           SELECT id,
+                  ROW_NUMBER() OVER (PARTITION BY file_path ORDER BY id DESC) as rownum
+           FROM file_snapshots
+         )
+         WHERE rownum > ?
+       )`,
+    ).run(MAX_SNAPSHOTS_PER_FILE);
+    snapshotsRemoved = result.changes;
 
     // Prune workflow history: keep last MAX_WORKFLOW_ENTRIES
     const countRow = db.prepare('SELECT COUNT(*) as cnt FROM workflow_history').get() as { cnt: number };
@@ -287,7 +316,14 @@ export class LearningDatabase {
       historyEntriesRemoved = result.changes;
     }
 
-    return { snapshotsRemoved, historyEntriesRemoved };
+    const patternResult = db.prepare(
+      `DELETE FROM pattern_observations WHERE id NOT IN (
+         SELECT id FROM pattern_observations ORDER BY id DESC LIMIT 5000
+       )`,
+    ).run();
+    const deletedPatternObservations = patternResult.changes;
+
+    return { snapshotsRemoved, historyEntriesRemoved, deletedPatternObservations };
   }
 
   getDatabaseSize(): number {
@@ -295,7 +331,102 @@ export class LearningDatabase {
     const snapshots = (db.prepare('SELECT COUNT(*) as cnt FROM file_snapshots').get() as { cnt: number }).cnt;
     const history = (db.prepare('SELECT COUNT(*) as cnt FROM workflow_history').get() as { cnt: number }).cnt;
     const sections = (db.prepare('SELECT COUNT(*) as cnt FROM section_hashes').get() as { cnt: number }).cnt;
-    return snapshots + history + sections;
+    const observations = (db.prepare('SELECT COUNT(*) as cnt FROM pattern_observations').get() as { cnt: number }).cnt;
+    return snapshots + history + sections + observations;
+  }
+
+  /**
+   * Return the most-edited files (by snapshot count), up to `limit`.
+   * Used by AGENTS.md key-files section.
+   */
+  getMostEditedFiles(limit = 10): Array<{ filePath: string; editCount: number }> {
+    const db = this.requireDb();
+    const rows = db.prepare(
+      `SELECT file_path, COUNT(*) as edit_count
+       FROM file_snapshots
+       WHERE source = 'human'
+       GROUP BY file_path
+       ORDER BY edit_count DESC
+       LIMIT ?`,
+    ).all(limit) as Array<{ file_path: string; edit_count: number }>;
+    return rows.map((r) => ({ filePath: r.file_path, editCount: r.edit_count }));
+  }
+
+  /**
+   * Return per-workflow cancellation stats.
+   * Used by AGENTS.md learned-preferences section.
+   */
+  getWorkflowCancellationStats(): Array<{ workflowType: string; totalRuns: number; cancelledRuns: number }> {
+    const db = this.requireDb();
+    const rows = db.prepare(
+      `SELECT workflow_type,
+              COUNT(*) as total_runs,
+              SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_runs
+       FROM workflow_history
+       GROUP BY workflow_type`,
+    ).all() as Array<{ workflow_type: string; total_runs: number; cancelled_runs: number }>;
+    return rows.map((r) => ({
+      workflowType: r.workflow_type,
+      totalRuns: r.total_runs,
+      cancelledRuns: r.cancelled_runs,
+    }));
+  }
+
+  // ---- Pattern Observations ----
+
+  /**
+   * Record a single sighting of a pattern (by its patternId).
+   * Called by ProjectAnalyzer each time a pattern is detected.
+   */
+  recordPatternObservation(patternId: string): void {
+    const db = this.requireDb();
+    db.prepare(
+      'INSERT INTO pattern_observations (pattern_id) VALUES (?)',
+    ).run(patternId);
+  }
+
+  /**
+   * Return the observation count for each pattern that has been recorded.
+   * Used by ProjectAnalyzer to boost confidence on frequently-seen patterns.
+   */
+  getPatternObservationCounts(): Array<{ patternId: string; observationCount: number }> {
+    const db = this.requireDb();
+    const rows = db.prepare(
+      `SELECT pattern_id, COUNT(*) as observation_count
+       FROM pattern_observations
+       GROUP BY pattern_id`,
+    ).all() as Array<{ pattern_id: string; observation_count: number }>;
+    return rows.map((r) => ({ patternId: r.pattern_id, observationCount: r.observation_count }));
+  }
+
+  // ---- Generation Acceptance ----
+
+  /**
+   * Compute how often humans keep (accepted) vs edit (edited) a Roadie-generated file.
+   * Scans consecutive roadie→human snapshot pairs. Returns null if fewer than 3 transitions.
+   */
+  getGenerationAcceptanceRate(filePath: string): { accepted: number; edited: number } | null {
+    const db = this.requireDb();
+    const rows = db.prepare(
+      'SELECT content_hash, source FROM file_snapshots WHERE file_path = ? ORDER BY id ASC',
+    ).all(filePath) as Array<{ content_hash: string; source: string }>;
+
+    let accepted = 0;
+    let edited = 0;
+
+    for (let i = 0; i < rows.length - 1; i++) {
+      if (rows[i].source === 'roadie' && rows[i + 1].source === 'human') {
+        if (rows[i].content_hash === rows[i + 1].content_hash) {
+          accepted++;
+        } else {
+          edited++;
+        }
+      }
+    }
+
+    const total = accepted + edited;
+    if (total < 3) return null;
+    return { accepted, edited };
   }
 
   // ---- Private ----

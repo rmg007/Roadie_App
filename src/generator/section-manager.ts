@@ -29,6 +29,19 @@ const MARKER_START = (id: string): string => `<!-- roadie:start:${id} -->`;
 const MARKER_END = (id: string): string => `<!-- roadie:end:${id} -->`;
 const MARKER_MERGED = (): string => `<!-- roadie:merged:${new Date().toISOString()} -->`;
 
+function escapeRegex(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function findSectionMatch(content: string, id: string): RegExpExecArray | null {
+  const escapedId = escapeRegex(id);
+  const regex = new RegExp(
+    `<!--\\s*roadie:start:${escapedId}\\s*-->([\\s\\S]*?)<!--\\s*roadie:end:${escapedId}\\s*-->`,
+    'i',
+  );
+  return regex.exec(content);
+}
+
 /** Compute SHA-256 hash of content. */
 export function hashContent(content: string): string {
   return createHash('sha256').update(content).digest('hex').slice(0, 16);
@@ -65,30 +78,28 @@ export function mergeSections(
   let anyMerged = false;
 
   for (const section of newSections) {
-    const startMarker = MARKER_START(section.id);
-    const endMarker = MARKER_END(section.id);
-    const startIdx = result.indexOf(startMarker);
-    const endIdx = result.indexOf(endMarker);
+    const newBlock = `${MARKER_START(section.id)}\n${section.content.trim()}\n${MARKER_END(section.id)}`;
+    const match = findSectionMatch(result, section.id);
 
-    const newBlock = `${startMarker}\n${section.content.trim()}\n${endMarker}`;
-
-    if (startIdx === -1 || endIdx === -1) {
+    if (!match) {
       // Section doesn't exist in file — append
       result = result.trimEnd() + '\n\n' + newBlock + '\n';
     } else {
-      // Section exists — check if human-edited
-      const existingBlock = result.slice(startIdx + startMarker.length, endIdx).trim();
+      const fullMatch = match[0];
+      const existingBlock = match[1].trim();
       const existingHash = hashContent(existingBlock);
       const storedHash = storedHashes.get(section.id);
+      const startIdx = match.index;
+      const endIdx = match.index + fullMatch.length;
 
       if (storedHash && existingHash !== storedHash) {
         // Human edited — append below with merge marker
         const mergeBlock = `\n${MARKER_MERGED()}\n${newBlock}`;
-        result = result.slice(0, endIdx + endMarker.length) + mergeBlock + result.slice(endIdx + endMarker.length);
+        result = result.slice(0, endIdx) + mergeBlock + result.slice(endIdx);
         anyMerged = true;
       } else {
         // No human edits — replace entirely
-        result = result.slice(0, startIdx) + newBlock + result.slice(endIdx + endMarker.length);
+        result = result.slice(0, startIdx) + newBlock + result.slice(endIdx);
       }
     }
   }

@@ -76,6 +76,36 @@ describe('FileGenerator', () => {
     expect(second.every((r) => !r.written)).toBe(true);
   });
 
+  it('writeReason is "new" on first write', async () => {
+    const results = await generator.generateAll(model);
+    for (const r of results) {
+      expect(r.writeReason).toBe('new');
+    }
+  });
+
+  it('writeReason is "unchanged" when content is identical', async () => {
+    await generator.generateAll(model);
+    const second = await generator.generateAll(model);
+    for (const r of second) {
+      expect(r.writeReason).toBe('unchanged');
+    }
+  });
+
+  it('writeReason is "updated" when content changes', async () => {
+    await generator.generateAll(model);
+
+    // Change the model to trigger a content change
+    model.setTechStack([
+      { category: 'language', name: 'TypeScript', version: '5.4', sourceFile: 'package.json' },
+      { category: 'framework', name: 'React', version: '18.0', sourceFile: 'package.json' },
+    ]);
+
+    const second = await generator.generateAll(model);
+    for (const r of second) {
+      expect(r.writeReason).toBe('updated');
+    }
+  });
+
   it('creates .github/.roadie/.gitignore', async () => {
     await generator.generateAll(model);
     const gitignore = await fs.readFile(
@@ -90,6 +120,32 @@ describe('FileGenerator', () => {
     const copilot = results.find((r) => r.type === 'copilot_instructions');
     expect(copilot!.content).toContain('vitest run');
     expect(copilot!.content).toContain('next build');
+  });
+
+  it('AGENTS.md includes commands section (content contract)', async () => {
+    const results = await generator.generateAll(model);
+    const agents = results.find((r) => r.type === 'agents_md');
+    expect(agents!.content).toContain('## Project Commands');
+    expect(agents!.content).toContain('vitest run');
+    expect(agents!.content).toContain('next build');
+  });
+
+  it('AGENTS.md includes directory structure section (content contract)', async () => {
+    const results = await generator.generateAll(model);
+    const agents = results.find((r) => r.type === 'agents_md');
+    expect(agents!.content).toContain('## Directory Structure');
+  });
+
+  it('AGENTS.md includes all required sections (content contract)', async () => {
+    const results = await generator.generateAll(model);
+    const agents = results.find((r) => r.type === 'agents_md');
+    const content = agents!.content;
+    // All 5 required sections must be present
+    expect(content).toContain('<!-- roadie:start:project-overview -->');
+    expect(content).toContain('<!-- roadie:start:commands -->');
+    expect(content).toContain('<!-- roadie:start:agent-roles -->');
+    expect(content).toContain('<!-- roadie:start:workflows -->');
+    expect(content).toContain('<!-- roadie:start:directory-structure -->');
   });
 
   it('contentHash starts with sha256:', async () => {

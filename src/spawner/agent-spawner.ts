@@ -48,9 +48,9 @@ export class AgentSpawner {
       const modelInfo = await this.modelResolver.resolve(config.modelTier);
       log.info(`[${config.role}] Model resolved: ${modelInfo.id}`);
 
-      // 2. Build the three-layer prompt
-      const prompt = this.promptBuilder.build(config);
-      log.debug(`[${config.role}] Prompt built (${prompt.length} chars)`);
+      // 2. Build the three-layer prompt messages
+      const messages = this.promptBuilder.buildMessages(config);
+      log.debug(`[${config.role}] Prompt built (${messages.map((m) => m.content.length).reduce((sum, len) => sum + len, 0)} chars)`);
 
       // 3. Scope tools
       const toolNames = this.toolRegistry.getToolNames(config.tools);
@@ -60,13 +60,14 @@ export class AgentSpawner {
       log.info(`[${config.role}] Sending request (tools: ${config.tools})`);
       const response = await this.modelProvider.sendRequest(
         modelInfo.id,
-        [{ role: 'user', content: prompt }],
+        messages,
         {
           tools: toolNames.map((name) => ({
             name,
             description: name,
             inputSchema: {},
           })),
+          cancellation: config.cancellation,
         },
       );
 

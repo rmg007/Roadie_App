@@ -83,10 +83,28 @@ describe('ModelResolver', () => {
     expect(model.id).toBe('some-prefix-gpt-4.1-suffix');
   });
 
+  it('prefers exact prefix/suffix model id matches over broad substrings', async () => {
+    const provider = makeMockProvider([
+      makeModel('copilot-claude-opus-4.6'),
+      makeModel('claude-opus-4.6-variant'),
+    ]);
+    const resolver = new ModelResolver(provider);
+    const model = await resolver.resolve('premium');
+    expect(model.id).toBe('copilot-claude-opus-4.6');
+  });
+
   it('throws ModelUnavailableError when nothing matches', async () => {
     const provider = makeMockProvider([]);
     const resolver = new ModelResolver(provider);
     await expect(resolver.resolve('free')).rejects.toBeInstanceOf(ModelUnavailableError);
+  });
+
+  it('caches model enumeration across multiple resolves', async () => {
+    const provider = makeMockProvider([makeModel('copilot-gpt-4.1')]);
+    const resolver = new ModelResolver(provider);
+    await resolver.resolve('free');
+    await resolver.resolve('free');
+    expect(provider.selectModels).toHaveBeenCalledTimes(1);
   });
 
   it('throws ModelUnavailableError from premium with all tried models across tiers', async () => {

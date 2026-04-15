@@ -328,6 +328,31 @@ describe('FileGeneratorManager', () => {
     });
   });
 
+  describe('simplified retry', () => {
+    it('retry passes simplified=true to generator.generate', async () => {
+      let callCount = 0;
+      const failThenSucceedGen: FileTypeGenerator = {
+        fileType: 'copilot_instructions',
+        triggers: ['techStack'],
+        generate: vi.fn().mockImplementation(async (_model, options) => {
+          callCount++;
+          if (callCount === 1) throw new Error('first attempt fails');
+          // On retry, options.simplified should be true
+          return {
+            filePath: '.github/copilot_instructions.md',
+            sections: [{ id: 'test', content: `simplified=${options?.simplified ?? false}` }],
+          };
+        }),
+      };
+      manager.register(failThenSucceedGen);
+
+      const result = await manager.generate('copilot_instructions', mockModel);
+      expect(callCount).toBe(2);
+      expect(failThenSucceedGen.generate).toHaveBeenNthCalledWith(2, mockModel, { simplified: true });
+      expect(result.written).toBe(true);
+    });
+  });
+
   describe('dispose', () => {
     it('clears generators and deferred writes', () => {
       manager.register(createMockGenerator('copilot_instructions', ['techStack']));

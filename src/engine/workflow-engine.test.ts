@@ -246,6 +246,22 @@ describe('WorkflowEngine', () => {
     expect(result.summary).toBe('Custom summary');
   });
 
+  it('logs a warning and returns the default result when onComplete throws', async () => {
+    const handler: StepHandlerFn = vi.fn().mockImplementation(
+      (step: WorkflowStep) => Promise.resolve(successResult(step.id)),
+    );
+    const onComplete = vi.fn().mockRejectedValue(new Error('boom'));
+    const engine = createEngine(handler);
+    const result = await engine.execute(
+      makeDefinition([makeStep('s1', 'Step 1')], { onComplete }),
+      makeContext(),
+    );
+
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(result.state).toBe(WorkflowState.COMPLETED);
+    expect(result.summary).toContain('Test Workflow');
+  });
+
   it('does not call onComplete when workflow is paused', async () => {
     const handler: StepHandlerFn = vi.fn().mockResolvedValue(failResult('s1'));
     const onComplete = vi.fn();

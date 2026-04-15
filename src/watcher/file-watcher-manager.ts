@@ -23,6 +23,8 @@ export interface FileWatcherConfig {
   maxBatchSize: number;
 }
 
+const MAX_PENDING_EVENTS = 2000;
+
 export const DEFAULT_CONFIG: FileWatcherConfig = {
   debounceMs: 500,
   maxBatchSize: 1000,
@@ -114,6 +116,22 @@ export class FileWatcherManager {
 
     // Deduplication: keep only the latest event per file path.
     this.pending.set(filePath, { eventType, timestamp: new Date() });
+
+    if (this.pending.size > MAX_PENDING_EVENTS) {
+      const overflowCount = this.pending.size;
+      this.clearDebounceTimer();
+      const rescanEvent: FullRescanEvent = {
+        type: 'FULL_RESCAN',
+        eventCount: overflowCount,
+        timestamp: new Date(),
+      };
+      this.pending.clear();
+      for (const handler of this.handlers) {
+        handler([rescanEvent]);
+      }
+      return;
+    }
+
     this.resetDebounceTimer();
   }
 

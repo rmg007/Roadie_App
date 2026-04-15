@@ -14,6 +14,24 @@ describe('LearningDatabase', () => {
   let rawDb: Database.Database;
   let learning: LearningDatabase;
 
+  function insertWorkflowHistory(
+    learningDb: LearningDatabase,
+    rows: Array<{ workflowType: string; status: WorkflowOutcomeInput['status']; count: number }>,
+  ): void {
+    for (const row of rows) {
+      for (let i = 0; i < row.count; i++) {
+        learningDb.recordWorkflowOutcome({
+          workflowType: row.workflowType,
+          prompt: `seed:${row.workflowType}:${row.status}:${i}`,
+          status: row.status,
+          stepsCompleted: row.status === 'cancelled' ? 1 : 3,
+          stepsTotal: 3,
+          durationMs: 1_000,
+        });
+      }
+    }
+  }
+
   beforeEach(() => {
     rawDb = createTestDb();
     learning = new LearningDatabase();
@@ -201,6 +219,74 @@ describe('LearningDatabase', () => {
     });
   });
 
+  describe('getWorkflowCancellationStats', () => {
+    it('returns an empty array for empty history', () => {
+      expect(learning.getWorkflowCancellationStats()).toEqual([]);
+    });
+
+    it('returns correct cancellation counts per workflow', () => {
+      insertWorkflowHistory(learning, [
+        { workflowType: 'bug_fix', status: 'completed', count: 3 },
+        { workflowType: 'bug_fix', status: 'cancelled', count: 2 },
+      ]);
+
+      expect(learning.getWorkflowCancellationStats()).toEqual([
+        {
+          workflowType: 'bug_fix',
+          totalRuns: 5,
+          cancelledRuns: 2,
+        },
+      ]);
+    });
+
+    it('does not apply the classifier minimum-run threshold in the database layer', () => {
+      insertWorkflowHistory(learning, [
+        { workflowType: 'bug_fix', status: 'completed', count: 2 },
+        { workflowType: 'bug_fix', status: 'cancelled', count: 1 },
+      ]);
+
+      // The >=5-run threshold belongs in IntentClassifier.adjustWithLearning, not here.
+      expect(learning.getWorkflowCancellationStats()).toEqual([
+        {
+          workflowType: 'bug_fix',
+          totalRuns: 3,
+          cancelledRuns: 1,
+        },
+      ]);
+    });
+
+    it('tracks multiple workflow types independently', () => {
+      insertWorkflowHistory(learning, [
+        { workflowType: 'bug_fix', status: 'completed', count: 5 },
+        { workflowType: 'bug_fix', status: 'cancelled', count: 1 },
+        { workflowType: 'feature', status: 'completed', count: 3 },
+        { workflowType: 'feature', status: 'cancelled', count: 2 },
+      ]);
+
+      const stats = learning.getWorkflowCancellationStats();
+      expect(stats).toHaveLength(2);
+      const bugFixStats = stats.find((s) => s.workflowType === 'bug_fix')!;
+      const featureStats = stats.find((s) => s.workflowType === 'feature')!;
+      expect(bugFixStats).toEqual({ workflowType: 'bug_fix', totalRuns: 6, cancelledRuns: 1 });
+      expect(featureStats).toEqual({ workflowType: 'feature', totalRuns: 5, cancelledRuns: 2 });
+    });
+
+    it('returns correct stats when only failures are recorded', () => {
+      insertWorkflowHistory(learning, [
+        { workflowType: 'refactor', status: 'failed', count: 4 },
+      ]);
+
+      const stats = learning.getWorkflowCancellationStats();
+      expect(stats).toEqual([
+        {
+          workflowType: 'refactor',
+          totalRuns: 4,
+          cancelledRuns: 0,
+        },
+      ]);
+    });
+  });
+
   // ================================================================
   // Section Hashes
   // ================================================================
@@ -328,6 +414,105 @@ describe('LearningDatabase', () => {
       // Phase 1 table should be untouched
       const row = rawDb.prepare('SELECT name FROM tech_stack').get() as { name: string };
       expect(row.name).toBe('TypeScript');
+    });
+  });
+
+  // ================================================================
+  // Pattern Observations
+  // ================================================================
+
+  describe('pattern observations', () => {
+    it('returns empty array when no observations recorded', () => {
+      expect(learning.getPatternObservationCounts()).toHaveLength(0);
+    });
+
+    it('records and counts a single pattern observation', () => {
+      learning.recordPatternObservation('language:TypeScript project');
+      const counts = learning.getPatternObservationCounts();
+      expect(counts).toHaveLength(1);
+      expect(counts[0].patternId).toBe('language:TypeScript project');
+      expect(counts[0].observationCount).toBe(1);
+    });
+
+    it('accumulates multiple sightings of the same pattern', () => {
+      for (let i = 0; i < 5; i++) {
+        learning.recordPatternObservation('testing:Uses Vitest');
+      }
+      const counts = learning.getPatternObservationCounts();
+      expect(counts).toHaveLength(1);
+      expect(counts[0].observationCount).toBe(5);
+    });
+
+    it('tracks multiple distinct patterns independently', () => {
+      learning.recordPatternObservation('patternA');
+      learning.recordPatternObservation('patternA');
+      learning.recordPatternObservation('patternB');
+      const counts = learning.getPatternObservationCounts();
+      const a = counts.find((c) => c.patternId === 'patternA')!;
+      const b = counts.find((c) => c.patternId === 'patternB')!;
+      expect(a.observationCount).toBe(2);
+      expect(b.observationCount).toBe(1);
+    });
+  });
+
+  // ================================================================
+  // Generation Acceptance Rate
+  // ================================================================
+
+  describe('getGenerationAcceptanceRate', () => {
+    it('returns null with fewer than 3 roadie→human transitions', () => {
+      learning.recordSnapshot('/AGENTS.md', 'v1', 'roadie');
+      learning.recordSnapshot('/AGENTS.md', 'v1', 'human'); // accepted (same hash)
+      expect(learning.getGenerationAcceptanceRate('/AGENTS.md')).toBeNull();
+    });
+
+    it('returns null for unknown file', () => {
+      expect(learning.getGenerationAcceptanceRate('/no-such.md')).toBeNull();
+    });
+
+    it('counts accepted transitions when hash matches', () => {
+      for (let i = 0; i < 3; i++) {
+        learning.recordSnapshot('/AGENTS.md', 'same-content', 'roadie');
+        learning.recordSnapshot('/AGENTS.md', 'same-content', 'human');
+      }
+      const rate = learning.getGenerationAcceptanceRate('/AGENTS.md');
+      expect(rate).not.toBeNull();
+      expect(rate!.accepted).toBe(3);
+      expect(rate!.edited).toBe(0);
+    });
+
+    it('counts edited transitions when hash differs', () => {
+      for (let i = 0; i < 3; i++) {
+        learning.recordSnapshot('/AGENTS.md', `roadie-v${i}`, 'roadie');
+        learning.recordSnapshot('/AGENTS.md', `human-v${i}`, 'human');
+      }
+      const rate = learning.getGenerationAcceptanceRate('/AGENTS.md');
+      expect(rate).not.toBeNull();
+      expect(rate!.accepted).toBe(0);
+      expect(rate!.edited).toBe(3);
+    });
+
+    it('handles mixed accepted/edited transitions', () => {
+      // 2 accepted, 1 edited — total 3 → should return result
+      learning.recordSnapshot('/f.md', 'same', 'roadie');
+      learning.recordSnapshot('/f.md', 'same', 'human');   // accepted
+      learning.recordSnapshot('/f.md', 'same', 'roadie');
+      learning.recordSnapshot('/f.md', 'same', 'human');   // accepted
+      learning.recordSnapshot('/f.md', 'roadie-v3', 'roadie');
+      learning.recordSnapshot('/f.md', 'human-v3', 'human'); // edited
+      const rate = learning.getGenerationAcceptanceRate('/f.md');
+      expect(rate).not.toBeNull();
+      expect(rate!.accepted).toBe(2);
+      expect(rate!.edited).toBe(1);
+    });
+
+    it('ignores human→roadie and human→human transitions', () => {
+      // Only roadie→human pairs count
+      learning.recordSnapshot('/f.md', 'a', 'human');
+      learning.recordSnapshot('/f.md', 'b', 'human');
+      learning.recordSnapshot('/f.md', 'c', 'roadie');
+      learning.recordSnapshot('/f.md', 'c', 'human');  // 1 accepted pair
+      expect(learning.getGenerationAcceptanceRate('/f.md')).toBeNull(); // only 1 transition < 3
     });
   });
 });

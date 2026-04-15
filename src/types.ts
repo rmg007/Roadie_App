@@ -133,6 +133,10 @@ export interface WorkflowStep {
   branches?: WorkflowStep[];
   /** For conditional steps: predicate that returns next step ID or null */
   condition?: (previousResult: StepResult) => string | null;
+  /** Optional context scope override for this step. When set, toContext() is called
+   *  with this scope instead of 'full', reducing prompt token usage.
+   *  Defaults to 'full' if omitted. */
+  contextScope?: 'full' | 'stack' | 'structure' | 'commands' | 'patterns';
 }
 
 /**
@@ -242,6 +246,8 @@ export interface AgentConfig {
   promptTemplate: string;
   /** Context injected into prompt (tech stack, patterns, etc.) */
   context: Record<string, unknown>;
+  /** Signal used to cancel the underlying model request */
+  cancellation?: AbortSignal;
   /** Maximum time to wait for agent response (milliseconds) */
   timeoutMs: number;
 }
@@ -489,7 +495,20 @@ export function isPhase15Active(model: ProjectModel): model is PersistentProject
 export type GeneratedFileType =
   | 'copilot_instructions'  // .github/copilot-instructions.md
   | 'agents_md'             // AGENTS.md at project root
-  | 'codebase_dictionary';  // .github/codebase-dictionary.md (M24, Phase 1.5)
+  | 'codebase_dictionary'   // .github/codebase-dictionary.md (M24, Phase 1.5)
+  | 'claude_md'             // CLAUDE.md at workspace root (Claude Code)
+  | 'cursor_rules'          // .cursor/rules/project.mdc (Cursor)
+  | 'cursor_rules_dir'      // .cursor/rules/{dir}.mdc (Cursor per-directory)
+  | 'path_instructions';    // .github/instructions/{dir}.instructions.md (Copilot path-scoped)
+
+/**
+ * Reason a generated file was written or skipped.
+ *  - 'new'       File did not exist — written fresh
+ *  - 'updated'   Existing file had different content — overwritten
+ *  - 'unchanged' Content hash identical — write skipped
+ *  - 'deferred'  File is open in editor — write deferred to avoid conflict
+ */
+export type WriteReason = 'new' | 'updated' | 'unchanged' | 'deferred' | 'error';
 
 /**
  * Generated file with content and metadata.
@@ -505,6 +524,8 @@ export interface GeneratedFile {
   contentHash: string;
   /** Whether the file was actually written (false if identical to existing) */
   written: boolean;
+  /** Why the file was written or skipped */
+  writeReason: WriteReason;
 }
 
 // =====================================================================

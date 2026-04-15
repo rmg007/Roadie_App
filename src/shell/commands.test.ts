@@ -13,6 +13,7 @@ vi.mock('vscode', () => {
     window: {
       showInformationMessage: vi.fn().mockResolvedValue(undefined),
       showWarningMessage: vi.fn().mockResolvedValue('Reset'),
+      showErrorMessage: vi.fn().mockResolvedValue(undefined),
     },
     commands: {
       registerCommand: vi.fn().mockImplementation((id: string, handler: Function) => ({
@@ -53,15 +54,20 @@ describe('registerCommands', () => {
     onStats: vi.fn(),
     onEnableWorkflowHistory: vi.fn(),
     onDisableWorkflowHistory: vi.fn(),
+    onGetScanSummary: vi.fn(),
+    onRunWorkflow: vi.fn(),
+    onDoctor: vi.fn(),
+    onShowLastContext: vi.fn(),
+    onShowMyStats: vi.fn(),
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('registers 6 commands', () => {
+  it('registers 11 commands', () => {
     const disposables = registerCommands(mockCallbacks);
-    expect(disposables).toHaveLength(6);
+    expect(disposables).toHaveLength(11);
 
     const register = vi.mocked(vscode.commands.registerCommand);
     expect(register).toHaveBeenCalledWith('roadie.init', expect.any(Function));
@@ -70,6 +76,11 @@ describe('registerCommands', () => {
     expect(register).toHaveBeenCalledWith('roadie.stats', expect.any(Function));
     expect(register).toHaveBeenCalledWith('roadie.enableWorkflowHistory', expect.any(Function));
     expect(register).toHaveBeenCalledWith('roadie.disableWorkflowHistory', expect.any(Function));
+    expect(register).toHaveBeenCalledWith('roadie.getScanSummary', expect.any(Function));
+    expect(register).toHaveBeenCalledWith('roadie.runWorkflow', expect.any(Function));
+    expect(register).toHaveBeenCalledWith('roadie.doctor', expect.any(Function));
+    expect(register).toHaveBeenCalledWith('roadie.showLastContext', expect.any(Function));
+    expect(register).toHaveBeenCalledWith('roadie.showMyStats', expect.any(Function));
   });
 
   it('roadie.init calls onInit callback', async () => {
@@ -103,5 +114,57 @@ describe('registerCommands', () => {
     const handler = register.mock.calls.find((c) => c[0] === 'roadie.reset')![1] as () => Promise<void>;
     await handler();
     expect(mockCallbacks.onReset).not.toHaveBeenCalled();
+  });
+
+  it('roadie.getScanSummary calls onGetScanSummary callback', async () => {
+    registerCommands(mockCallbacks);
+    const register = vi.mocked(vscode.commands.registerCommand);
+    const handler = register.mock.calls.find((c) => c[0] === 'roadie.getScanSummary')![1] as () => Promise<void>;
+    await handler();
+    expect(mockCallbacks.onGetScanSummary).toHaveBeenCalledTimes(1);
+  });
+
+  it('roadie.runWorkflow calls onRunWorkflow callback', async () => {
+    registerCommands(mockCallbacks);
+    const register = vi.mocked(vscode.commands.registerCommand);
+    const handler = register.mock.calls.find((c) => c[0] === 'roadie.runWorkflow')![1] as () => Promise<void>;
+    await handler();
+    expect(mockCallbacks.onRunWorkflow).toHaveBeenCalledTimes(1);
+  });
+
+  it('roadie.doctor calls onDoctor callback', async () => {
+    registerCommands(mockCallbacks);
+    const register = vi.mocked(vscode.commands.registerCommand);
+    const handler = register.mock.calls.find((c) => c[0] === 'roadie.doctor')![1] as () => Promise<void>;
+    await handler();
+    expect(mockCallbacks.onDoctor).toHaveBeenCalledTimes(1);
+  });
+
+  it('roadie.showMyStats calls onShowMyStats callback', async () => {
+    registerCommands(mockCallbacks);
+    const register = vi.mocked(vscode.commands.registerCommand);
+    const handler = register.mock.calls.find((c) => c[0] === 'roadie.showMyStats')![1] as () => Promise<void>;
+    await handler();
+    expect(mockCallbacks.onShowMyStats).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows an error message when a command callback throws', async () => {
+    const errorCallback = vi.fn().mockRejectedValueOnce(new Error('boom'));
+    const callbacks = { ...mockCallbacks, onStats: errorCallback };
+    registerCommands(callbacks);
+    const register = vi.mocked(vscode.commands.registerCommand);
+    const handler = register.mock.calls.find((c) => c[0] === 'roadie.stats')![1] as () => Promise<void>;
+
+    await handler();
+
+    expect(errorCallback).toHaveBeenCalledTimes(1);
+    expect(vscode.window.showErrorMessage).toHaveBeenCalledWith('Roadie command failed — boom');
+  });
+});
+
+describe('readConfiguration contextLensLevel', () => {
+  it('defaults to summary', () => {
+    const config = readConfiguration();
+    expect(config.contextLensLevel).toBe('summary');
   });
 });

@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { scanDependencies } from './dependency-scanner';
 
@@ -45,6 +47,23 @@ describe('DependencyScanner', () => {
     expect(commands.find((c) => c.name === 'test')).toBeDefined();
     expect(commands.find((c) => c.name === 'build')).toBeDefined();
     expect(commands.find((c) => c.name === 'dev')).toBeDefined();
+  });
+
+  it('handles malformed package.json fields without throwing', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'roadie-deps-'));
+    try {
+      await fs.writeFile(path.join(tempDir, 'package.json'), JSON.stringify({
+        dependencies: 42,
+        devDependencies: ['typescript'],
+        scripts: 'not-an-object',
+      }), 'utf8');
+
+      const { techStack, commands } = await scanDependencies(tempDir);
+      expect(techStack.some((e) => e.name === 'Node.js')).toBe(true);
+      expect(commands).toEqual([]);
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
   });
 
   it('returns empty for non-existent workspace', async () => {

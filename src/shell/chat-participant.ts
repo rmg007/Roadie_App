@@ -12,7 +12,7 @@
  */
 
 import * as vscode from 'vscode';
-import type { WorkflowDefinition, WorkflowContext, ProjectModel } from '../types';
+import type { WorkflowDefinition, WorkflowContext, ProjectModel, ClassificationResult } from '../types';
 import { VSCodeProgressReporter, VSCodeCancellationHandle } from './vscode-providers';
 import { IntentClassifier } from '../classifier/intent-classifier';
 import { WorkflowEngine } from '../engine/workflow-engine';
@@ -28,6 +28,14 @@ import type { LearningDatabase } from '../learning/learning-database';
 import { getLogger } from './logger';
 
 const PARTICIPANT_ID = 'roadie';
+
+/** Stores the most recent serialized context snapshot for `Roadie: Show Last Context`. */
+let _lastContextSnapshot = '';
+
+/** Returns the last context snapshot written before an LLM call. */
+export function getChatLastContext(): string {
+  return _lastContextSnapshot;
+}
 
 /** Map intent types to workflow definitions. All 7 workflows registered. */
 const WORKFLOW_MAP: Record<string, WorkflowDefinition> = {
@@ -52,6 +60,7 @@ export function registerChatParticipant(deps?: {
   stepHandler?: StepHandlerFn;
   projectModel?: ProjectModel;
   learningDb?: LearningDatabase;
+  contextLensLevel?: 'off' | 'summary' | 'full';
 }): vscode.Disposable {
   const classifier = deps?.classifier ?? new IntentClassifier();
 
@@ -80,8 +89,45 @@ export function registerChatParticipant(deps?: {
       : request.prompt;
     log.info(`@roadie received: "${preview}"`);
 
-    // 1. Classify intent
-    const classification = classifier.classify(request.prompt);
+    // Slash subcommand: skip classification, route directly to workflow
+    const COMMAND_WORKFLOW_MAP: Record<string, string> = {
+      fix:        'bug_fix',
+      document:   'document',
+      review:     'review',
+      refactor:   'refactor',
+      onboard:    'onboard',
+      dependency: 'dependency',
+    };
+
+    let classification: ClassificationResult;
+    if (request.command && COMMAND_WORKFLOW_MAP[request.command]) {
+      const intentKey = COMMAND_WORKFLOW_MAP[request.command];
+      log.info(`Slash command /${request.command} → intent: ${intentKey} (no classification)`);
+      // Build a synthetic classification result so the rest of the handler is unchanged
+      classification = {
+        intent:     intentKey,
+        confidence: 1.0,
+        signals:    [`slash:/${request.command}`],
+        requiresLLM: false,
+      };
+      // Fall through to step 3 (workflow context build) using this classification
+      // Implementation: extract steps 3–6 into a shared helper or duplicate minimally
+    } else {
+      // 1. Classify intent
+      classification = classifier.classify(request.prompt);
+
+      // Apply learning-based confidence adjustment (if DB available and has enough data)
+      if (deps?.learningDb) {
+        try {
+          const stats = deps.learningDb.getWorkflowStats();
+          const cancelStats = deps.learningDb.getWorkflowCancellationStats();
+          classification = classifier.adjustWithLearning(classification, stats, cancelStats);
+        } catch {
+          // Non-fatal — continue with unadjusted confidence
+        }
+      }
+    }
+
     log.info(
       `Intent: ${classification.intent} ` +
       `(confidence: ${classification.confidence.toFixed(2)}, ` +
@@ -109,13 +155,43 @@ export function registerChatParticipant(deps?: {
     }
 
     // 3. Build workflow context
+    let enrichedPrompt = request.prompt;
+    if (
+      deps?.learningDb &&
+      (classification.intent === 'onboard' || classification.intent === 'review')
+    ) {
+      try {
+        const hotFiles = deps.learningDb.getMostEditedFiles(10);
+        if (hotFiles.length > 0) {
+          enrichedPrompt = buildContextWithHotFiles(request.prompt, hotFiles);
+        }
+      } catch {
+        // Non-fatal — use original prompt
+      }
+    }
+
     const workflowContext: WorkflowContext = {
-      prompt:       request.prompt,
+      prompt:       enrichedPrompt,
       intent:       classification,
       projectModel: (deps?.projectModel ?? {}) as ProjectModel,
       progress:     new VSCodeProgressReporter(response),
       cancellation: new VSCodeCancellationHandle(token),
     };
+
+    // 3b. Context snapshot + level-gated logging
+    _lastContextSnapshot = enrichedPrompt;
+    const lensLevel = deps?.contextLensLevel ?? 'summary';
+    if (lensLevel !== 'off') {
+      log.info(
+        `[CONTEXT] intent=${classification.intent} chars=${enrichedPrompt.length}`,
+      );
+      if (lensLevel === 'full') {
+        const body = enrichedPrompt.length > 200
+          ? `${enrichedPrompt.slice(0, 200)}…`
+          : enrichedPrompt;
+        log.info(`[CONTEXT] body: ${body}`);
+      }
+    }
 
     // 4. Execute workflow
     log.info(`Starting workflow: ${workflow.name}`);
@@ -171,4 +247,17 @@ export function registerChatParticipant(deps?: {
   const participant = vscode.chat.createChatParticipant(PARTICIPANT_ID, handler);
   participant.iconPath = new vscode.ThemeIcon('zap');
   return participant;
+}
+
+/**
+ * Appends a Most-Edited Files subsection to the base context string.
+ * Used for onboard and review intents to surface hot-spot files.
+ */
+export function buildContextWithHotFiles(
+  base: string,
+  hotFiles: Array<{ filePath: string; editCount: number }>,
+): string {
+  if (hotFiles.length === 0) return base;
+  const lines = hotFiles.map((f) => `- ${f.filePath} (${f.editCount} edits)`);
+  return `${base}\n\n## Most-Edited Files\n\n${lines.join('\n')}`;
 }

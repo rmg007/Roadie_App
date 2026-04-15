@@ -15,21 +15,4 @@ export default defineConfig([
     clean:    true,
     target:   'node20',
   },
-
-  // ---- MCP CLI bundle ----
-  {
-    entry:   { 'bin/roadie-mcp': 'bin/roadie-mcp.ts' },
-    outDir:  'out',
-    format:  ['cjs'],
-    // vscode is never imported in standalone mode, but keep it external
-    // in case a transitive import slips in (it will fail at runtime, not build time).
-    external:   ['vscode', 'better-sqlite3'],
-    noExternal: ['fast-glob', 'zod', '@modelcontextprotocol/sdk'],
-    sourcemap: true,
-    // Do not clean here — the extension bundle runs first and owns `clean: true`
-    clean:    false,
-    target:   'node20',
-    // Make the output executable on POSIX systems
-    banner:   { js: '#!/usr/bin/env node' },
-  },
 ]);

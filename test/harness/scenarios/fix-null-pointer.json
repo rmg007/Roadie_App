@@ -1,0 +1,26 @@
+{
+  "$schema": "test/harness/scenarios/schema.json",
+  "version": 1,
+  "id": "fix-null-pointer",
+  "name": "Bug fix on null pointer",
+  "workspaceFixture": "ts-calculator",
+  "prompt": "@roadie the add() function crashes on null inputs",
+  "seed": {
+    "workflowHistory": [
+      { "type": "bug_fix", "status": "completed", "count": 4 },
+      { "type": "bug_fix", "status": "cancelled", "count": 1 }
+    ],
+    "patternObservations": [
+      { "patternId": "language:TypeScript", "count": 10 }
+    ]
+  },
+  "expect": {
+    "intent": { "type": "bug_fix", "confidence": ">= 0.6" },
+    "workflow": "bug_fix",
+    "stepsExecuted": { ">=": 1, "<=": 2 },
+    "faultExpected": true,
+    "assertions": ["./assertions/confidence-adjusted.ts"]
+  },
+  "faultInjection": { "onStep": 2, "mode": "throw" },
+  "cassette": "fix-null-pointer.cassette.jsonl"
+}
