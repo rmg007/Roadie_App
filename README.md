@@ -12,11 +12,15 @@ VS Code extension that makes GitHub Copilot smarter. Transforms chat into autono
 - Automatic project context generation for Copilot and agent tools (`.github/`, `AGENTS.md`, path rules).
 - Local-first design with optional SQLite persistence and graceful fallback when native SQLite is unavailable.
 
-## What's New in 0.7.8
+## What's New in 0.7.10
 
-- Improved Marketplace listing copy (name, short description, and feature framing).
-- Refreshed extension icon asset for better visibility in Marketplace and Extensions view.
-- Polished README and changelog wording for clearer release notes and user onboarding.
+- Full Phase 1.5 (Passive Mode) completion: file watcher, persistence, generators, learning database
+- 11 command palette commands with comprehensive project intelligence
+- Workflow history and edit tracking with SQLite backend
+- Enhanced chat interface with slash subcommands and context variables
+- Code Actions integration for quick symbol-scoped workflows
+- 7 artifact families auto-generated: copilot-instructions.md, AGENTS.md, CLAUDE.md, Cursor rules, path-scoped instructions
+- Expanded configuration options: model preference, telemetry, edit tracking, test command override, context logging levels
 
 ---
 
@@ -71,7 +75,7 @@ Example output:
 
 ```
 Roadie — doctor
-package: C:\dev\Roadie\roadie
+package: C:\dev\Roadie\roadie-App
 
 1. VS Code extension build
 ✓ out/extension.js exists
@@ -83,14 +87,18 @@ package: C:\dev\Roadie\roadie
 ✓ keywords count is 5
 
 3. Packaged .vsix
-✓ roadie-0.7.8.vsix present
+✓ roadie-0.7.10.vsix present
 
 4. VS Code extension registration
 ✓ roadie.roadie is installed
 
 5. Generated context files
-✓ AGENTS.md exists
 ✓ .github/copilot-instructions.md exists
+✓ AGENTS.md exists
+✓ .roadie/last-scan.json exists (with writeReason and hashPolicy)
+
+6. Persistence layer
+✓ SQLite database available (or graceful fallback)
 
 All checks passed.
 ```

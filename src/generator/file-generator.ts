@@ -29,6 +29,7 @@ import { generateCursorRulesDir, CURSOR_RULES_DIR } from './templates/cursor-rul
 import type { LearningDatabase } from '../learning/learning-database';
 import type { FileSystemProvider } from '../providers';
 import { getLogger } from '../shell/logger';
+import { detectIDEs, type DetectionResult } from '../detector/ide-detector';
 
 interface FileSpec {
   type: GeneratedFileType;
@@ -38,8 +39,8 @@ interface FileSpec {
   preamble?: () => string;
 }
 
-function buildFileSpecs(learningDb?: LearningDatabase): FileSpec[] {
-  return [
+function buildFileSpecs(learningDb?: LearningDatabase, detection?: DetectionResult): FileSpec[] {
+  const specs: FileSpec[] = [
     {
       type:     'copilot_instructions',
       path:     COPILOT_INSTRUCTIONS_PATH,
@@ -62,11 +63,23 @@ function buildFileSpecs(learningDb?: LearningDatabase): FileSpec[] {
       preamble: buildCursorRulesPreamble,
     },
   ];
+
+  // Phase 2: Conditionally add tool-specific files based on IDE detection
+  // (placeholder for future .mcp.json, claude-hooks generation)
+  if (detection?.isClaudeCode) {
+    // Future: add mcp-config and claude-hooks specs here
+    // specs.push({ type: 'mcp_config', ... });
+  }
+  if (detection?.isWindsurf) {
+    // Future: add windsurf-rules spec here
+  }
+
+  return specs;
 }
 
 export class FileGenerator {
   private fileSystem: FileSystemProvider | null;
-  private fileSpecs: FileSpec[];
+  private cachedDetection: DetectionResult | null = null;
 
   constructor(
     private workspaceRoot: string,
@@ -74,7 +87,20 @@ export class FileGenerator {
     fileSystem?: FileSystemProvider,
   ) {
     this.fileSystem = fileSystem ?? null;
-    this.fileSpecs  = buildFileSpecs(learningDb);
+  }
+
+  /**
+   * Detect IDEs once per session (cached).
+   */
+  private async getDetection(): Promise<DetectionResult> {
+    if (!this.cachedDetection) {
+      this.cachedDetection = await detectIDEs(this.workspaceRoot);
+      const log = getLogger();
+      if (this.cachedDetection.detectedIDEs.length > 0) {
+        log.debug(`IDE detection: ${this.cachedDetection.detectedIDEs.join(', ')}`);
+      }
+    }
+    return this.cachedDetection;
   }
 
   /**
@@ -92,8 +118,11 @@ export class FileGenerator {
   async generateAll(model: ProjectModel): Promise<GeneratedFile[]> {
     await this.ensureGitignore();
 
+    const detection = await this.getDetection();
+    const fileSpecs = buildFileSpecs(this.learningDb, detection);
+
     const results: GeneratedFile[] = [];
-    for (const spec of this.fileSpecs) {
+    for (const spec of fileSpecs) {
       const result = await this.generateFile(spec, model);
       results.push(result);
     }
