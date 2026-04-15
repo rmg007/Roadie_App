@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing pending.
 
+## [0.7.10] — 2026-04-15 — Node.js engine upgrade & test fixtures
+
+### Fixed
+- Upgraded GitHub Actions workflows to use Node.js 22+ to satisfy `@vscode/vsce@3.8.1` engine requirement.
+- Fixed missing test fixture directories (`src/`, `__tests__/`, `src/operations/`) that caused directory scanner tests to fail.
+
 ## [0.7.9] — 2026-04-15 — Linux CI path normalization fix
 
 ### Fixed
