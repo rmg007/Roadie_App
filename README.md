@@ -55,6 +55,12 @@ For any Marketplace release, push a semantic version tag together with the relea
 
 If publish automation is enabled, only tagged pushes should trigger Marketplace publish.
 
+Automation setup (one-time):
+
+1. Add repository secret `VSCE_PAT` in GitHub (Settings -> Secrets and variables -> Actions).
+2. The workflow `.github/workflows/publish-marketplace.yml` publishes on `v*` tags.
+3. Keep the tag and `package.json` version identical (workflow enforces this).
+
 ## Health check
 
 ```bash

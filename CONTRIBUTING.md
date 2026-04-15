@@ -19,6 +19,13 @@ Roadie releases are tag-driven.
 
 If GitHub automation is configured for publish, Marketplace release should run only from version tags (`v*`), not from every push.
 
+### GitHub publish automation setup
+
+1. Create a VS Code Marketplace Personal Access Token for publisher `roadie`.
+2. Add it as GitHub Actions secret `VSCE_PAT`.
+3. Use `.github/workflows/publish-marketplace.yml` to publish on `v*` tags.
+4. Ensure tag and `package.json` version match exactly (workflow validates this).
+
 ## Writing scenario tests
 
 Scenarios live in `test/harness/scenarios/`. Each scenario is a JSON file that specifies a prompt, an expected intent, and what the workflow engine should do.
