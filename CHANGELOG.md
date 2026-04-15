@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing pending.
 
+## [0.7.9] — 2026-04-15 — Linux CI path normalization fix
+
+### Fixed
+- Normalized scanned directory paths in `src/analyzer/directory-scanner.ts` to strip trailing
+  separators, fixing Linux test failures in `directory-scanner.test.ts` and
+  `directory-scanner-calculator.test.ts`.
+- Restored role inheritance behavior for nested directories (for example `src/operations`)
+  across platforms.
+
 ## [0.7.8] — 2026-04-15 — Marketplace listing polish
 
 ### Changed

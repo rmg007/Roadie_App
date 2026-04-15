@@ -21,6 +21,12 @@ const IGNORED_DIRS = [
 
 const MAX_DEPTH = 10;
 
+function normalizeDirPath(p: string): string {
+  const parsed = path.parse(p);
+  if (p === parsed.root) return p;
+  return p.replace(/[\\/]+$/, '');
+}
+
 /** Map directory name to role. */
 function assignRole(dirName: string): string | undefined {
   const lower = dirName.toLowerCase();
@@ -42,7 +48,7 @@ export async function scanDirectories(workspaceRoot: string): Promise<DirectoryN
 
   // Build flat list of directory nodes
   const root: DirectoryNode = {
-    path: workspaceRoot,
+    path: normalizeDirPath(workspaceRoot),
     type: 'directory',
     role: 'source',
     children: [],
@@ -53,8 +59,9 @@ export async function scanDirectories(workspaceRoot: string): Promise<DirectoryN
 
   for (const entry of entries) {
     const dirName = path.basename(entry);
+    const fullPath = normalizeDirPath(path.join(workspaceRoot, entry));
     root.children!.push({
-      path: path.join(workspaceRoot, entry),
+      path: fullPath,
       type: 'directory',
       role: assignRole(dirName),
     });
@@ -66,7 +73,7 @@ export async function scanDirectories(workspaceRoot: string): Promise<DirectoryN
   const inheritableRoles = new Set(['source', 'test']);
   for (const node of root.children!) {
     if (node.role !== undefined) continue;
-    const parentPath = path.dirname(node.path);
+    const parentPath = normalizeDirPath(path.dirname(node.path));
     // Walk up: check direct parent first, then root children (flat structure)
     const parentNode = root.children!.find((n) => n.path === parentPath);
     if (parentNode?.role && inheritableRoles.has(parentNode.role)) {
