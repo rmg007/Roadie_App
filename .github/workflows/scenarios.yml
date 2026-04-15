@@ -1,14 +1,40 @@
-name: Scenario Tests
+name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [master, main]
   pull_request:
-    branches: [main]
+    branches: [master, main]
 
 jobs:
+  unit-and-build:
+    name: Unit + Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Build extension
+        run: npm run build
+
   scenarios:
-    name: Run scenario tests
+    name: Scenario tests (ubuntu)
     runs-on: ubuntu-latest
 
     steps:
@@ -18,17 +44,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: roadie/package-lock.json
+          cache: npm
 
       - name: Install dependencies
-        working-directory: roadie
         run: npm ci
 
-      - name: Run unit tests
-        working-directory: roadie
-        run: npm test
-
       - name: Run scenario tests
-        working-directory: roadie
         run: npm run test:scenarios
