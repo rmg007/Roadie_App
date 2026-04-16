@@ -29,6 +29,7 @@ import { getChatLastContext } from './shell/chat-participant';
 import { RoadieCodeActionProvider } from './shell/code-action-provider';
 import { AgentSpawner } from './spawner/agent-spawner';
 import { ModelResolver } from './engine/model-resolver';
+import { VSCodeModelProvider } from './shell/vscode-providers';
 import { InMemoryProjectModel } from './model/project-model';
 import { RoadieDatabase } from './model/database';
 import { LearningDatabase } from './learning/learning-database';
@@ -220,7 +221,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   }
 
   // ── AgentSpawner (real step handler) ────────────────────────────────────
-  const modelResolver = new ModelResolver();
+  const modelResolver = new ModelResolver(new VSCodeModelProvider());
   const agentSpawner  = new AgentSpawner(modelResolver);
 
   const stepHandler: StepHandlerFn = async (step, workflowContext, attemptInfo) => {
