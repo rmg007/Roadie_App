@@ -96,7 +96,13 @@ vi.mock('./spawner/agent-spawner', () => ({
 }));
 
 vi.mock('./engine/model-resolver', () => ({
-  ModelResolver: class {},
+  // Provide a mock that accepts the same constructor signature to avoid
+  // runtime wiring mismatches when the real code calls `new ModelResolver(provider)`.
+  ModelResolver: class {
+    constructor(_provider?: any) {
+      // no-op
+    }
+  },
 }));
 
 vi.mock('./model/project-model', () => ({

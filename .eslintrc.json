@@ -25,7 +25,7 @@
         "varsIgnorePattern": "^_"
       }
     ],
-    "@typescript-eslint/no-explicit-any": "warn",
+    "@typescript-eslint/no-explicit-any": "error",
     "@typescript-eslint/explicit-function-return-type": [
       "warn",
       {
@@ -34,7 +34,7 @@
       }
     ],
     "@typescript-eslint/no-floating-promises": "error",
-    "@typescript-eslint/no-non-null-assertion": "warn",
+    "@typescript-eslint/no-non-null-assertion": "error",
     "no-restricted-syntax": [
       "error",
       {
@@ -47,4 +47,19 @@
     "no-var": "error"
   },
   "ignorePatterns": ["out/", "node_modules/", "*.config.ts", "*.config.js", "**/*.test.ts"]
+  ,
+  "overrides": [
+    {
+      "files": ["src/model/database.ts", "src/learning/learning-database.ts", "src/dictionary/dictionary-query.ts", "src/dictionary/entity-writer.ts"],
+      "rules": {
+        "@typescript-eslint/no-var-requires": "off"
+      }
+    },
+    {
+      "files": ["src/analyzer/directory-scanner.ts", "src/engine/workflow-engine.ts", "src/generator/section-manager-service.ts", "src/model/database.ts"],
+      "rules": {
+        "@typescript-eslint/no-non-null-assertion": "off"
+      }
+    }
+  ]
 }
