@@ -14,6 +14,12 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
+      // Thresholds — current actual: ~87 lines, ~85 branches, ~84 functions.
+      // Set a few points below to allow headroom while enforcing a meaningful floor.
+      lines: 85,
+      branches: 82,
+      functions: 80,
+      statements: 85,
     },
   },
 });

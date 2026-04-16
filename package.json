@@ -205,13 +205,14 @@
     "test:scenarios": "vitest run test/harness/scenario.test.ts",
     "package": "vsce package",
     "publish": "vsce publish",
-    "prepublish:test": "npm run test && npm run lint && npm run build"
+    "prepublish:test": "npm run test && npm run lint && npm run build && node scripts/smoke-test-bundle.js"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.84.0",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
+    "@vitest/coverage-v8": "^0.34.6",
     "@vscode/test-cli": "^0.0.4",
     "@vscode/test-electron": "^2.3.0",
     "@vscode/vsce": "^3.8.1",
