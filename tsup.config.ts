@@ -14,7 +14,7 @@ export default defineConfig([
     sourcemap: true,
     clean:    true,
     target:   'node20',
-    // After tsup writes the file, restore the "node:" prefix that esbuild strips.
-    onSuccess: 'node scripts/fix-sqlite-require.js',
+    // After tsup writes the file, run post-build fix and verification scripts.
+    onSuccess: 'node scripts/fix-sqlite-require.js && node scripts/verify-bundle.js',
   },
 ]);
