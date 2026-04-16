@@ -230,7 +230,7 @@ export class EntityWriterImpl implements EntityWriter {
       }
     } catch (err) {
       // Log but don't throw - never crash a workflow
-      console.error(`[EntityWriter] Error recording entities for ${filePath}:`, err);
+      console.error(`[EntityWriter] Error recording entities for ${filePath}:`, err); // eslint-disable-line no-console
     }
   }
 
@@ -238,7 +238,7 @@ export class EntityWriterImpl implements EntityWriter {
     try {
       this.db.prepare('DELETE FROM codebase_entities WHERE file_path = ?').run(filePath);
     } catch (err) {
-      console.error(`[EntityWriter] Error invalidating file ${filePath}:`, err);
+      console.error(`[EntityWriter] Error invalidating file ${filePath}:`, err); // eslint-disable-line no-console
     }
   }
 }

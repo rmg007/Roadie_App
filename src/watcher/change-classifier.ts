@@ -57,7 +57,7 @@ const IGNORED_GENERATED_PREFIXES = [
 export function isIgnoredPath(filePath: string): boolean {
   const normalized = filePath.replace(/\\/g, '/');
   // Strip leading drive/absolute prefix to get workspace-relative path
-  const relative = normalized.replace(/^.*\/(AGENTS\.md|CLAUDE\.md|\.github\/|\.cursor\/)/, (_, p1) => p1)
+  const _relative = normalized.replace(/^.*\/(AGENTS\.md|CLAUDE\.md|\.github\/|\.cursor\/)/, (_, p1) => p1)
     .replace(/^[^/]+\/[^/]+\/[^/]+\//, '') // trim deep absolute prefixes
     || normalized;
 

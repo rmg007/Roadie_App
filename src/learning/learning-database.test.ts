@@ -385,9 +385,9 @@ describe('LearningDatabase', () => {
       expect(learning.getDatabaseSize()).toBe(3);
     });
 
-    it('throws if not initialized', () => {
+    it('throws if not initialized (query methods)', () => {
       const uninit = new LearningDatabase();
-      expect(() => uninit.recordSnapshot('/a.ts', 'x', 'human')).toThrow('not initialized');
+      expect(() => uninit.getSnapshots('/a.ts')).toThrow('not initialized');
     });
 
     it('prune runs automatically on initialize', () => {
@@ -514,6 +514,42 @@ describe('LearningDatabase', () => {
       learning.recordSnapshot('/f.md', 'c', 'roadie');
       learning.recordSnapshot('/f.md', 'c', 'human');  // 1 accepted pair
       expect(learning.getGenerationAcceptanceRate('/f.md')).toBeNull(); // only 1 transition < 3
+    });
+  });
+
+  // ================================================================
+  // Defensive error paths (db not initialized)
+  // ================================================================
+
+  describe('uninitialized db defensive guards', () => {
+    it('recordSnapshot is a no-op when db is null', () => {
+      const uninit = new LearningDatabase();
+      expect(() => uninit.recordSnapshot('/a.ts', 'x', 'human')).not.toThrow();
+    });
+
+    it('recordWorkflowOutcome is a no-op when db is null', () => {
+      const uninit = new LearningDatabase();
+      uninit.setWorkflowHistory(true);
+      expect(() =>
+        uninit.recordWorkflowOutcome({
+          workflowType: 'bug_fix',
+          prompt: 'test',
+          status: 'completed',
+          stepsCompleted: 1,
+          stepsTotal: 1,
+        }),
+      ).not.toThrow();
+    });
+
+    it('recordPatternObservation is a no-op when db is null', () => {
+      const uninit = new LearningDatabase();
+      expect(() => uninit.recordPatternObservation('some-pattern-id')).not.toThrow();
+    });
+
+    it('requireDb-throwing methods still throw when db is null', () => {
+      const uninit = new LearningDatabase();
+      // getSnapshots uses requireDb() which throws \u2014 query methods are not guarded
+      expect(() => uninit.getWorkflowHistory()).toThrow('LearningDatabase not initialized');
     });
   });
 });

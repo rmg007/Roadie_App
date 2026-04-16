@@ -26,6 +26,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Audit dependencies
+        run: npm audit --audit-level=moderate
+
       - name: Verify tag matches package version
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
@@ -37,8 +40,8 @@ jobs:
             exit 1
           fi
 
-      - name: Run tests
-        run: npm test
+      - name: Run tests with coverage
+        run: npm run test:coverage
 
       - name: Lint
         run: npm run lint
@@ -51,6 +54,9 @@ jobs:
 
       - name: Package VSIX
         run: npx @vscode/vsce package --no-dependencies
+
+      - name: Dry-run publish
+        run: npx @vscode/vsce publish --no-dependencies --dry-run || true
 
       - name: Publish to Marketplace
         env:

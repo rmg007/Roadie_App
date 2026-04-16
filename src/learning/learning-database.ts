@@ -167,7 +167,8 @@ export class LearningDatabase {
   // ---- File Snapshots ----
 
   recordSnapshot(filePath: string, content: string, source: 'roadie' | 'human'): void {
-    const db = this.requireDb();
+    if (!this.db) return;
+    const db = this.db;
     const hash = sha256(content);
     db.prepare(
       'INSERT INTO file_snapshots (file_path, content, content_hash, source) VALUES (?, ?, ?, ?)',
@@ -198,7 +199,8 @@ export class LearningDatabase {
 
   recordWorkflowOutcome(entry: WorkflowOutcomeInput): void {
     if (!this.config.workflowHistory) return;
-    const db = this.requireDb();
+    if (!this.db) return;
+    const db = this.db;
     db.prepare(
       `INSERT INTO workflow_history (workflow_type, prompt, status, steps_completed, steps_total, duration_ms, model_tiers_used, error_summary)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -375,7 +377,8 @@ export class LearningDatabase {
    * Called by ProjectAnalyzer each time a pattern is detected.
    */
   recordPatternObservation(patternId: string): void {
-    const db = this.requireDb();
+    if (!this.db) return;
+    const db = this.db;
     db.prepare(
       'INSERT INTO pattern_observations (pattern_id) VALUES (?)',
     ).run(patternId);

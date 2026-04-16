@@ -1,4 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { RoadieDatabase } from './database';
 import type { TechStackEntry, DetectedPattern, ProjectCommand, DirectoryNode } from '../types';
 
@@ -92,5 +95,36 @@ describe('RoadieDatabase', () => {
     const loaded = db.loadCommands();
     expect(loaded).toHaveLength(2);
     expect(loaded[0].command).toBe('vitest run');
+  });
+
+  // ---- Error paths ----
+
+  it('recovers from a corrupted database file by recreating it', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'roadie-db-test-'));
+    const dbPath = path.join(dir, 'test.db');
+
+    // Write garbage bytes to simulate corruption
+    fs.writeFileSync(dbPath, Buffer.from('not a sqlite database -- corrupted!'));
+
+    // Should NOT throw — should delete and recreate
+    let recovered: RoadieDatabase | null = null;
+    expect(() => { recovered = new RoadieDatabase(dbPath); }).not.toThrow();
+
+    // Should be fully functional after recovery
+    recovered!.saveTechStack([{ category: 'language', name: 'TS', sourceFile: 'package.json' }]);
+    expect(recovered!.loadTechStack()).toHaveLength(1);
+    recovered!.close();
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('WAL checkpoint runs without error on close', () => {
+    // Verifies close() doesn't throw even with WAL checkpoint
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'roadie-db-close-'));
+    const dbPath = path.join(dir, 'test.db');
+    const fileDb = new RoadieDatabase(dbPath);
+    fileDb.saveTechStack([{ category: 'runtime', name: 'Node.js', sourceFile: 'package.json' }]);
+    expect(() => fileDb.close()).not.toThrow();
+    fs.rmSync(dir, { recursive: true, force: true });
   });
 });

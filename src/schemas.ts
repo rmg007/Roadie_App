@@ -722,7 +722,7 @@ export function parseOrNull<T>(schema: z.ZodType<T>, data: unknown, context: str
     const issues = result.error.issues
       .map((i) => `${i.path.join('.')}: ${i.message}`)
       .join('; ');
-    console.warn(`[${context}] Validation failed (using fallback): ${issues}`);
+    console.warn(`[${context}] Validation failed (using fallback): ${issues}`); // eslint-disable-line no-console
     return null;
   }
   return result.data;

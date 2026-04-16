@@ -10,7 +10,7 @@
  * @depended-on-by project-model.ts
  */
 
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, unlinkSync, existsSync } from 'node:fs';
 import * as path from 'node:path';
 import type { TechStackEntry, DirectoryNode, DetectedPattern, ProjectCommand } from '../types';
 
@@ -69,10 +69,57 @@ export class RoadieDatabase {
       mkdirSync(dir, { recursive: true });
     }
 
-    this.db = new DatabaseSync(dbPath);
-    this.db.exec('PRAGMA journal_mode = WAL');
-    this.db.exec('PRAGMA foreign_keys = ON');
+    this.db = this.openDb(dbPath);
     this.migrate();
+  }
+
+  private openDb(dbPath: string): SqliteDb {
+    let db: SqliteDb | undefined;
+    try {
+      db = new DatabaseSync(dbPath);
+      db.exec('PRAGMA journal_mode = WAL');
+      db.exec('PRAGMA foreign_keys = ON');
+    } catch {
+      // File is not a SQLite database (garbage bytes, wrong header, etc.) — delete and recreate.
+      try { db?.close(); } catch { /* ignore */ }
+      if (dbPath !== ':memory:') {
+        this.deleteDbFiles(dbPath);
+      }
+      db = new DatabaseSync(dbPath);
+      db.exec('PRAGMA journal_mode = WAL');
+      db.exec('PRAGMA foreign_keys = ON');
+    }
+
+    // Also verify integrity for files that open but are internally corrupt.
+    if (dbPath !== ':memory:') {
+      try {
+        const result = db.prepare('PRAGMA integrity_check').get() as { integrity_check: string } | undefined;
+        if (result?.integrity_check !== 'ok') {
+          db.close();
+          this.deleteDbFiles(dbPath);
+          db = new DatabaseSync(dbPath);
+          db.exec('PRAGMA journal_mode = WAL');
+          db.exec('PRAGMA foreign_keys = ON');
+        }
+      } catch {
+        // integrity_check itself failed — start fresh
+        try { db.close(); } catch { /* ignore */ }
+        this.deleteDbFiles(dbPath);
+        db = new DatabaseSync(dbPath);
+        db.exec('PRAGMA journal_mode = WAL');
+        db.exec('PRAGMA foreign_keys = ON');
+      }
+    }
+
+    return db as SqliteDb;
+  }
+
+  private deleteDbFiles(dbPath: string): void {
+    unlinkSync(dbPath);
+    const walPath = dbPath + '-wal';
+    const shmPath = dbPath + '-shm';
+    if (existsSync(walPath)) unlinkSync(walPath);
+    if (existsSync(shmPath)) unlinkSync(shmPath);
   }
 
   /** Run schema migrations. */
@@ -259,6 +306,11 @@ export class RoadieDatabase {
 
   /** Close the database connection. */
   close(): void {
+    try {
+      this.db.exec('PRAGMA wal_checkpoint(RESTART)');
+    } catch {
+      // Best-effort checkpoint; close regardless
+    }
     this.db.close();
   }
 }
