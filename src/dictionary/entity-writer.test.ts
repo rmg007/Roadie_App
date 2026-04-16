@@ -1,12 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import Database from 'better-sqlite3';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite');
 import { EntityWriterImpl } from './entity-writer';
 import type { RecordEntitiesParams } from '../types';
 
-function createTestDb(): Database.Database {
-  const db = new Database(':memory:');
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
+function createTestDb(): InstanceType<typeof DatabaseSync> {
+  const db = new DatabaseSync(':memory:');
+  db.exec('PRAGMA journal_mode = WAL');
+  db.exec('PRAGMA foreign_keys = ON');
   return db;
 }
 
@@ -22,7 +23,7 @@ function makeParams(overrides: Partial<RecordEntitiesParams> = {}): RecordEntiti
 }
 
 describe('EntityWriterImpl', () => {
-  let db: Database.Database;
+  let db: InstanceType<typeof DatabaseSync>;
   let writer: EntityWriterImpl;
 
   beforeEach(() => {

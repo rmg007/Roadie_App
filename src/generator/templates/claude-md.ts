@@ -1,13 +1,14 @@
 /**
  * @module claude-md
  * @description Template for CLAUDE.md at the workspace root.
- *   Consumed by Claude Code as its workspace-rules file.
- *   Output is capped at 120 lines to stay within Claude Code's auto-read budget.
+ *   Provides workspace context for manual reference by any Claude-based tool.
+ *   This file can be manually referenced or used by Claude Code through MCP.
+ *   Output is capped at 120 lines for readability.
  *
  *   Content contract:
- *   - workspace-rules: commands + high-confidence patterns (≤ 60 lines)
- *   - repo-map:        top-level directory tree with file counts
- *   - forbidden:       static stub the user can fill (preserved by merge markers)
+ *   - Global Rules: commands + high-confidence patterns (≤ 60 lines)
+ *   - repo-map:     top-level directory tree with file counts
+ *   - forbidden:    static stub the user can fill (preserved by merge markers)
  *
  * @inputs ProjectModel
  * @outputs GeneratedSection[] for CLAUDE.md

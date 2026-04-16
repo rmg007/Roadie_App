@@ -1,19 +1,23 @@
 /**
  * @module database
- * @description SQLite wrapper via better-sqlite3. Creates the database at
+ * @description SQLite wrapper via node:sqlite (built-in Node.js >= 22.5). Creates the database at
  *   .github/.roadie/project-model.db, handles schema migrations via
  *   schema_version table, provides CRUD for project model tables.
  *   PRAGMA integrity_check on open — if corrupt, delete and recreate.
  * @inputs Database path (or ':memory:' for tests)
  * @outputs CRUD methods for tech_stack, directories, patterns, commands
- * @depends-on better-sqlite3
+ * @depends-on node:sqlite (built-in)
  * @depended-on-by project-model.ts
  */
 
-import Database from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
 import * as path from 'node:path';
 import type { TechStackEntry, DirectoryNode, DetectedPattern, ProjectCommand } from '../types';
+
+// node:sqlite is a built-in Node.js 22.5+ module — no native binary required.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite');
+type SqliteDb = InstanceType<typeof DatabaseSync>;
 
 const CURRENT_SCHEMA_VERSION = 1;
 
@@ -56,7 +60,7 @@ const SCHEMA_V1 = `
 `;
 
 export class RoadieDatabase {
-  private db: Database.Database;
+  private db: SqliteDb;
 
   constructor(dbPath: string) {
     // Ensure directory exists for file-based databases
@@ -65,9 +69,9 @@ export class RoadieDatabase {
       mkdirSync(dir, { recursive: true });
     }
 
-    this.db = new Database(dbPath);
-    this.db.pragma('journal_mode = WAL');
-    this.db.pragma('foreign_keys = ON');
+    this.db = new DatabaseSync(dbPath);
+    this.db.exec('PRAGMA journal_mode = WAL');
+    this.db.exec('PRAGMA foreign_keys = ON');
     this.migrate();
   }
 
@@ -96,16 +100,20 @@ export class RoadieDatabase {
   // ---- Tech Stack CRUD ----
 
   saveTechStack(entries: TechStackEntry[]): void {
-    this.db.prepare('DELETE FROM tech_stack').run();
-    const insert = this.db.prepare(
-      'INSERT INTO tech_stack (category, name, version, source_file) VALUES (?, ?, ?, ?)',
-    );
-    const tx = this.db.transaction((items: TechStackEntry[]) => {
-      for (const e of items) {
+    this.db.exec('BEGIN');
+    try {
+      this.db.prepare('DELETE FROM tech_stack').run();
+      const insert = this.db.prepare(
+        'INSERT INTO tech_stack (category, name, version, source_file) VALUES (?, ?, ?, ?)',
+      );
+      for (const e of entries) {
         insert.run(e.category, e.name, e.version ?? null, e.sourceFile);
       }
-    });
-    tx(entries);
+      this.db.exec('COMMIT');
+    } catch (err) {
+      this.db.exec('ROLLBACK');
+      throw err;
+    }
   }
 
   loadTechStack(): TechStackEntry[] {
@@ -123,16 +131,20 @@ export class RoadieDatabase {
   // ---- Directories CRUD ----
 
   saveDirectories(root: DirectoryNode): void {
-    this.db.prepare('DELETE FROM directories').run();
-    const insert = this.db.prepare(
-      'INSERT OR REPLACE INTO directories (path, type, role, language) VALUES (?, ?, ?, ?)',
-    );
-    const tx = this.db.transaction((node: DirectoryNode) => {
-      this.flattenTree(node).forEach((n) => {
+    this.db.exec('BEGIN');
+    try {
+      this.db.prepare('DELETE FROM directories').run();
+      const insert = this.db.prepare(
+        'INSERT OR REPLACE INTO directories (path, type, role, language) VALUES (?, ?, ?, ?)',
+      );
+      this.flattenTree(root).forEach((n) => {
         insert.run(n.path, n.type, n.role ?? null, n.language ?? null);
       });
-    });
-    tx(root);
+      this.db.exec('COMMIT');
+    } catch (err) {
+      this.db.exec('ROLLBACK');
+      throw err;
+    }
   }
 
   loadDirectoryRoot(): DirectoryNode | null {
@@ -178,16 +190,20 @@ export class RoadieDatabase {
   // ---- Patterns CRUD ----
 
   savePatterns(patterns: DetectedPattern[]): void {
-    this.db.prepare('DELETE FROM detected_patterns').run();
-    const insert = this.db.prepare(
-      'INSERT INTO detected_patterns (category, description, evidence, confidence) VALUES (?, ?, ?, ?)',
-    );
-    const tx = this.db.transaction((items: DetectedPattern[]) => {
-      for (const p of items) {
+    this.db.exec('BEGIN');
+    try {
+      this.db.prepare('DELETE FROM detected_patterns').run();
+      const insert = this.db.prepare(
+        'INSERT INTO detected_patterns (category, description, evidence, confidence) VALUES (?, ?, ?, ?)',
+      );
+      for (const p of patterns) {
         insert.run(p.category, p.description, JSON.stringify(p.evidence), p.confidence);
       }
-    });
-    tx(patterns);
+      this.db.exec('COMMIT');
+    } catch (err) {
+      this.db.exec('ROLLBACK');
+      throw err;
+    }
   }
 
   loadPatterns(): DetectedPattern[] {
@@ -205,16 +221,20 @@ export class RoadieDatabase {
   // ---- Commands CRUD ----
 
   saveCommands(commands: ProjectCommand[]): void {
-    this.db.prepare('DELETE FROM project_commands').run();
-    const insert = this.db.prepare(
-      'INSERT INTO project_commands (name, command, source_file, type) VALUES (?, ?, ?, ?)',
-    );
-    const tx = this.db.transaction((items: ProjectCommand[]) => {
-      for (const c of items) {
+    this.db.exec('BEGIN');
+    try {
+      this.db.prepare('DELETE FROM project_commands').run();
+      const insert = this.db.prepare(
+        'INSERT INTO project_commands (name, command, source_file, type) VALUES (?, ?, ?, ?)',
+      );
+      for (const c of commands) {
         insert.run(c.name, c.command, c.sourceFile, c.type);
       }
-    });
-    tx(commands);
+      this.db.exec('COMMIT');
+    } catch (err) {
+      this.db.exec('ROLLBACK');
+      throw err;
+    }
   }
 
   loadCommands(): ProjectCommand[] {
@@ -230,10 +250,10 @@ export class RoadieDatabase {
   }
 
   /**
-   * Expose the raw better-sqlite3 Database instance so other services
+   * Expose the raw node:sqlite Database instance so other services
    * (e.g. LearningDatabase) can share the same connection and WAL journal.
    */
-  getRawDb(): Database.Database {
+  getRawDb(): SqliteDb {
     return this.db;
   }
 
@@ -242,3 +262,4 @@ export class RoadieDatabase {
     this.db.close();
   }
 }
+

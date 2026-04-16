@@ -285,4 +285,4 @@ npm run format
 - `#roadie` chat variable for full context injection into any participant
 - Code Action Provider integration for symbol-scoped document/review/fix prompts
 
-**Phase 2 — MCP Server** — specified, not yet built. Deferred until testing of Phase 1/1.5 is complete.
+**Claude Code Integration** — via separate `roadie-claude-connector` MCP package. Roadie generates data files (.roadie/last-scan.json, .roadie/*.db); external MCP queries them. See [TOOL_INTEGRATION_STATUS.md](../roadie_docs/TOOL_INTEGRATION_STATUS.md) for details.

@@ -8,7 +8,9 @@
  * @depended-on-by workflow steps, context injection
  */
 
-import type Database from 'better-sqlite3';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite');
+type SqliteDb = InstanceType<typeof DatabaseSync>;
 import type {
   CodeEntity,
   DictionaryContext,
@@ -70,9 +72,9 @@ function rowToEntity(row: EntityRow): CodeEntity {
 }
 
 export class DictionaryQueryImpl implements DictionaryQuery {
-  private db: Database.Database;
+  private db: SqliteDb;
 
-  constructor(db: Database.Database) {
+  constructor(db: SqliteDb) {
     this.db = db;
     this.ensureSchema();
   }
@@ -221,3 +223,4 @@ export class DictionaryQueryImpl implements DictionaryQuery {
     return row.count;
   }
 }
+

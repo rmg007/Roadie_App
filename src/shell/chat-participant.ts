@@ -27,7 +27,7 @@ import { ONBOARD_WORKFLOW } from '../engine/definitions/onboard';
 import type { LearningDatabase } from '../learning/learning-database';
 import { getLogger } from './logger';
 
-const PARTICIPANT_ID = 'roadie';
+const PARTICIPANT_ID = 'roadie.roadie';
 
 /** Stores the most recent serialized context snapshot for `Roadie: Show Last Context`. */
 let _lastContextSnapshot = '';

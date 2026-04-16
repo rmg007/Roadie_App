@@ -8,7 +8,9 @@
  * @depended-on-by dictionary-query.ts, file-watcher-manager.ts
  */
 
-import type Database from 'better-sqlite3';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite');
+type SqliteDb = InstanceType<typeof DatabaseSync>;
 import type {
   CodeEntity,
   EntityWriter,
@@ -182,9 +184,9 @@ function extractEntities(content: string): ExtractedEntity[] {
 }
 
 export class EntityWriterImpl implements EntityWriter {
-  private db: Database.Database;
+  private db: SqliteDb;
 
-  constructor(db: Database.Database) {
+  constructor(db: SqliteDb) {
     this.db = db;
     this.ensureSchema();
   }
@@ -216,13 +218,16 @@ export class EntityWriterImpl implements EntityWriter {
           updated_at = datetime('now')
       `);
 
-      const tx = this.db.transaction((items: ExtractedEntity[]) => {
-        for (const e of items) {
+      this.db.exec('BEGIN');
+      try {
+        for (const e of entities) {
           upsert.run(e.name, e.kind, filePath, e.lineNumber, e.signature, e.purpose, workflowType);
         }
-      });
-
-      tx(entities);
+        this.db.exec('COMMIT');
+      } catch (txErr) {
+        this.db.exec('ROLLBACK');
+        throw txErr;
+      }
     } catch (err) {
       // Log but don't throw - never crash a workflow
       console.error(`[EntityWriter] Error recording entities for ${filePath}:`, err);
@@ -240,3 +245,4 @@ export class EntityWriterImpl implements EntityWriter {
 
 // Exported for testing
 export { extractEntities, getLineNumber, getSignature, getJsDocPurpose };
+

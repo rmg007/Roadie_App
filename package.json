@@ -21,14 +21,15 @@
     "code review"
   ],
   "activationEvents": [
-    "onChat:roadie",
+    "onChat:roadie.roadie",
+    "onCommand:roadie.init",
     "workspaceContains:.github/.roadie/project-model.db"
   ],
   "main": "./out/extension.js",
   "contributes": {
     "chatParticipants": [
       {
-        "id": "roadie",
+        "id": "roadie.roadie",
         "name": "Roadie",
         "description": "The invisible AI workflow engine. Chat naturally—Roadie handles the rest.",
         "isSticky": true,
@@ -202,17 +203,11 @@
     "test:watch": "vitest watch",
     "test:coverage": "vitest run --coverage",
     "test:scenarios": "vitest run test/harness/scenario.test.ts",
-    "package": "vsce package --no-dependencies",
-    "publish": "vsce publish --no-dependencies",
+    "package": "vsce package",
+    "publish": "vsce publish",
     "prepublish:test": "npm run test && npm run lint && npm run build"
   },
-  "dependencies": {
-    "better-sqlite3": "^9.4.3",
-    "fast-glob": "^3.3.0",
-    "zod": "^3.22.4"
-  },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.0",
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.84.0",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
@@ -223,14 +218,13 @@
     "ajv": "^8.18.0",
     "ajv-formats": "^3.0.1",
     "eslint": "^8.50.0",
+    "fast-glob": "^3.3.0",
     "prettier": "^3.0.0",
     "tsup": "^8.0.0",
     "typescript": "^5.2.0",
-    "vitest": "^0.34.0"
+    "vitest": "^0.34.0",
+    "zod": "^3.22.4"
   },
-  "bundleDependencies": [
-    "better-sqlite3"
-  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/rmg007/Roadie_App.git"

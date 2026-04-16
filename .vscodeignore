@@ -26,24 +26,4 @@ AGENTS.md
 # ── Generated .github/ files (not needed in the extension package) ────────────
 .github/
 
-# ── All node_modules excluded by default ─────────────────────────────────────
 node_modules/**
-
-# ── Re-include ONLY the essential better-sqlite3 runtime files ───────────────
-# (src/, deps/, binding.gyp stay excluded — we only need the JS wrapper + binary)
-!node_modules/better-sqlite3/package.json
-!node_modules/better-sqlite3/lib/
-!node_modules/better-sqlite3/lib/**
-!node_modules/better-sqlite3/build/
-!node_modules/better-sqlite3/build/Release/
-!node_modules/better-sqlite3/build/Release/better_sqlite3.node
-
-# ── bindings: runtime dependency of better-sqlite3 (locates the .node binary) ─
-!node_modules/bindings/
-!node_modules/bindings/package.json
-!node_modules/bindings/bindings.js
-
-# ── file-uri-to-path: runtime dependency of bindings ─────────────────────────
-!node_modules/file-uri-to-path/
-!node_modules/file-uri-to-path/package.json
-!node_modules/file-uri-to-path/index.js

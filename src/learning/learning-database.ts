@@ -3,13 +3,15 @@
  * @description Adds learning tables (file_snapshots, workflow_history,
  *   section_hashes) to the shared SQLite database. Provides CRUD and
  *   pruning for Phase 1.5 edit tracking and workflow analytics.
- * @inputs better-sqlite3 Database instance (shared with RoadieDatabase)
+ * @inputs node:sqlite DatabaseSync instance (shared with RoadieDatabase)
  * @outputs CRUD methods for snapshots, workflow history, section hashes
- * @depends-on better-sqlite3, node:crypto
+ * @depends-on node:sqlite (built-in), node:crypto
  * @depended-on-by edit-tracker, section-manager, file-watcher-manager
  */
 
-import type Database from 'better-sqlite3';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite');
+type SqliteDb = InstanceType<typeof DatabaseSync>;
 import { createHash } from 'node:crypto';
 
 // ---- Public types ----
@@ -124,11 +126,11 @@ function sha256(content: string): string {
 // ---- Class ----
 
 export class LearningDatabase {
-  private db: Database.Database | null = null;
+  private db: SqliteDb | null = null;
   private config: LearningDatabaseConfig = {};
 
-  /** Attach to an existing better-sqlite3 Database and create tables. */
-  initialize(db: Database.Database, config?: LearningDatabaseConfig): void {
+  /** Attach to an existing node:sqlite DatabaseSync and create tables. */
+  initialize(db: SqliteDb, config?: LearningDatabaseConfig): void {
     if (this.db) {
       this.close();
     }
@@ -145,13 +147,7 @@ export class LearningDatabase {
   }
 
   close(): void {
-    if (this.db) {
-      try {
-        this.db.close();
-      } catch {
-        // Ignore close failures; releasing the reference is still safe.
-      }
-    }
+    // node:sqlite DatabaseSync is closed automatically; just release the reference.
     this.db = null;
   }
 
@@ -431,7 +427,7 @@ export class LearningDatabase {
 
   // ---- Private ----
 
-  private requireDb(): Database.Database {
+  private requireDb(): SqliteDb {
     if (!this.db) throw new Error('LearningDatabase not initialized. Call initialize() first.');
     return this.db;
   }
@@ -470,3 +466,4 @@ function toWorkflowEntry(row: {
     createdAt: row.created_at,
   };
 }
+

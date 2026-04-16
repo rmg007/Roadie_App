@@ -24,12 +24,11 @@ import {
 import { generateAgentDefinitions, AGENTS_MD_PATH } from './templates/agent-definitions';
 import { generateClaudeMd, CLAUDE_MD_PATH } from './templates/claude-md';
 import { generateCursorRules, buildCursorRulesPreamble, CURSOR_RULES_PATH } from './templates/cursor-rules';
-import { generatePathInstructions, PATH_INSTRUCTIONS_DIR } from './templates/path-instructions';
-import { generateCursorRulesDir, CURSOR_RULES_DIR } from './templates/cursor-rules-dir';
+import { generatePathInstructions } from './templates/path-instructions';
+import { generateCursorRulesDir } from './templates/cursor-rules-dir';
 import type { LearningDatabase } from '../learning/learning-database';
 import type { FileSystemProvider } from '../providers';
 import { getLogger } from '../shell/logger';
-import { detectIDEs, type DetectionResult } from '../detector/ide-detector';
 
 interface FileSpec {
   type: GeneratedFileType;
@@ -39,7 +38,7 @@ interface FileSpec {
   preamble?: () => string;
 }
 
-function buildFileSpecs(learningDb?: LearningDatabase, detection?: DetectionResult): FileSpec[] {
+function buildFileSpecs(learningDb?: LearningDatabase): FileSpec[] {
   const specs: FileSpec[] = [
     {
       type:     'copilot_instructions',
@@ -64,22 +63,11 @@ function buildFileSpecs(learningDb?: LearningDatabase, detection?: DetectionResu
     },
   ];
 
-  // Phase 2: Conditionally add tool-specific files based on IDE detection
-  // (placeholder for future .mcp.json, claude-hooks generation)
-  if (detection?.isClaudeCode) {
-    // Future: add mcp-config and claude-hooks specs here
-    // specs.push({ type: 'mcp_config', ... });
-  }
-  if (detection?.isWindsurf) {
-    // Future: add windsurf-rules spec here
-  }
-
   return specs;
 }
 
 export class FileGenerator {
   private fileSystem: FileSystemProvider | null;
-  private cachedDetection: DetectionResult | null = null;
 
   constructor(
     private workspaceRoot: string,
@@ -87,20 +75,6 @@ export class FileGenerator {
     fileSystem?: FileSystemProvider,
   ) {
     this.fileSystem = fileSystem ?? null;
-  }
-
-  /**
-   * Detect IDEs once per session (cached).
-   */
-  private async getDetection(): Promise<DetectionResult> {
-    if (!this.cachedDetection) {
-      this.cachedDetection = await detectIDEs(this.workspaceRoot);
-      const log = getLogger();
-      if (this.cachedDetection.detectedIDEs.length > 0) {
-        log.debug(`IDE detection: ${this.cachedDetection.detectedIDEs.join(', ')}`);
-      }
-    }
-    return this.cachedDetection;
   }
 
   /**
@@ -118,8 +92,7 @@ export class FileGenerator {
   async generateAll(model: ProjectModel): Promise<GeneratedFile[]> {
     await this.ensureGitignore();
 
-    const detection = await this.getDetection();
-    const fileSpecs = buildFileSpecs(this.learningDb, detection);
+    const fileSpecs = buildFileSpecs(this.learningDb);
 
     const results: GeneratedFile[] = [];
     for (const spec of fileSpecs) {

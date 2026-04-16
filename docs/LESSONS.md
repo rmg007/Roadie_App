@@ -13,3 +13,4 @@ Format: `YYYY-MM-DD — <mistake> → <correction>`
 - 2026-04-14 — Bumped to `0.5.1` when CHANGELOG already described `0.5.2` work in source → read CHANGELOG before choosing a version number.
 - 2026-04-14 — Used `node.name` on `DirectoryNode` which only has `path` → always check the type definition before dereferencing a field; `path.basename(node.path)` is the correct idiom.
 - 2026-04-14 — Package script used bare `vsce` which is not on PATH → use `npx @vscode/vsce package --allow-missing-repository` in the script.
+2026-04-16: database.ts static import of better-sqlite3 crashed extension before extension.ts try/catch could run. Fix: change to import type + lazy require() in constructor.
