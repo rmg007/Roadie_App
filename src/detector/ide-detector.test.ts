@@ -24,10 +24,16 @@ describe('IDE Detector', () => {
 
     it('returns empty when no IDEs detected', async () => {
       delete process.env.VSCODE_PID;
-      // Assume current dir doesn't have .cursor, .mcp.json, etc.
-      const result = await detectIDEs('.');
-      expect(result.detectedIDEs.length).toBe(0);
-      expect(result.primaryIDE).toBeNull();
+      // Use an empty temp dir so no IDE marker files exist
+      const tmpDir = path.join(process.cwd(), '.test-tmp-empty-ide');
+      await fs.mkdir(tmpDir, { recursive: true });
+      try {
+        const result = await detectIDEs(tmpDir);
+        expect(result.detectedIDEs.length).toBe(0);
+        expect(result.primaryIDE).toBeNull();
+      } finally {
+        await fs.rm(tmpDir, { recursive: true, force: true });
+      }
     });
 
     it('detects Claude Code when .mcp.json exists', async () => {
