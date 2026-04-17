@@ -210,7 +210,7 @@
   "dependencies": {
     "better-sqlite3": "^9.4.3",
     "fast-glob": "^3.3.0",
-    "zod": "^3.22.4"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.0",
