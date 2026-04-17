@@ -125,12 +125,15 @@ function enforceBudget(sections: GeneratedSection[], maxLines: number): Generate
     .slice(1)
     .reduce((acc, s) => acc + s.content.split('\n').length, 0);
   const allowedForFirst = Math.max(10, maxLines - overhead);
-  const firstLines = sections[0].content.split('\n');
-  if (firstLines.length > allowedForFirst) {
-    sections[0] = {
-      ...sections[0],
-      content: firstLines.slice(0, allowedForFirst).join('\n') + '\n[truncated]',
-    };
+  const firstSection = sections[0];
+  if (firstSection !== undefined) {
+    const firstLines = firstSection.content.split('\n');
+    if (firstLines.length > allowedForFirst) {
+      sections[0] = {
+        ...firstSection,
+        content: firstLines.slice(0, allowedForFirst).join('\n') + '\n[truncated]',
+      };
+    }
   }
   return sections;
 }

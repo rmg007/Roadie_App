@@ -58,7 +58,7 @@ describe('edge cases', () => {
     const r = classifier.classify("Don't fix it, just tell me what's wrong");
     expect(r.intent).toBe('general_chat');
     expect(r.confidence).toBe(CONFIDENCE_THRESHOLDS.negativeOverride);
-    expect(r.requiresLLM).toBe(false);
+    expect(r.requiresLLM).toBe(true);
   });
 
   it('handles negative signal "not a bug"', () => {

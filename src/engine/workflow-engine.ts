@@ -62,6 +62,7 @@ export class WorkflowEngine {
 
     for (let i = 0; i < definition.steps.length; i++) {
       const step = definition.steps[i];
+      if (step === undefined) continue;
 
       // Check cancellation at step boundary
       if (context.cancellation.isCancelled) {
@@ -166,12 +167,15 @@ export class WorkflowEngine {
     log.debug(`[parallel] Spawning ${branches.length} branches: [${branches.map((b) => b.id).join(', ')}]`);
 
     const results = await Promise.allSettled(
-      branches.map((branch) => this.stepExecutor.executeStep(branch, {
-        ...context,
-        previousStepResults: context.previousStepResults
-          ? [...context.previousStepResults]
-          : undefined,
-      })),
+      branches.map((branch) => {
+        const branchContext = { ...context };
+        if (context.previousStepResults) {
+          branchContext.previousStepResults = [...context.previousStepResults];
+        } else {
+          delete branchContext.previousStepResults;
+        }
+        return this.stepExecutor.executeStep(branch, branchContext);
+      }),
     );
 
     const branchResults: StepResult[] = [];
@@ -179,21 +183,24 @@ export class WorkflowEngine {
 
     for (let i = 0; i < results.length; i++) {
       const r = results[i];
+      if (r === undefined) continue;
+      const branch = branches[i];
+      if (branch === undefined) continue;
       if (r.status === 'fulfilled') {
         branchResults.push(r.value);
-        if (r.value.modelUsed) tiersUsed.add(branches[i].modelTier);
+        if (r.value.modelUsed) tiersUsed.add(branch.modelTier);
         if (r.value.status === 'failed') {
           anyFailed = true;
-          log.warn(`[parallel] Branch "${branches[i].id}" failed: ${r.value.error ?? '(no detail)'}`);
+          log.warn(`[parallel] Branch "${branch.id}" failed: ${r.value.error ?? '(no detail)'}`);
         } else {
-          log.debug(`[parallel] Branch "${branches[i].id}" succeeded`);
+          log.debug(`[parallel] Branch "${branch.id}" succeeded`);
         }
       } else {
         anyFailed = true;
         const errMsg = r.reason instanceof Error ? r.reason.message : String(r.reason);
-        log.warn(`[parallel] Branch "${branches[i].id}" rejected: ${errMsg}`);
+        log.warn(`[parallel] Branch "${branch.id}" rejected: ${errMsg}`);
         branchResults.push({
-          stepId:     branches[i].id,
+          stepId:     branch.id,
           status:     'failed',
           output:     '',
           tokenUsage: { input: 0, output: 0 },

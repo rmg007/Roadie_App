@@ -2,14 +2,18 @@ import { describe, it, expect, vi } from 'vitest';
 
 // Mock vscode so the module can be imported in test environments
 vi.mock('vscode', () => ({
-  chat: { 
-    createChatParticipant: vi.fn((id, handler) => ({ 
-      iconPath: undefined, 
+  chat: {
+    createChatParticipant: vi.fn((id, handler) => ({
+      iconPath: undefined,
       dispose: vi.fn(),
       handler // Store the handler for testing
-    })) 
+    }))
   },
   ThemeIcon: vi.fn(),
+  LanguageModelChatMessage: {
+    User: vi.fn((text: string) => ({ role: 'user', content: text })),
+    Assistant: vi.fn((text: string) => ({ role: 'assistant', content: text })),
+  },
 }));
 
 import { buildContextWithHotFiles, getChatLastContext } from './chat-participant';
@@ -226,6 +230,98 @@ describe('slash command routing', () => {
     await handler(request, {}, mockResponse, mockToken);
 
     expect(mockClassifier.classify).toHaveBeenCalledWith('hello');
+  });
+});
+
+describe('general_chat LLM fallback', () => {
+  it('calls request.model.sendRequest instead of echoing for general_chat', async () => {
+    const mockClassifier = {
+      classify: vi.fn().mockReturnValue({
+        intent: 'general_chat',
+        confidence: 0.1,
+        signals: [],
+        requiresLLM: true,
+      }),
+    };
+    const mockStepHandler = vi.fn();
+    const mockResponse = { markdown: vi.fn(), progress: vi.fn() };
+    const mockToken = {
+      isCancellationRequested: false,
+      onCancellationRequested: vi.fn(),
+    };
+    const fakeChunks = ['Hello', ' from', ' LLM'];
+    const mockModel = {
+      sendRequest: vi.fn().mockResolvedValue({
+        text: (async function* () { for (const c of fakeChunks) yield c; })(),
+      }),
+    };
+
+    const { registerChatParticipant } = await import('./chat-participant');
+    registerChatParticipant({
+      classifier: mockClassifier as any,
+      stepHandler: mockStepHandler,
+      projectModel: {} as any,
+    });
+
+    const vscode = await import('vscode');
+    const mockCreateChatParticipant = vscode.chat.createChatParticipant as any;
+    const mockParticipant = mockCreateChatParticipant.mock.results[
+      mockCreateChatParticipant.mock.results.length - 1
+    ].value;
+    const handler = mockParticipant.handler;
+
+    const request = { command: undefined, prompt: 'what does this project do?', model: mockModel };
+    await handler(request, {}, mockResponse, mockToken);
+
+    expect(mockModel.sendRequest).toHaveBeenCalledOnce();
+    // Should NOT contain the old echo pattern
+    const calls: string[] = mockResponse.markdown.mock.calls.map((c: unknown[]) => String(c[0]));
+    expect(calls.some((c) => c.includes('**Echo:**'))).toBe(false);
+    // Should stream LLM chunks
+    expect(calls).toContain('Hello');
+    expect(calls).toContain(' from');
+    expect(calls).toContain(' LLM');
+  });
+
+  it('renders a canned error message when LLM call fails', async () => {
+    const mockClassifier = {
+      classify: vi.fn().mockReturnValue({
+        intent: 'general_chat',
+        confidence: 0.1,
+        signals: [],
+        requiresLLM: true,
+      }),
+    };
+    const mockStepHandler = vi.fn();
+    const mockResponse = { markdown: vi.fn(), progress: vi.fn() };
+    const mockToken = {
+      isCancellationRequested: false,
+      onCancellationRequested: vi.fn(),
+    };
+    const mockModel = {
+      sendRequest: vi.fn().mockRejectedValue(new Error('network error')),
+    };
+
+    const { registerChatParticipant } = await import('./chat-participant');
+    registerChatParticipant({
+      classifier: mockClassifier as any,
+      stepHandler: mockStepHandler,
+      projectModel: {} as any,
+    });
+
+    const vscode = await import('vscode');
+    const mockCreateChatParticipant = vscode.chat.createChatParticipant as any;
+    const mockParticipant = mockCreateChatParticipant.mock.results[
+      mockCreateChatParticipant.mock.results.length - 1
+    ].value;
+    const handler = mockParticipant.handler;
+
+    const request = { command: undefined, prompt: 'hello', model: mockModel };
+    await handler(request, {}, mockResponse, mockToken);
+
+    const calls: string[] = mockResponse.markdown.mock.calls.map((c: unknown[]) => String(c[0]));
+    expect(calls.some((c) => c.includes("couldn't reach the model"))).toBe(true);
+    expect(calls.some((c) => c.includes('**Echo:**'))).toBe(false);
   });
 });
 

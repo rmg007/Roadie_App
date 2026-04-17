@@ -18,6 +18,17 @@ import * as path from 'node:path';
 import type { ProjectModel, DirectoryNode } from '../../types';
 import type { GeneratedSection } from '../section-manager';
 
+/** Allows tests to override the timestamp generation. */
+let getTimestampFn = () => new Date().toISOString();
+
+export function setTimestampForTesting(fn: () => string): void {
+  getTimestampFn = fn;
+}
+
+export function resetTimestamp(): void {
+  getTimestampFn = () => new Date().toISOString();
+}
+
 export const CURSOR_RULES_DIR = '.cursor/rules';
 
 /** Minimum source-file count for a directory to qualify. */
@@ -59,7 +70,16 @@ function collectQualifyingDirs(root: DirectoryNode): DirectoryNode[] {
  * Build the MDC frontmatter preamble for a given directory name.
  */
 export function buildCursorRulesDirPreamble(dirName: string): string {
-  return `---\nalwaysApply: false\nglobs: "${dirName}/**"\n---\n`;
+  const generatedAt = getTimestampFn();
+  return (
+    `---\n` +
+    `name: "rules: ${dirName}"\n` +
+    `alwaysApply: false\n` +
+    `globs: "${dirName}/**"\n` +
+    `generated-by: roadie\n` +
+    `generated-at: ${generatedAt}\n` +
+    `---\n`
+  );
 }
 
 /**

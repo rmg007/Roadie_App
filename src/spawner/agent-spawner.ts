@@ -67,7 +67,7 @@ export class AgentSpawner {
             description: name,
             inputSchema: {},
           })),
-          cancellation: config.cancellation,
+          ...(config.cancellation !== undefined ? { cancellation: config.cancellation } : {}),
         },
       );
 
@@ -110,7 +110,7 @@ export class AgentSpawner {
     const mapped = results.map((r, i) => {
       if (r.status === 'fulfilled') return r.value;
       const errMsg = r.reason instanceof Error ? r.reason.message : String(r.reason);
-      log.warn(`Parallel spawn [${configs[i].role}] rejected: ${errMsg}`);
+      log.warn(`Parallel spawn [${configs[i]?.role ?? i}] rejected: ${errMsg}`);
       return {
         output:      '',
         toolResults: [],

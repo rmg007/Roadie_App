@@ -247,7 +247,7 @@ export class FileWatcherManager {
 
     // Sort by priority: HIGH first, then MEDIUM, then LOW.
     const priorityOrder: Record<string, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 };
-    events.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
+    events.sort((a, b) => (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2));
 
     for (const handler of this.handlers) {
       handler(events);

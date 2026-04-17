@@ -2,15 +2,16 @@
  * @module entity-writer
  * @description Extracts code entities from file content using regex patterns
  *   and persists them to SQLite. Part of the Codebase Dictionary (M24).
- * @inputs File content (string), better-sqlite3 Database instance
+ * @inputs File content (string), node:sqlite Database instance
  * @outputs Persisted CodeEntity rows in codebase_entities table
- * @depends-on better-sqlite3, types.ts
+ * @depends-on node:sqlite, types.ts
  * @depended-on-by dictionary-query.ts, file-watcher-manager.ts
  */
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite');
 type SqliteDb = InstanceType<typeof DatabaseSync>;
+import { getLogger } from '../shell/logger';
 import type {
   CodeEntity,
   EntityWriter,
@@ -111,7 +112,7 @@ function getJsDocPurpose(content: string, matchIndex: number): string {
   if (!jsdocMatch) return '';
 
   // Extract the description (first line of JSDoc, stripped of * prefix)
-  const raw = jsdocMatch[1];
+  const raw = jsdocMatch[1] ?? '';
   const descLines = raw
     .split('\n')
     .map((l) => l.replace(/^\s*\*\s?/, '').trim())
@@ -139,8 +140,8 @@ function extractEntities(content: string): ExtractedEntity[] {
     while ((match = regex.exec(content)) !== null) {
       // Route patterns have a different capture group layout
       if (pattern.kind === 'route') {
-        const method = match[1];
-        const routePath = match[2];
+        const method = match[1] ?? '';
+        const routePath = match[2] ?? '';
         const name = `${method.toUpperCase()} ${routePath}`;
         const key = `${name}::route`;
         if (seen.has(key)) continue;
@@ -155,7 +156,7 @@ function extractEntities(content: string): ExtractedEntity[] {
         continue;
       }
 
-      const name = match[1];
+      const name = match[1] ?? '';
       const kind = pattern.kind;
 
       // For constant pattern, skip if already captured as arrow function
@@ -230,7 +231,7 @@ export class EntityWriterImpl implements EntityWriter {
       }
     } catch (err) {
       // Log but don't throw - never crash a workflow
-      console.error(`[EntityWriter] Error recording entities for ${filePath}:`, err); // eslint-disable-line no-console
+      getLogger().error(`[EntityWriter] Error recording entities for ${filePath}:`, err);
     }
   }
 
@@ -238,7 +239,7 @@ export class EntityWriterImpl implements EntityWriter {
     try {
       this.db.prepare('DELETE FROM codebase_entities WHERE file_path = ?').run(filePath);
     } catch (err) {
-      console.error(`[EntityWriter] Error invalidating file ${filePath}:`, err); // eslint-disable-line no-console
+      getLogger().error(`[EntityWriter] Error invalidating file ${filePath}:`, err);
     }
   }
 }

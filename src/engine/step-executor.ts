@@ -101,7 +101,11 @@ export class StepExecutor {
 
       try {
         const result = await withTimeout(
-          this.handler(step, context, { attempt, tier: currentTier, previousError }),
+          this.handler(step, context, {
+            attempt,
+            tier: currentTier,
+            ...(previousError !== undefined ? { previousError } : {}),
+          }),
           timeoutMs,
           step.id,
         );

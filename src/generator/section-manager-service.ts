@@ -117,23 +117,27 @@ export class SectionManagerService {
 
     let i = 0;
     while (i < lines.length) {
-      const startMatch = lines[i].trim().match(markers.start);
+      const lineI = lines[i];
+      if (lineI === undefined) { i++; continue; }
+      const startMatch = lineI.trim().match(markers.start);
       if (!startMatch) { i++; continue; }
 
-      const id = startMatch[1];
+      const id = startMatch[1] ?? '';
       const startLine = i;
       let hash: string | null = null;
       let endLine = -1;
 
       // Look for optional hash line right after start marker
       if (i + 1 < lines.length) {
-        const hm = lines[i + 1].trim().match(markers.hashLine);
-        if (hm) { hash = hm[1]; }
+        const lineNext = lines[i + 1];
+        const hm = lineNext !== undefined ? lineNext.trim().match(markers.hashLine) : null;
+        if (hm) { hash = hm[1] ?? null; }
       }
 
       // Find matching end marker
       for (let j = i + 1; j < lines.length; j++) {
-        const endMatch = lines[j].trim().match(markers.end);
+        const lineJ = lines[j];
+        const endMatch = lineJ !== undefined ? lineJ.trim().match(markers.end) : null;
         if (endMatch && endMatch[1] === id) {
           endLine = j;
           break;

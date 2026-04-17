@@ -1,0 +1,61 @@
+name: Classifier eval (weekly)
+
+# Phase 5 of docs/e2e-extension-tester-plan.md.
+# Runs the labelled-dataset evaluation and appends one row to evals/trend.tsv.
+# Currently advisory (--no-gate) while the dataset stabilises; promote by
+# removing --no-gate once macro-accuracy crosses 80% with no intent below 60%.
+
+on:
+  schedule:
+    # Sunday 03:00 UTC
+    - cron: '0 3 * * 0'
+  workflow_dispatch:
+    inputs:
+      gate:
+        description: 'Set to "true" to enforce thresholds (fail on regression).'
+        required: false
+        default: 'false'
+
+jobs:
+  eval:
+    name: Run classifier eval
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run evaluation
+        run: |
+          if [ "${{ github.event.inputs.gate }}" = "true" ]; then
+            npx tsx evals/classifier/run.ts
+          else
+            npx tsx evals/classifier/run.ts --no-gate
+          fi
+
+      - name: Upload trend snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: classifier-trend
+          path: evals/trend.tsv
+          retention-days: 90
+
+      - name: Commit trend update
+        if: github.event_name == 'schedule'
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          if ! git diff --quiet evals/trend.tsv; then
+            git add evals/trend.tsv
+            git commit -m "chore(evals): weekly classifier trend update [skip ci]"
+            git push
+          fi

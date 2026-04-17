@@ -139,18 +139,30 @@ export function registerChatParticipant(deps?: {
 
     if (!workflow) {
       // No workflow — enriched passthrough (general_chat or unimplemented intent)
-      if (classification.requiresLLM) {
+      if (classification.requiresLLM && request.model?.sendRequest) {
         log.warn(
           `Intent unclear (confidence: ${classification.confidence.toFixed(2)}) — ` +
-          'treating as general_chat',
+          'treating as general_chat, delegating to LLM',
         );
         response.markdown(
-          `*Intent unclear (confidence: ${classification.confidence.toFixed(2)}). Treating as general chat.*\n\n`,
+          `*Intent unclear (confidence: ${classification.confidence.toFixed(2)}). Asking the LLM...*\n\n`,
         );
+
+        try {
+          const result = await request.model.sendRequest(request, [], token);
+          for await (const chunk of result.text) {
+            response.markdown(chunk);
+          }
+          return { metadata: { command: 'general_chat' } };
+        } catch (err) {
+          log.error(`LLM request failed: ${err instanceof Error ? err.message : String(err)}`);
+          response.markdown(`**Error:** I couldn't reach the model to answer this question. Please try again.`);
+          return { metadata: { command: 'general_chat' } };
+        }
       } else {
         log.info('No workflow for intent: general_chat — passthrough');
+        response.markdown(`**Echo:** ${request.prompt}`);
       }
-      response.markdown(`**Echo:** ${request.prompt}`);
       return {};
     }
 

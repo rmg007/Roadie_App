@@ -170,7 +170,7 @@ export class RoadieDatabase {
     return rows.map((r) => ({
       category: r.category,
       name: r.name,
-      version: r.version ?? undefined,
+      ...(r.version != null ? { version: r.version } : {}),
       sourceFile: r.source_file,
     }));
   }
@@ -214,21 +214,22 @@ export class RoadieDatabase {
 
   private buildTree(rows: Array<{ path: string; type: 'directory' | 'file'; role: string | null; language: string | null }>): DirectoryNode {
     if (rows.length === 0) return { path: '', type: 'directory', children: [] };
+    const firstRow = rows[0]!;
     const root: DirectoryNode = {
-      path: rows[0].path,
-      type: rows[0].type,
-      role: rows[0].role ?? undefined,
-      language: rows[0].language ?? undefined,
+      path: firstRow.path,
+      type: firstRow.type,
+      ...(firstRow.role != null ? { role: firstRow.role } : {}),
+      ...(firstRow.language != null ? { language: firstRow.language } : {}),
       children: [],
     };
     // Simplified tree-build: flat list of nodes (full tree reconstruction deferred)
     for (let i = 1; i < rows.length; i++) {
-      const r = rows[i];
+      const r = rows[i]!;
       root.children!.push({
         path: r.path,
         type: r.type,
-        role: r.role ?? undefined,
-        language: r.language ?? undefined,
+        ...(r.role != null ? { role: r.role } : {}),
+        ...(r.language != null ? { language: r.language } : {}),
       });
     }
     return root;

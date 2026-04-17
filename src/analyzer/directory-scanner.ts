@@ -60,10 +60,11 @@ export async function scanDirectories(workspaceRoot: string): Promise<DirectoryN
   for (const entry of entries) {
     const dirName = path.basename(entry);
     const fullPath = normalizeDirPath(path.join(workspaceRoot, entry));
+    const assignedRole = assignRole(dirName);
     root.children!.push({
       path: fullPath,
       type: 'directory',
-      role: assignRole(dirName),
+      ...(assignedRole !== undefined ? { role: assignedRole } : {}),
     });
   }
 

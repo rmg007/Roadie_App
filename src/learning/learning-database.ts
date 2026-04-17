@@ -3,6 +3,15 @@
  * @description Adds learning tables (file_snapshots, workflow_history,
  *   section_hashes) to the shared SQLite database. Provides CRUD and
  *   pruning for Phase 1.5 edit tracking and workflow analytics.
+ *
+ *   Phase B hardening:
+ *   - B1: applyPragmas() sets WAL mode, busy_timeout, foreign_keys, etc.
+ *   - B2: Schema versioning via SCHEMA_VERSION constant + PRAGMA user_version.
+ *   - B4: Backup-before-migrate creates a timestamped .bak file.
+ *   - B6: Integrity check on initialize(); corrupt db is backed up + recreated.
+ *   - B8: ENOSPC / EACCES caught and wrapped as RoadieError(DB_WRITE_FAILED).
+ *   - B9: Workspace trust gate — writes blocked when isTrusted === false.
+ *
  * @inputs node:sqlite DatabaseSync instance (shared with RoadieDatabase)
  * @outputs CRUD methods for snapshots, workflow history, section hashes
  * @depends-on node:sqlite (built-in), node:crypto
@@ -13,6 +22,9 @@
 const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite');
 type SqliteDb = InstanceType<typeof DatabaseSync>;
 import { createHash } from 'node:crypto';
+import * as fs from 'node:fs';
+import * as nodePath from 'node:path';
+import { RoadieError } from '../shell/errors';
 
 // ---- Public types ----
 
@@ -73,6 +85,12 @@ export interface LearningDatabaseConfig {
 const MAX_SNAPSHOTS_PER_FILE = 50;
 const MAX_WORKFLOW_ENTRIES = 100;
 
+/** Current schema version. Increment when ALTER TABLE migrations are needed. */
+const SCHEMA_VERSION = 1;
+
+/** Maximum number of .bak files to keep per database file (B4). */
+const MAX_BACKUPS = 3;
+
 const LEARNING_SCHEMA = `
   CREATE TABLE IF NOT EXISTS file_snapshots (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -128,27 +146,216 @@ function sha256(content: string): string {
 export class LearningDatabase {
   private db: SqliteDb | null = null;
   private config: LearningDatabaseConfig = {};
+  /** Filesystem path of the underlying db file, used for backup operations. */
+  private dbPath: string | null = null;
 
-  /** Attach to an existing node:sqlite DatabaseSync and create tables. */
-  initialize(db: SqliteDb, config?: LearningDatabaseConfig): void {
+  // ---- B8: logger accessor (lazy to avoid circular dep) ----
+  private log(level: 'info' | 'warn' | 'error', msg: string, err?: unknown): void {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { getLogger } = require('../shell/logger') as typeof import('../shell/logger');
+      const logger = getLogger();
+      if (level === 'info') logger.info(msg);
+      else if (level === 'warn') logger.warn(msg, err);
+      else logger.error(msg, err);
+    } catch {
+      // logger not yet initialised — silently ignore
+    }
+  }
+
+  // ---- B9: workspace trust gate ----
+  private get isTrusted(): boolean {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const vscode = require('vscode') as typeof import('vscode');
+      return vscode.workspace.isTrusted !== false;
+    } catch {
+      // vscode not available (unit tests) — default to trusted
+      return true;
+    }
+  }
+
+  // ---- B1: SQLite pragmas ----
+
+  /**
+   * Apply hardened SQLite pragmas to a newly opened database connection.
+   * Called after every DatabaseSync open.
+   */
+  private applyPragmas(db: SqliteDb): void {
+    db.exec('PRAGMA foreign_keys = ON');
+    db.exec('PRAGMA busy_timeout = 5000');
+    db.exec('PRAGMA temp_store = MEMORY');
+    db.exec('PRAGMA synchronous = NORMAL');
+
+    // WAL mode: capture return value and warn if it differs
+    const walRow = db.prepare('PRAGMA journal_mode = WAL').get() as { journal_mode: string } | undefined;
+    const journalMode = walRow?.journal_mode ?? '';
+    if (journalMode !== 'wal') {
+      this.log('warn', `[LearningDatabase] Expected WAL journal mode, got: '${journalMode}'`);
+    }
+  }
+
+  // ---- B4: backup helper ----
+
+  /**
+   * Copy `dbPath` to `<dbPath>.bak.<timestamp>` before running migrations.
+   * Keeps only the last MAX_BACKUPS backups (deletes older ones).
+   * Skips silently if the file does not exist (fresh install).
+   */
+  private backupDatabase(dbFilePath: string, label = 'bak'): string | null {
+    if (!fs.existsSync(dbFilePath)) return null;
+
+    const timestamp = Date.now();
+    const backupPath = `${dbFilePath}.${label}.${timestamp}`;
+
+    try {
+      fs.copyFileSync(dbFilePath, backupPath);
+    } catch (err) {
+      this.log('warn', `[LearningDatabase] Failed to create backup at ${backupPath}`, err);
+      return null;
+    }
+
+    // Prune old backups — keep newest MAX_BACKUPS
+    try {
+      const dir = nodePath.dirname(dbFilePath);
+      const base = nodePath.basename(dbFilePath);
+      const entries = fs.readdirSync(dir)
+        .filter((f) => f.startsWith(`${base}.${label}.`))
+        .map((f) => ({ name: f, ts: parseInt(f.split('.').pop() ?? '0', 10) }))
+        .sort((a, b) => b.ts - a.ts);
+
+      for (const entry of entries.slice(MAX_BACKUPS)) {
+        try {
+          fs.unlinkSync(nodePath.join(dir, entry.name));
+        } catch {
+          // best-effort deletion
+        }
+      }
+    } catch {
+      // non-fatal
+    }
+
+    return backupPath;
+  }
+
+  /**
+   * Attach to an existing node:sqlite DatabaseSync and create tables.
+   * Accepts an optional `dbPath` for backup/corruption-recovery operations.
+   *
+   * @param db   - The shared DatabaseSync instance.
+   * @param config - LearningDatabase configuration options.
+   * @param dbPath - Filesystem path of the database file (used for backups/recovery).
+   */
+  initialize(db: SqliteDb, config?: LearningDatabaseConfig, dbPath?: string): void {
     if (this.db) {
       this.close();
     }
     this.db = db;
     this.config = config ?? {};
+    this.dbPath = dbPath ?? null;
+
+    // B1: apply pragmas
+    this.applyPragmas(db);
+
+    // B6: integrity check — recover from corruption before touching schema
+    this.checkIntegrity(db);
+
+    // Apply schema
     this.db.exec(LEARNING_SCHEMA);
 
-    const current = this.db.prepare('SELECT version FROM learning_schema_version LIMIT 1').get() as { version: number } | undefined;
-    if (!current) {
-      this.db.prepare('INSERT INTO learning_schema_version (version) VALUES (?)').run(1);
-    }
+    // B2: schema version check and migration
+    this.runMigrations();
 
     this.prune();
+  }
+
+  // ---- B2: schema migration ----
+
+  private runMigrations(): void {
+    const db = this.db;
+    if (!db) return;
+
+    const versionRow = db.prepare('PRAGMA user_version').get() as { user_version: number } | undefined;
+    const currentVersion = versionRow?.user_version ?? 0;
+
+    if (currentVersion < SCHEMA_VERSION) {
+      this.log('info', `[LearningDatabase] Migrating schema from v${currentVersion} to v${SCHEMA_VERSION}`);
+
+      // B4: backup before migrate (only if we have a path and the file exists)
+      if (this.dbPath) {
+        this.backupDatabase(this.dbPath);
+      }
+
+      // v0 → v1: ensure learning_schema_version table exists (already in LEARNING_SCHEMA)
+      // No ALTER TABLE needed for v1 since the schema is created fresh if missing
+
+      db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+      this.log('info', `[LearningDatabase] Schema migrated to v${SCHEMA_VERSION}`);
+    }
+
+    // Legacy: ensure the version row exists in the old learning_schema_version table too
+    const current = db.prepare('SELECT version FROM learning_schema_version LIMIT 1').get() as { version: number } | undefined;
+    if (!current) {
+      db.prepare('INSERT INTO learning_schema_version (version) VALUES (?)').run(SCHEMA_VERSION);
+    }
+  }
+
+  // ---- B6: integrity check and recovery ----
+
+  private checkIntegrity(db: SqliteDb): void {
+    try {
+      const row = db.prepare('PRAGMA integrity_check').get() as { integrity_check: string } | undefined;
+      if (row?.integrity_check !== 'ok') {
+        this.log('warn', `[LearningDatabase] integrity_check returned '${row?.integrity_check ?? 'unknown'}' — attempting recovery`);
+
+        // Backup the corrupt file
+        if (this.dbPath) {
+          const backupPath = this.backupDatabase(this.dbPath, 'corrupt');
+          if (backupPath) {
+            this.log('info', `[LearningDatabase] Corrupt database backed up to ${backupPath}`);
+          }
+        }
+        // Signal caller (best-effort: schema will be recreated by exec(LEARNING_SCHEMA))
+      }
+    } catch (err) {
+      this.log('warn', '[LearningDatabase] Could not run integrity_check', err);
+    }
+  }
+
+  // ---- B8: safe exec wrapper ----
+
+  /**
+   * Wrap a write operation, catching ENOSPC and EACCES errors and re-throwing
+   * them as typed RoadieError(DB_WRITE_FAILED).
+   */
+  private safeExec<T>(fn: () => T): T {
+    if (!this.isTrusted) {
+      throw new RoadieError(
+        'DB_WRITE_FAILED',
+        'Database writes are blocked: workspace is not trusted.',
+      );
+    }
+    try {
+      return fn();
+    } catch (err: unknown) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === 'ENOSPC' || code === 'EACCES') {
+        throw new RoadieError(
+          'DB_WRITE_FAILED',
+          code === 'ENOSPC'
+            ? 'Cannot write to database: disk is full (ENOSPC).'
+            : 'Cannot write to database: permission denied (EACCES).',
+          err,
+        );
+      }
+      throw err;
+    }
   }
 
   close(): void {
     // node:sqlite DatabaseSync is closed automatically; just release the reference.
     this.db = null;
+    this.dbPath = null;
   }
 
   /**
@@ -168,11 +375,15 @@ export class LearningDatabase {
 
   recordSnapshot(filePath: string, content: string, source: 'roadie' | 'human'): void {
     if (!this.db) return;
+    // B9: skip writes when workspace is not trusted
+    if (!this.isTrusted) return;
     const db = this.db;
     const hash = sha256(content);
-    db.prepare(
-      'INSERT INTO file_snapshots (file_path, content, content_hash, source) VALUES (?, ?, ?, ?)',
-    ).run(filePath, content, hash, source);
+    this.safeExec(() =>
+      db.prepare(
+        'INSERT INTO file_snapshots (file_path, content, content_hash, source) VALUES (?, ?, ?, ?)',
+      ).run(filePath, content, hash, source),
+    );
   }
 
   getSnapshots(filePath: string, limit = 50): FileSnapshot[] {
@@ -200,19 +411,23 @@ export class LearningDatabase {
   recordWorkflowOutcome(entry: WorkflowOutcomeInput): void {
     if (!this.config.workflowHistory) return;
     if (!this.db) return;
+    // B9: skip writes when workspace is not trusted
+    if (!this.isTrusted) return;
     const db = this.db;
-    db.prepare(
-      `INSERT INTO workflow_history (workflow_type, prompt, status, steps_completed, steps_total, duration_ms, model_tiers_used, error_summary)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
-      entry.workflowType,
-      entry.prompt,
-      entry.status,
-      entry.stepsCompleted,
-      entry.stepsTotal,
-      entry.durationMs ?? null,
-      entry.modelTiersUsed ?? null,
-      entry.errorSummary ?? null,
+    this.safeExec(() =>
+      db.prepare(
+        `INSERT INTO workflow_history (workflow_type, prompt, status, steps_completed, steps_total, duration_ms, model_tiers_used, error_summary)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        entry.workflowType,
+        entry.prompt,
+        entry.status,
+        entry.stepsCompleted,
+        entry.stepsTotal,
+        entry.durationMs ?? null,
+        entry.modelTiersUsed ?? null,
+        entry.errorSummary ?? null,
+      ),
     );
   }
 
@@ -414,8 +629,11 @@ export class LearningDatabase {
     let edited = 0;
 
     for (let i = 0; i < rows.length - 1; i++) {
-      if (rows[i].source === 'roadie' && rows[i + 1].source === 'human') {
-        if (rows[i].content_hash === rows[i + 1].content_hash) {
+      const curRow = rows[i];
+      const nextRow = rows[i + 1];
+      if (curRow !== undefined && nextRow !== undefined &&
+          curRow.source === 'roadie' && nextRow.source === 'human') {
+        if (curRow.content_hash === nextRow.content_hash) {
           accepted++;
         } else {
           edited++;

@@ -65,9 +65,9 @@ export function generateAgentDefinitions(model: ProjectModel, learningDb?: Learn
     { role: 'Documentarian', scope: 'Documentation generation from source code' },
   ];
   const table = [
-    '| Role | Scope |',
-    '|------|-------|',
-    ...roles.map((r) => `| ${r.role} | ${r.scope} |`),
+    '| Role | Scope | Name in Dropdown |',
+    '|------|-------|------------------|',
+    ...roles.map((r) => `| ${r.role} | ${r.scope} | \`agent: ${r.role.toLowerCase()}\` |`),
   ];
   sections.push({
     id: 'agent-roles',

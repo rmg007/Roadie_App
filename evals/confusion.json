@@ -1,0 +1,14 @@
+{
+  "generatedAt": "2026-04-17",
+  "version": "0.12.0",
+  "matrix": {
+    "bug_fix": { "bug_fix": 28, "dependency": 0, "document": 0, "feature": 0, "general_chat": 0, "onboard": 0, "refactor": 0, "review": 0 },
+    "dependency": { "bug_fix": 1, "dependency": 25, "document": 0, "feature": 2, "general_chat": 0, "onboard": 0, "refactor": 0, "review": 0 },
+    "document": { "bug_fix": 0, "dependency": 0, "document": 27, "feature": 0, "general_chat": 0, "onboard": 0, "refactor": 0, "review": 0 },
+    "feature": { "bug_fix": 0, "dependency": 0, "document": 1, "feature": 27, "general_chat": 0, "onboard": 0, "refactor": 0, "review": 0 },
+    "general_chat": { "bug_fix": 0, "dependency": 0, "document": 0, "feature": 0, "general_chat": 18, "onboard": 2, "refactor": 0, "review": 0 },
+    "onboard": { "bug_fix": 0, "dependency": 0, "document": 0, "feature": 0, "general_chat": 0, "onboard": 27, "refactor": 0, "review": 0 },
+    "refactor": { "bug_fix": 0, "dependency": 1, "document": 1, "feature": 0, "general_chat": 0, "onboard": 0, "refactor": 27, "review": 0 },
+    "review": { "bug_fix": 0, "dependency": 0, "document": 0, "feature": 0, "general_chat": 0, "onboard": 0, "refactor": 0, "review": 27 }
+  }
+}

@@ -16,7 +16,28 @@ if (/require\((?:'|\")sqlite(?:'|\")\)/.test(content)) {
   process.exit(1);
 }
 
-// 2) Basic sanity: try to parse the file in a vm context
+// 2) Ensure FakeModelProvider does not leak into production bundle
+// (It should only be included when ROADIE_TEST_MODE env var is set)
+// Look for the class definition or its usage patterns
+if (process.env.ROADIE_TEST_MODE !== 'true') {
+  const fakeProviderPatterns = [
+    /class FakeModelProvider\s*{/,
+    /class FakeProgressReporter\s*{/,
+    /class FakeCancellationHandle\s*{/,
+    /class FakeFileSystemProvider\s*{/,
+    /class FakeConfigProvider\s*{/,
+  ];
+
+  for (const pattern of fakeProviderPatterns) {
+    if (pattern.test(content)) {
+      console.error('[verify-bundle] ERROR: FakeModelProvider detected in production bundle');
+      console.error('[verify-bundle]   Set ROADIE_TEST_MODE=true if intentional, or use /* @__PURE__ */ marking');
+      process.exit(1);
+    }
+  }
+}
+
+// 3) Basic sanity: try to parse the file in a vm context
 try {
   new vm.Script(content, { filename: outFile });
 } catch (err) {

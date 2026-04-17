@@ -88,10 +88,11 @@ export async function scanDependencies(workspaceRoot: string): Promise<Dependenc
   };
 
   if (allDeps.typescript || (await exists(path.join(workspaceRoot, 'tsconfig.json')))) {
+    const tsVersion = allDeps.typescript?.replace(/^[\^~]/, '');
     entries.push({
       category: 'language',
       name: 'TypeScript',
-      version: allDeps.typescript?.replace(/^[\^~]/, ''),
+      ...(tsVersion !== undefined ? { version: tsVersion } : {}),
       sourceFile: 'package.json',
     });
   }
@@ -108,7 +109,7 @@ export async function scanDependencies(workspaceRoot: string): Promise<Dependenc
         entries.push({
           category: mapping.category,
           name: mapping.name,
-          version,
+          ...(version !== undefined ? { version } : {}),
           sourceFile: 'package.json',
         });
       }

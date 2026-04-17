@@ -1,0 +1,8 @@
+# .gitleaksignore — suppress known false positives for gitleaks secret scanning
+#
+# Format: <sha>:<filepath>:<line>
+# Add entries here when gitleaks flags test fixture placeholder values or
+# documentation examples that are not real secrets.
+#
+# Example:
+# abc123def456:test/fixtures/example.ts:42

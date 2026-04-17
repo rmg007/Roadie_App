@@ -32,9 +32,9 @@ import type {
 export class VSCodeModelProvider implements ModelProvider {
   async selectModels(selector: ModelSelector): Promise<ModelInfo[]> {
     const models = await vscode.lm.selectChatModels({
-      vendor: selector.vendor,
-      family: selector.family,
-      id: selector.id,
+      ...(selector.vendor !== undefined ? { vendor: selector.vendor } : {}),
+      ...(selector.family !== undefined ? { family: selector.family } : {}),
+      ...(selector.id !== undefined ? { id: selector.id } : {}),
     });
     return models.map((m) => ({
       id: m.id,
@@ -55,10 +55,12 @@ export class VSCodeModelProvider implements ModelProvider {
       throw new Error(`Model not found: ${modelId}`);
     }
 
+    // VS Code's LanguageModelChatMessage API only exposes User() and Assistant()
+    // factories — there is no System(). System messages are folded into a User
+    // message so the model still receives the instructions.
     const vsMessages = messages.map((m) => {
-      if (m.role === 'user') return vscode.LanguageModelChatMessage.User(m.content);
       if (m.role === 'assistant') return vscode.LanguageModelChatMessage.Assistant(m.content);
-      return vscode.LanguageModelChatMessage.System(m.content);
+      return vscode.LanguageModelChatMessage.User(m.content);
     });
 
     const cancellationSource = new vscode.CancellationTokenSource();

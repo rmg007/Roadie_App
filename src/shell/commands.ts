@@ -27,7 +27,6 @@ export interface RoadieConfig extends DeveloperPreferences {
 }
 
 const DEFAULTS: RoadieConfig = {
-  testCommand: undefined,
   modelPreference: 'balanced',
   telemetryEnabled: false,
   autoCommit: false,
@@ -42,7 +41,7 @@ function validateModelPreference(value: unknown): 'economy' | 'balanced' | 'qual
     return value;
   }
   getLogger().warn(`commands: invalid roadie.modelPreference value '${String(value)}' — falling back to balanced`);
-  return DEFAULTS.modelPreference;
+  return 'balanced';
 }
 
 function validateTestTimeout(value: unknown): number {
@@ -64,8 +63,9 @@ function validateContextLensLevel(value: unknown): 'off' | 'summary' | 'full' {
  */
 export function readConfiguration(): RoadieConfig {
   const raw = vscode.workspace.getConfiguration('roadie');
+  const testCommandRaw = raw.get<string>('testCommand') || undefined;
   return {
-    testCommand:       raw.get<string>('testCommand') || undefined,
+    ...(testCommandRaw !== undefined ? { testCommand: testCommandRaw } : {}),
     modelPreference:   validateModelPreference(raw.get('modelPreference', DEFAULTS.modelPreference)),
     telemetryEnabled:  raw.get<boolean>('telemetry', DEFAULTS.telemetryEnabled),
     autoCommit:        raw.get<boolean>('autoCommit', DEFAULTS.autoCommit),

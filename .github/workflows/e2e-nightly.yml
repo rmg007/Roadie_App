@@ -1,0 +1,86 @@
+name: E2E (nightly)
+
+# Phase D of docs/phase-d-e2e-gate.md.
+# Runs the packaged VSIX under a real VS Code instance (vscode-extension-tester).
+# Matrix: min-supported (1.93.0) and stable × ubuntu / macos / windows.
+#
+# Linux is the merge gate. macOS/Windows promoted to blocking after 5 consecutive nightly greens.
+
+on:
+  schedule:
+    # 03:00 UTC daily
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      vscode_version:
+        description: 'VS Code version override (e.g. 1.93.0, stable, insider)'
+        required: false
+        default: ''
+
+jobs:
+  e2e:
+    name: E2E (${{ matrix.os }} / VS Code ${{ matrix.vscode_version }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+
+    # Linux is the merge gate (continue-on-error: false).
+    # macOS and Windows are monitored but non-blocking until 5 consecutive nightly greens.
+    continue-on-error: ${{ matrix.os != 'ubuntu-latest' }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ['ubuntu-latest', 'macos-latest', 'windows-latest']
+        vscode_version: ['1.93.0', 'stable']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Package VSIX
+        run: npm run package
+
+      - name: Install Linux display dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y xvfb libnss3 libgbm1 libasound2t64
+
+      - name: Run E2E suite (Linux)
+        if: runner.os == 'Linux'
+        env:
+          DISPLAY: ':99.0'
+          ROADIE_TEST_MODE: 'true'
+        run: |
+          Xvfb :99 -screen 0 1280x1024x24 &
+          sleep 2
+          node e2e/run.js "" ${{ github.event.inputs.vscode_version || matrix.vscode_version }}
+
+      - name: Run E2E suite (macOS / Windows)
+        if: runner.os != 'Linux'
+        env:
+          ROADIE_TEST_MODE: 'true'
+        run: node e2e/run.js "" ${{ github.event.inputs.vscode_version || matrix.vscode_version }}
+
+      - name: Upload screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screenshots-${{ matrix.os }}-${{ matrix.vscode_version }}
+          path: |
+            e2e/.vscode-test/**/screenshots/**
+            e2e/.vscode-test/**/logs/**
+            e2e/screenshots/**
+          if-no-files-found: ignore
+          retention-days: 14

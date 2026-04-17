@@ -90,7 +90,8 @@ export class IntentClassifier {
       };
     }
 
-    const topEntry = sorted[0];
+    // sorted.length > 0 is guaranteed by the guard above
+    const topEntry = sorted[0]!;
     const topIntent = topEntry[0];
     const topData = topEntry[1];
 
@@ -121,14 +122,14 @@ export class IntentClassifier {
         intent: 'general_chat',
         confidence: CONFIDENCE_THRESHOLDS.negativeOverride,
         signals: topData.signals,
-        requiresLLM: false,
+        requiresLLM: true,
       };
     }
 
     // 5. Ambiguity check: second-highest must be meaningful (>= 0.3)
     //    and close to the top score (within ambiguousDelta).
     if (sorted.length >= 2) {
-      const secondScore = sorted[1][1].score;
+      const secondScore = sorted[1]![1].score;
       if (
         secondScore >= 0.3 &&
         topData.score - secondScore < CONFIDENCE_THRESHOLDS.ambiguousDelta

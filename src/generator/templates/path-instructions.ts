@@ -19,6 +19,17 @@ import * as path from 'node:path';
 import type { ProjectModel, DirectoryNode } from '../../types';
 import type { GeneratedSection } from '../section-manager';
 
+/** Allows tests to override the timestamp generation. */
+let getTimestampFn = () => new Date().toISOString();
+
+export function setTimestampForTesting(fn: () => string): void {
+  getTimestampFn = fn;
+}
+
+export function resetTimestamp(): void {
+  getTimestampFn = () => new Date().toISOString();
+}
+
 export const PATH_INSTRUCTIONS_DIR = '.github/instructions';
 
 /** Minimum source-file count for a directory to qualify for an instruction file. */
@@ -52,11 +63,19 @@ export function generatePathInstructions(model: ProjectModel, options?: { simpli
 
   for (const dir of qualifying.slice(0, MAX_FILES)) {
     const dirName = path.basename(dir.path);
-    const filePath = `${PATH_INSTRUCTIONS_DIR}/${dirName}.instructions.md`;
+    const filePath = `${PATH_INSTRUCTIONS_DIR}/${dirName}.md`;
     const roleDesc = dir.role === 'test' ? 'test files' : 'source files';
     const fileCount = countSourceFiles(dir);
+    const generatedAt = getTimestampFn();
 
     const contentLines: string[] = [
+      '---',
+      `name: "instruction: ${dirName}"`,
+      `description: Path-scoped instructions for /${dirName} (${roleDesc})`,
+      'generated-by: roadie',
+      `generated-at: ${generatedAt}`,
+      '---',
+      '',
       `## ${dirName}/ — ${roleDesc}`,
       '',
       `This directory contains ${roleDesc} (${fileCount} files detected).`,
@@ -133,7 +152,7 @@ function countSourceFiles(node: DirectoryNode): number {
 export function generatePathInstructionSections(model: ProjectModel): GeneratedSection[] {
   const files = generatePathInstructions(model);
   return files.map((f) => ({
-    id: `path-instructions:${path.basename(f.filePath).replace(/\.instructions\.md$/, '')}`,
+    id: `path-instructions:${path.basename(f.filePath).replace(/\.md$/, '')}`,
     content: f.sections.map((s) => s.content).join('\n'),
   }));
 }

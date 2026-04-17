@@ -58,6 +58,18 @@ jobs:
       - name: Dry-run publish
         run: npx @vscode/vsce publish --no-dependencies --dry-run || true
 
+      # Publisher verification: @vscode/vsce validates the publisher token against
+      # the VS Code Marketplace during publish. No additional signing step is needed;
+      # the VSCE_PAT secret acts as the publisher credential.
+      - name: Generate SBOM
+        run: node scripts/generate-sbom.js
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ github.ref_name }}
+          path: sbom.json
+
       - name: Publish to Marketplace
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}

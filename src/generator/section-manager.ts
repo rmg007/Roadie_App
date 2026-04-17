@@ -86,7 +86,7 @@ export function mergeSections(
       result = result.trimEnd() + '\n\n' + newBlock + '\n';
     } else {
       const fullMatch = match[0];
-      const existingBlock = match[1].trim();
+      const existingBlock = (match[1] ?? '').trim();
       const existingHash = hashContent(existingBlock);
       const storedHash = storedHashes.get(section.id);
       const startIdx = match.index;

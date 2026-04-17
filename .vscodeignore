@@ -12,6 +12,10 @@ vitest.config.js
 *.test.ts
 *.spec.ts
 test/
+e2e/
+evals/
+coverage/
+DEVELOPMENT_LOG.md
 
 # ── Dev tooling files ─────────────────────────────────────────────────────────
 .vscode/

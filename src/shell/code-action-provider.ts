@@ -6,7 +6,7 @@ export function extractSymbolName(document: vscode.TextDocument, range: vscode.R
   for (let i = startLine; i >= Math.max(0, startLine - 5); i--) {
     const text = document.lineAt(i).text;
     const m = DECL_RE.exec(text);
-    if (m) return m[1];
+    if (m) return m[1] ?? null;
   }
   return null;
 }

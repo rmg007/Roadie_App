@@ -168,7 +168,7 @@ export class FileGeneratorManager {
         return result.value;
       }
       return {
-        fileType: fileTypes[i],
+        fileType: fileTypes[i] ?? '',
         filePath: '',
         written: false,
         merged: false,

@@ -1,7 +1,17 @@
-import { describe, it, expect } from 'vitest';
-import { generatePathInstructions, generatePathInstructionSections, PATH_INSTRUCTIONS_DIR } from './path-instructions';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { generatePathInstructions, generatePathInstructionSections, PATH_INSTRUCTIONS_DIR, setTimestampForTesting, resetTimestamp } from './path-instructions';
 import { InMemoryProjectModel } from '../../model/project-model';
 import type { DirectoryNode, DetectedPattern, ProjectCommand } from '../../types';
+
+const FIXED_TIMESTAMP = '2026-04-17T12:00:00Z';
+
+beforeEach(() => {
+  setTimestampForTesting(() => FIXED_TIMESTAMP);
+});
+
+afterEach(() => {
+  resetTimestamp();
+});
 
 function makeModel(opts: {
   tree: DirectoryNode;
@@ -64,7 +74,7 @@ describe('generatePathInstructions', () => {
     });
     const results = generatePathInstructions(model);
     expect(results).toHaveLength(1);
-    expect(results[0].filePath).toBe(`${PATH_INSTRUCTIONS_DIR}/src.instructions.md`);
+    expect(results[0].filePath).toBe(`${PATH_INSTRUCTIONS_DIR}/src.md`);
   });
 
   it('caps output at 6 files regardless of directory count', () => {
@@ -86,7 +96,7 @@ describe('generatePathInstructions', () => {
       },
     });
     const [result] = generatePathInstructions(model);
-    expect(result.filePath).toBe('.github/instructions/src.instructions.md');
+    expect(result.filePath).toBe('.github/instructions/src.md');
   });
 
   it('both source and test roles qualify', () => {

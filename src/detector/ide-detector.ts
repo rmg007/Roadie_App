@@ -57,7 +57,7 @@ export async function detectIDEs(workspaceRoot: string): Promise<DetectionResult
   }
 
   // Determine primary IDE (unambiguous if only one detected)
-  const primaryIDE = detected.length === 1 ? detected[0] : null;
+  const primaryIDE: string | null = detected.length === 1 ? (detected[0] ?? null) : null;
 
   return {
     isVSCode: detected.includes('vscode'),

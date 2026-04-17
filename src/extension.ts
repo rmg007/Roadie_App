@@ -6,7 +6,7 @@
  *   status bar, configuration reader, and command palette commands.
  *   Routes deactivation through the container's dispose().
  *
- *   SQLite persistence is fully optional — if better-sqlite3 fails to load
+ *   SQLite persistence is fully optional — if node:sqlite fails to load
  *   (e.g. ABI mismatch), Roadie degrades gracefully to in-memory-only mode
  *   and logs a warning. Everything else continues to work normally.
  *
@@ -20,25 +20,25 @@
 
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { Container } from './container';
-import { registerChatParticipant } from './shell/chat-participant';
-import { createStatusBar } from './shell/status-bar';
-import { registerCommands, readConfiguration, updateSetting } from './shell/commands';
-import { initLogger, getLogger, RoadieLogger } from './shell/logger';
-import { getChatLastContext } from './shell/chat-participant';
-import { RoadieCodeActionProvider } from './shell/code-action-provider';
-import { AgentSpawner } from './spawner/agent-spawner';
-import { VSCodeModelProvider } from './shell/vscode-providers';
-import { InMemoryProjectModel } from './model/project-model';
-import { RoadieDatabase } from './model/database';
-import { LearningDatabase } from './learning/learning-database';
-import { ProjectAnalyzer } from './analyzer/project-analyzer';
-import { FileGenerator } from './generator/file-generator';
-import { FileWatcherManager } from './watcher/file-watcher-manager';
+// A-lazy: only type-level imports are static; all value imports are deferred
+// to the top of activate() via dynamic import() to reduce activation time.
 import type { StepHandlerFn } from './engine/step-executor';
 import type { AgentConfig } from './types';
 
-let container: Container | undefined;
+/** Container reference — typed structurally to avoid a static import of Container. */
+let container: { dispose(): void } | undefined;
+
+/**
+ * F7: cold-start activation duration (ms). Set at the end of activate().
+ * Used by the roadie.stats command to report performance telemetry.
+ */
+let _coldActivationMs: number | undefined;
+
+/**
+ * Cached logger reference used by deactivate().
+ * Set during activate(); never undefined once activation completes.
+ */
+let _logger: { info(msg: string): void; error(msg: string, err?: unknown): void } | undefined;
 
 type ChatVariableResolverApi = {
   registerChatVariableResolver: (
@@ -58,11 +58,53 @@ type ChatVariableResolverApi = {
  * Called by VS Code when the extension is activated.
  */
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-  container = new Container();
+  // ── F7: activation timing ─────────────────────────────────────────────────
+  const _activationStart = performance.now();
+
+  // ── A-lazy: dynamic imports ───────────────────────────────────────────────
+  // All heavyweight modules are loaded here at activation time (not at module
+  // parse time) so VS Code's extension host starts faster.
+  const [
+    { Container },
+    { registerChatParticipant, getChatLastContext },
+    { createStatusBar },
+    { registerCommands, readConfiguration, updateSetting },
+    { initLogger, getLogger, RoadieLogger },
+    { RoadieCodeActionProvider },
+    { AgentSpawner },
+    { VSCodeModelProvider },
+    { InMemoryProjectModel },
+    { RoadieDatabase },
+    { LearningDatabase },
+    { ProjectAnalyzer },
+    { FileGenerator },
+    { FileWatcherManager },
+    { registerDiagnosticsCommand },
+  ] = await Promise.all([
+    import('./container'),
+    import('./shell/chat-participant'),
+    import('./shell/status-bar'),
+    import('./shell/commands'),
+    import('./shell/logger'),
+    import('./shell/code-action-provider'),
+    import('./spawner/agent-spawner'),
+    import('./shell/vscode-providers'),
+    import('./model/project-model'),
+    import('./model/database'),
+    import('./learning/learning-database'),
+    import('./analyzer/project-analyzer'),
+    import('./generator/file-generator'),
+    import('./watcher/file-watcher-manager'),
+    import('./shell/diagnostics'),
+  ]);
+
+  const c = new Container();
+  container = c;
 
   // Logger must be the first thing initialised — everything else uses it.
   const logger = initLogger();
-  container.register(logger);
+  _logger = logger;
+  c.register(logger);
 
   const { version } = context.extension.packageJSON as { version: string };
   logger.info(`Roadie v${version} activating…`);
@@ -79,7 +121,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // ── SQLite persistence (fully fault-tolerant) ────────────────────────────
   // Both RoadieDatabase (project model) and LearningDatabase (workflow history
   // + file snapshots) share the same SQLite file and connection.
-  // If better-sqlite3 cannot be loaded (ABI mismatch, missing binary, etc.)
+  // If node:sqlite cannot be loaded (ABI mismatch, missing binary, etc.)
   // we fall back to pure in-memory mode and continue without persistence.
   let roadieDb: RoadieDatabase | null = null;
   let learningDb: LearningDatabase | null = null;
@@ -94,7 +136,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         workflowHistory: config.workflowHistory,
       });
 
-      container.register({
+      c.register({
         dispose: () => {
           try {
             learningDb?.close();
@@ -127,7 +169,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   // ── Project model ────────────────────────────────────────────────────────
   const projectModel = new InMemoryProjectModel(roadieDb);
-  container.register(projectModel);
+  c.register(projectModel);
 
   // ── File generator ───────────────────────────────────────────────────────
   const fileGenerator = workspaceRoot
@@ -157,7 +199,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   if (workspaceRoot && fileGenerator) {
     const watcher = new FileWatcherManager();
     watcher.start();
-    container.register(
+    c.register(
       watcher.onBatch((events) => {
         // FullRescanEvent sentinel: events is [{ type: 'FULL_RESCAN' }]
         if (!Array.isArray(events) || events.length === 0) return;
@@ -205,18 +247,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     ];
 
     for (const vsWatcher of vsWatchers) {
-      container.register(vsWatcher);
-      container.register(
+      c.register(vsWatcher);
+      c.register(
         vsWatcher.onDidChange((uri) => watcher.handleFileEvent(uri.fsPath, 'change')),
       );
-      container.register(
+      c.register(
         vsWatcher.onDidCreate((uri) => watcher.handleFileEvent(uri.fsPath, 'create')),
       );
-      container.register(
+      c.register(
         vsWatcher.onDidDelete((uri) => watcher.handleFileEvent(uri.fsPath, 'delete')),
       );
     }
-    container.register({ dispose: () => watcher.dispose() });
+    c.register({ dispose: () => watcher.dispose() });
   }
 
   // ── AgentSpawner (real step handler) ────────────────────────────────────
@@ -273,7 +315,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           ? { previous_error: attemptInfo.previousError }
           : {}),
       },
-      cancellation: workflowContext.cancellation.signal,
+      ...(workflowContext.cancellation.signal !== undefined
+        ? { cancellation: workflowContext.cancellation.signal }
+        : {}),
       timeoutMs: step.timeoutMs,
     };
 
@@ -292,7 +336,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   };
 
   // ── Chat Participant ─────────────────────────────────────────────────────
-  container.register(
+  c.register(
     registerChatParticipant({
       stepHandler,
       projectModel,
@@ -309,10 +353,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       { query },
     );
   });
-  container.register(openChatCmd);
+  c.register(openChatCmd);
 
   const codeActionProvider = new RoadieCodeActionProvider();
-  container.register(
+  c.register(
     vscode.languages.registerCodeActionsProvider(
       ['typescript', 'typescriptreact', 'javascript', 'javascriptreact'].map((language) => ({ language })),
       codeActionProvider,
@@ -339,10 +383,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       ];
     },
   );
-  container.register(chatVariableDisposable);
+  c.register(chatVariableDisposable);
 
   // ── Status bar ───────────────────────────────────────────────────────────
-  container.register(createStatusBar());
+  c.register(createStatusBar());
 
   // ── Commands ─────────────────────────────────────────────────────────────
   const commands = registerCommands({
@@ -455,6 +499,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       log.info(`Success rate:     ${rate}%  (${stats.successCount} ok / ${stats.failureCount} failed)`);
       log.info(`Avg duration:     ${avgMs}ms`);
       log.info(`DB records:       ${dbSize}`);
+      // F7: cold vs warm activation telemetry
+      if (_coldActivationMs !== undefined) {
+        log.info(`Cold activation:  ${_coldActivationMs.toFixed(0)}ms (budget: 250ms)`);
+      }
       log.info('By workflow type:');
       for (const [type, data] of Object.entries(stats.byType)) {
         const typeRate = data.count > 0
@@ -593,18 +641,23 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   });
 
   for (const cmd of commands) {
-    container.register(cmd);
+    c.register(cmd);
   }
 
-  context.subscriptions.push(container);
-  logger.info('Roadie activated ✓');
+  // ── E1: Export Diagnostics command ───────────────────────────────────────
+  c.register(registerDiagnosticsCommand(context));
+
+  context.subscriptions.push(c);
+  _coldActivationMs = performance.now() - _activationStart;
+  logger.info(`Roadie activated ✓ (cold start: ${_coldActivationMs.toFixed(0)}ms)`);
 }
 
 /**
  * Called by VS Code when the extension is deactivated.
  */
 export function deactivate(): void {
-  getLogger().info('Roadie deactivating…');
+  _logger?.info('Roadie deactivating…');
   container?.dispose();
   container = undefined;
+  _logger = undefined;
 }
