@@ -752,8 +752,8 @@ describe('Feature Workflow E2E — Multi-turn Interview & Approval', () => {
 
     // Should complete without further pauses
     expect(result2.state).toBe(WorkflowState.COMPLETED);
-    // Should have all 5 steps (1 interviewer + 1 approve + 3 agents)
-    expect(result2.stepResults.length).toBe(5);
+    // Should have 4 steps (1 interviewer + 3 agents; approve step is pre-gate only)
+    expect(result2.stepResults.length).toBe(4);
     expect(result2.stepResults.every((r) => r.status === 'success')).toBe(true);
 
     // Verify all agents executed

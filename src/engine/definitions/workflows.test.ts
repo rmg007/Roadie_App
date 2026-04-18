@@ -126,9 +126,9 @@ describe('Feature Workflow', () => {
 
   it('completes all steps with mock handler', async () => {
     const { state, stepCount } = await executeWorkflow(FEATURE_WORKFLOW);
-    // Feature workflow now pauses at step 2 (present-plan) which requires approval
+    // Feature workflow now pauses BEFORE step 2 (present-plan) which requires approval
     expect(state).toBe(WorkflowState.WAITING_FOR_APPROVAL);
-    expect(stepCount).toBe(2); // gather-app-context + present-plan
+    expect(stepCount).toBe(1); // gather-app-context only (present-plan not yet executed)
   });
 });
 

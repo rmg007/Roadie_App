@@ -19,7 +19,7 @@ export interface IntentPattern {
 export const INTENT_PATTERNS: Record<string, IntentPattern[]> = {
   command: [
     { regex: /\brescan\b/i,  weight: 1.0, label: 'keyword:rescan' },
-    { regex: /\breset\b/i,   weight: 1.0, label: 'keyword:reset' },
+    { regex: /\breset\s+(roadie|workspace|settings|config|project)\b|\b(roadie|workspace)\s+reset\b/i, weight: 1.0, label: 'keyword:reset' },
     { regex: /\binit\b/i,    weight: 1.0, label: 'keyword:init' },
     { regex: /\bscan\b/i,    weight: 1.0, label: 'keyword:scan' },
   ],
@@ -248,7 +248,9 @@ export const NEGATIVE_SIGNALS: IntentPattern[] = [
 // downstream code receives literal types (e.g. `0.80`, not `number`).
 export const CONFIDENCE_THRESHOLDS = {
   /** Single primary signal matched -> confidence returned by classifier. */
-  primaryOnly: 0.55,
+  primaryOnly: 0.70,
+  /** Two or more primary keyword matches (no signal: pattern) -> mid-high confidence. */
+  primaryMultiple: 0.80,
   /** Primary + at least one secondary signal matched -> highest local confidence. */
   primaryPlusSecondary: 0.90,
   /** Two or more intents scored within this delta of each other -> confidence is capped. */

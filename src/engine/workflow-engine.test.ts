@@ -350,3 +350,154 @@ describe('WorkflowEngine — rebindTurnHandles', () => {
     expect(resumeResult.state).toBe(WorkflowState.CANCELLED);
   });
 });
+
+// ============================================================================
+// Test Suite: Bug 4 — ThreadId Plumbing (Phase 3)
+// ============================================================================
+// @description Tests for threadId field on WorkflowContext and snapshot persistence
+// @coverage threadId propagation, snapshot storage, thread-scoped lookups
+
+describe('WorkflowEngine — Bug 4 ThreadId Plumbing', () => {
+  it('Test 3.1: WorkflowContext accepts threadId field', () => {
+    // Arrange
+    const threadId = 'thread-abc123';
+    const context = makeContext({ threadId });
+
+    // Assert: threadId is present and accessible
+    expect(context.threadId).toBe(threadId);
+  });
+
+  it('Test 3.2: WorkflowContext threadId is optional', () => {
+    // Arrange
+    const context = makeContext();
+
+    // Assert: No error when threadId is undefined
+    expect(context.threadId).toBeUndefined();
+  });
+
+  it('Test 3.3: Paused workflow includes threadId in snapshot', async () => {
+    // Arrange
+    const threadId = 'thread-abc123';
+    const mockLearningDb = {
+      saveWorkflowSnapshot: vi.fn().mockResolvedValue(undefined),
+      getWorkflowStats: vi.fn().mockReturnValue({}),
+      getWorkflowCancellationStats: vi.fn().mockReturnValue({}),
+    };
+
+    const handler: StepHandlerFn = vi
+      .fn()
+      .mockImplementation((step: WorkflowStep) => Promise.resolve(successResult(step.id)));
+
+    const engine = new WorkflowEngine(new StepExecutor(handler), mockLearningDb as any);
+
+    const steps = [
+      makeStep('s1', 'Approve Step', { requiresApproval: true }),
+      makeStep('s2', 'Final Step'),
+    ];
+
+    // Act: Execute workflow with threadId
+    const context = makeContext({ threadId });
+    const result = await engine.execute(makeDefinition(steps), context);
+
+    // Assert: Snapshot was saved with threadId
+    expect(mockLearningDb.saveWorkflowSnapshot).toHaveBeenCalledOnce();
+    const snapshotCall = mockLearningDb.saveWorkflowSnapshot.mock.calls[0][0];
+    expect(snapshotCall.threadId).toBe(threadId);
+  });
+
+  it('Test 3.4: Paused workflow defaults threadId to "unknown" when missing', async () => {
+    // Arrange: Context without threadId
+    const mockLearningDb = {
+      saveWorkflowSnapshot: vi.fn().mockResolvedValue(undefined),
+      getWorkflowStats: vi.fn().mockReturnValue({}),
+      getWorkflowCancellationStats: vi.fn().mockReturnValue({}),
+    };
+
+    const handler: StepHandlerFn = vi
+      .fn()
+      .mockImplementation((step: WorkflowStep) => Promise.resolve(successResult(step.id)));
+
+    const engine = new WorkflowEngine(new StepExecutor(handler), mockLearningDb as any);
+
+    const steps = [
+      makeStep('s1', 'Approve Step', { requiresApproval: true }),
+      makeStep('s2', 'Final Step'),
+    ];
+
+    // Act: Execute workflow WITHOUT threadId
+    const context = makeContext(); // threadId is undefined
+    const result = await engine.execute(makeDefinition(steps), context);
+
+    // Assert: Snapshot was saved with default threadId = 'unknown'
+    expect(mockLearningDb.saveWorkflowSnapshot).toHaveBeenCalledOnce();
+    const snapshotCall = mockLearningDb.saveWorkflowSnapshot.mock.calls[0][0];
+    expect(snapshotCall.threadId).toBe('unknown');
+  });
+
+  it('Test 3.5: Multiple threads with paused workflows have separate snapshots', async () => {
+    // Arrange
+    const thread1 = 'thread-1';
+    const thread2 = 'thread-2';
+    const mockLearningDb = {
+      saveWorkflowSnapshot: vi.fn().mockResolvedValue(undefined),
+      getWorkflowStats: vi.fn().mockReturnValue({}),
+      getWorkflowCancellationStats: vi.fn().mockReturnValue({}),
+    };
+
+    const handler: StepHandlerFn = vi
+      .fn()
+      .mockImplementation((step: WorkflowStep) => Promise.resolve(successResult(step.id)));
+
+    const engine = new WorkflowEngine(new StepExecutor(handler), mockLearningDb as any);
+
+    const steps = [
+      makeStep('s1', 'Approve Step', { requiresApproval: true }),
+      makeStep('s2', 'Final Step'),
+    ];
+
+    // Act: Execute two workflows with different threadIds
+    const result1 = await engine.execute(makeDefinition(steps, { id: 'workflow-1' }), makeContext({ threadId: thread1 }));
+    const result2 = await engine.execute(makeDefinition(steps, { id: 'workflow-2' }), makeContext({ threadId: thread2 }));
+
+    // Assert: Two separate snapshots with different threadIds
+    expect(mockLearningDb.saveWorkflowSnapshot).toHaveBeenCalledTimes(2);
+    const snapshot1 = mockLearningDb.saveWorkflowSnapshot.mock.calls[0][0];
+    const snapshot2 = mockLearningDb.saveWorkflowSnapshot.mock.calls[1][0];
+
+    expect(snapshot1.threadId).toBe(thread1);
+    expect(snapshot2.threadId).toBe(thread2);
+    expect(snapshot1.workflowId).toBe('workflow-1');
+    expect(snapshot2.workflowId).toBe('workflow-2');
+  });
+
+  it('Test 3.6: Removed unsafe cast — threadId accessed directly (not via any)', async () => {
+    // Arrange: This test verifies that the unsafe cast (context as any).threadId
+    // has been replaced with direct context.threadId access.
+    const threadId = 'thread-xyz';
+    const mockLearningDb = {
+      saveWorkflowSnapshot: vi.fn().mockResolvedValue(undefined),
+      getWorkflowStats: vi.fn().mockReturnValue({}),
+      getWorkflowCancellationStats: vi.fn().mockReturnValue({}),
+    };
+
+    const handler: StepHandlerFn = vi
+      .fn()
+      .mockImplementation((step: WorkflowStep) => Promise.resolve(successResult(step.id)));
+
+    const engine = new WorkflowEngine(new StepExecutor(handler), mockLearningDb as any);
+
+    const steps = [
+      makeStep('s1', 'Approve Step', { requiresApproval: true }),
+      makeStep('s2', 'Final Step'),
+    ];
+
+    // Act: Execute with threadId
+    const context = makeContext({ threadId });
+    const result = await engine.execute(makeDefinition(steps), context);
+
+    // Assert: Snapshot preserves the threadId correctly
+    // (If the unsafe cast had not been replaced, TypeScript strict mode would fail)
+    const snapshot = mockLearningDb.saveWorkflowSnapshot.mock.calls[0][0];
+    expect(snapshot.threadId).toBe(threadId);
+  });
+});

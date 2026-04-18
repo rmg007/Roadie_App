@@ -1,138 +1,141 @@
 
-> roadie@0.7.14 test
+> roadie@0.10.0 test
 > vitest run
 
-[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+The CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.
 
 [7m[1m[36m RUN [39m[22m[27m [36mv0.34.6[39m [90mC:/dev/Roadie/roadie-App[39m
 
- [33m❯[39m evals/classifier/fuzz.test.ts [2m ([22m[2m0 test[22m[2m)[22m
- [33m❯[39m src/shell/__tests__/cancellation.test.ts [2m ([22m[2m0 test[22m[2m)[22m
- [33m❯[39m src/watcher/__tests__/debounce.test.ts [2m ([22m[2m0 test[22m[2m)[22m
-(node:7048) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ [32mΓ£ô[39m src/__integration__/no-network.test.ts [2m ([22m[2m1 test[22m[2m)[22m[90m 30[2mms[22m[39m
+(node:37388) ExperimentalWarning: SQLite is an experimental feature and might change at any time
 (Use `node --trace-warnings ...` to show where the warning was created)
-(node:7048) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(node:37388) ExperimentalWarning: SQLite is an experimental feature and might change at any time
 (Use `node --trace-warnings ...` to show where the warning was created)
-(node:7048) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(node:37388) ExperimentalWarning: SQLite is an experimental feature and might change at any time
 (Use `node --trace-warnings ...` to show where the warning was created)
- [33m❯[39m src/classifier/intent-classifier-intents.test.ts [2m ([22m[2m53 tests[22m [2m|[22m [31m2 failed[39m[2m)[22m[90m 98[2mms[22m[39m
-[31m   [33m❯[31m src/classifier/intent-classifier-intents.test.ts[2m > [22mbug_fix intent[2m > [22mdetects "fix the login error"[39m
-[31m     → expected 0.55 to be greater than or equal to 0.7[39m
-[31m   [33m❯[31m src/classifier/intent-classifier-intents.test.ts[2m > [22mfeature intent[2m > [22mdetects "implement"[39m
-[31m     → expected 'command' to be 'feature' // Object.is equality[39m
- [33m❯[39m src/classifier/intent-classifier.test.ts [2m ([22m[2m24 tests[22m [2m|[22m [31m1 failed[39m[2m)[22m[90m 169[2mms[22m[39m
-[31m   [33m❯[31m src/classifier/intent-classifier.test.ts[2m > [22mIntentClassifier accuracy (reference dataset)[2m > [22mconfidence is within +/-0.20 of expected for correctly classified prompts[39m
-[31m     → "Fix the login bug" confidence: got 0.55, expected 0.8: expected 0.25 to be less than or equal to 0.21[39m
-(node:7048) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ [32mΓ£ô[39m src/classifier/intent-classifier-intents.test.ts [2m ([22m[2m60 tests[22m[2m)[22m[90m 67[2mms[22m[39m
+ [32mΓ£ô[39m src/classifier/intent-classifier.test.ts [2m ([22m[2m24 tests[22m[2m)[22m[90m 102[2mms[22m[39m
+(node:37388) ExperimentalWarning: SQLite is an experimental feature and might change at any time
 (Use `node --trace-warnings ...` to show where the warning was created)
-(node:7048) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ [33mΓ¥»[39m src/__integration__/feature-workflow-e2e.test.ts [2m ([22m[2m12 tests[22m [2m|[22m [31m1 failed[39m[2m)[22m[90m 68[2mms[22m[39m
+[31m   [33mΓ¥»[31m src/__integration__/feature-workflow-e2e.test.ts[2m > [22mFeature Workflow E2E ΓÇö Multi-turn Interview & Approval[2m > [22mcompletes full feature workflow: classification ΓåÆ interview ΓåÆ approval ΓåÆ agents[39m
+[31m     ΓåÆ expected 4 to be 5 // Object.is equality[39m
+ [33mΓ¥»[39m src/engine/definitions/workflows.test.ts [2m ([22m[2m67 tests[22m [2m|[22m [31m1 failed[39m[2m)[22m[90m 67[2mms[22m[39m
+[31m   [33mΓ¥»[31m src/engine/definitions/workflows.test.ts[2m > [22mFeature Workflow[2m > [22mcompletes all steps with mock handler[39m
+[31m     ΓåÆ expected 1 to be 2 // Object.is equality[39m
+ [33mΓ¥»[39m src/shell/chat-participant.test.ts [2m ([22m[2m91 tests[22m [2m|[22m [31m4 failed[39m[2m)[22m[33m 342[2mms[22m[39m
+[31m   [33mΓ¥»[31m src/shell/chat-participant.test.ts[2m > [22mgeneral_chat LLM fallback[2m > [22mreuses prior workflow context for short follow-up prompts[39m
+[31m     ΓåÆ expected false to be true // Object.is equality[39m
+[31m   [33mΓ¥»[31m src/shell/chat-participant.test.ts[2m > [22mextractThreadId[2m > [22mreturns same threadId for two calls with identical first prompt[39m
+[31m     ΓåÆ extractThreadId is not a function[39m
+[31m   [33mΓ¥»[31m src/shell/chat-participant.test.ts[2m > [22mextractThreadId[2m > [22mreturns different threadIds for different first prompts[39m
+[31m     ΓåÆ extractThreadId is not a function[39m
+[31m   [33mΓ¥»[31m src/shell/chat-participant.test.ts[2m > [22mextractThreadId[2m > [22mreturns an ephemeral id when history is empty[39m
+[31m     ΓåÆ extractThreadId is not a function[39m
+(node:37388) ExperimentalWarning: SQLite is an experimental feature and might change at any time
 (Use `node --trace-warnings ...` to show where the warning was created)
- [32m✓[39m src/generator/file-generator.test.ts [2m ([22m[2m13 tests[22m[2m)[22m[33m 847[2mms[22m[39m
- [32m✓[39m src/extension.test.ts [2m ([22m[2m1 test[22m[2m)[22m[33m 376[2mms[22m[39m
- [33m❯[39m test/harness/scenario.test.ts [2m ([22m[2m6 tests[22m [2m|[22m [31m4 failed[39m[2m)[22m[33m 594[2mms[22m[39m
-[31m   [33m❯[31m test/harness/scenario.test.ts[2m > [22mscenario runner[2m > [22mexecutes confidence-adjusted.json[39m
-[31m     → intent.confidence failed comparator >= 0.7. actual=0.5800000000000001[39m
-[31m   [33m❯[31m test/harness/scenario.test.ts[2m > [22mscenario runner[2m > [22mexecutes mixed-js-ts-onboard.json[39m
-[31m     → intent.confidence failed comparator >= 0.6. actual=0.55[39m
-[31m   [33m❯[31m test/harness/scenario.test.ts[2m > [22mscenario runner[2m > [22mexecutes nested-monorepo-review.json[39m
-[31m     → intent.confidence failed comparator >= 0.6. actual=0.55[39m
-[31m   [33m❯[31m test/harness/scenario.test.ts[2m > [22mscenario runner[2m > [22mexecutes review-codebase-summary.json[39m
-[31m     → intent.confidence failed comparator >= 0.7. actual=0.55[39m
-[90mstdout[2m | src/__perf__/memory.test.ts[2m > [22m[2mF2 — Memory ceiling (BLOCKING)[2m > [22m[2mRSS delta < 50MB after 10000 classify ops[22m[39m
-[perf] memory delta after 10000 ops: -4.1MB (budget: 50MB)
+ [32mΓ£ô[39m src/__perf__/memory.test.ts [2m ([22m[2m1 test[22m[2m)[22m[33m 376[2mms[22m[39m
+[90mstdout[2m | src/__perf__/memory.test.ts[2m > [22m[2mF2 ΓÇö Memory ceiling (BLOCKING)[2m > [22m[2mRSS delta < 50MB after 10000 classify ops[22m[39m
+[perf] memory delta after 10000 ops: 20.2MB (budget: 50MB)
 
- [32m✓[39m src/__perf__/memory.test.ts [2m ([22m[2m1 test[22m[2m)[22m[33m 599[2mms[22m[39m
- [32m✓[39m test/harness/scenario-schema.test.ts [2m ([22m[2m6 tests[22m[2m)[22m[33m 482[2mms[22m[39m
- [32m✓[39m src/generator/file-generator-manager.test.ts [2m ([22m[2m23 tests[22m[2m)[22m[33m 1056[2mms[22m[39m
- [32m✓[39m src/engine/step-executor.test.ts [2m ([22m[2m11 tests[22m[2m)[22m[33m 1046[2mms[22m[39m
-(node:7048) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ [32mΓ£ô[39m test/harness/scenario.test.ts [2m ([22m[2m6 tests[22m[2m)[22m[33m 660[2mms[22m[39m
+ [32mΓ£ô[39m evals/classifier/fuzz.test.ts [2m ([22m[2m4 tests[22m[2m)[22m[33m 501[2mms[22m[39m
+ [32mΓ£ô[39m src/analyzer/project-analyzer-calculator.test.ts [2m ([22m[2m10 tests[22m[2m)[22m[33m 493[2mms[22m[39m
+ [32mΓ£ô[39m src/generator/file-generator.test.ts [2m ([22m[2m13 tests[22m[2m)[22m[33m 882[2mms[22m[39m
+ [32mΓ£ô[39m src/learning/learning-database.test.ts [2m ([22m[2m48 tests[22m[2m)[22m[33m 2439[2mms[22m[39m
+ [32mΓ£ô[39m src/generator/file-generator-manager.test.ts [2m ([22m[2m23 tests[22m[2m)[22m[33m 1151[2mms[22m[39m
+(node:37388) ExperimentalWarning: SQLite is an experimental feature and might change at any time
 (Use `node --trace-warnings ...` to show where the warning was created)
- [32m✓[39m src/learning/learning-database.test.ts [2m ([22m[2m48 tests[22m[2m)[22m[33m 2853[2mms[22m[39m
- [32m✓[39m src/learning/__tests__/pragmas.test.ts [2m ([22m[2m7 tests[22m[2m)[22m[33m 327[2mms[22m[39m
-(node:7048) ExperimentalWarning: SQLite is an experimental feature and might change at any time
-(Use `node --trace-warnings ...` to show where the warning was created)
- [32m✓[39m src/watcher/file-watcher-manager.test.ts [2m ([22m[2m24 tests[22m[2m)[22m[90m 118[2mms[22m[39m
- [32m✓[39m src/__integration__/prompt-injection.test.ts [2m ([22m[2m3 tests[22m[2m)[22m[90m 170[2mms[22m[39m
- [32m✓[39m src/model/project-model-persistence.test.ts [2m ([22m[2m31 tests[22m[2m)[22m[90m 110[2mms[22m[39m
- [32m✓[39m src/__perf__/disposable-leak.test.ts [2m ([22m[2m5 tests[22m[2m)[22m[90m 215[2mms[22m[39m
- [32m✓[39m src/__perf__/activation.test.ts [2m ([22m[2m1 test[22m[2m)[22m[90m 107[2mms[22m[39m
-[90mstdout[2m | src/__perf__/activation.test.ts[2m > [22m[2mF1 — Activation latency (BLOCKING)[2m > [22m[2mmedian activation time is < 250ms[22m[39m
-[perf] activation median: 0.5ms (budget: 250ms)
+ [32mΓ£ô[39m src/learning/__tests__/pragmas.test.ts [2m ([22m[2m7 tests[22m[2m)[22m[33m 301[2mms[22m[39m
+ [32mΓ£ô[39m src/engine/step-executor.test.ts [2m ([22m[2m11 tests[22m[2m)[22m[33m 1037[2mms[22m[39m
+ [32mΓ£ô[39m test/harness/scenario-schema.test.ts [2m ([22m[2m6 tests[22m[2m)[22m[33m 806[2mms[22m[39m
+ [32mΓ£ô[39m src/extension.test.ts [2m ([22m[2m1 test[22m[2m)[22m[33m 1138[2mms[22m[39m
+ [32mΓ£ô[39m src/shell/__tests__/cancellation.test.ts [2m ([22m[2m6 tests[22m[2m)[22m[33m 3210[2mms[22m[39m
+ [32mΓ£ô[39m src/detector/ide-detector.test.ts [2m ([22m[2m14 tests[22m[2m)[22m[33m 380[2mms[22m[39m
+ [32mΓ£ô[39m src/__integration__/prompt-injection.test.ts [2m ([22m[2m3 tests[22m[2m)[22m[90m 251[2mms[22m[39m
+[90mstdout[2m | src/__integration__/degraded-mode.test.ts[2m > [22m[2mLearningDatabase ΓÇö degraded-mode safety[2m > [22m[2mgetWorkflowStats() on 1000 records returns in under 500ms[22m[39m
+[perf] getWorkflowStats(1000 records): 3.6ms
 
- [32m✓[39m src/detector/ide-detector.test.ts [2m ([22m[2m14 tests[22m[2m)[22m[90m 108[2mms[22m[39m
-(node:7048) ExperimentalWarning: SQLite is an experimental feature and might change at any time
-(Use `node --trace-warnings ...` to show where the warning was created)
-(node:7048) ExperimentalWarning: SQLite is an experimental feature and might change at any time
-(Use `node --trace-warnings ...` to show where the warning was created)
- [32m✓[39m src/model/database.test.ts [2m ([22m[2m9 tests[22m[2m)[22m[90m 111[2mms[22m[39m
- [32m✓[39m src/generator/section-manager.test.ts [2m ([22m[2m27 tests[22m[2m)[22m[33m 1287[2mms[22m[39m
+ [32mΓ£ô[39m src/__integration__/degraded-mode.test.ts [2m ([22m[2m5 tests[22m[2m)[22m[33m 4532[2mms[22m[39m
+ [32mΓ£ô[39m src/generator/section-manager.test.ts [2m ([22m[2m27 tests[22m[2m)[22m[33m 794[2mms[22m[39m
+ [32mΓ£ô[39m src/__perf__/disposable-leak.test.ts [2m ([22m[2m5 tests[22m[2m)[22m[90m 275[2mms[22m[39m
+ [32mΓ£ô[39m src/__perf__/performance.test.ts [2m ([22m[2m4 tests[22m[2m)[22m[33m 4647[2mms[22m[39m
 [90mstdout[2m | src/__perf__/performance.test.ts[2m > [22m[2mPerf: IntentClassifier.classify()[2m > [22m[2mmedian inference time stays within budget[22m[39m
-[perf] IntentClassifier.classify: 0.1ms median / 100ms budget (0%) — OK
+[perf] IntentClassifier.classify: 0.2ms median / 100ms budget (0%) ΓÇö OK
 
 [90mstdout[2m | src/__perf__/performance.test.ts[2m > [22m[2mPerf: WorkflowEngine.execute() (3 steps, fake handler)[2m > [22m[2mmedian wall time stays within budget[22m[39m
-[perf] WorkflowEngine.execute (3 steps): 0.3ms median / 5000ms budget (0%) — OK
+[perf] WorkflowEngine.execute (3 steps): 0.2ms median / 5000ms budget (0%) ΓÇö OK
 
 [90mstdout[2m | src/__perf__/performance.test.ts[2m > [22m[2mPerf: WorkflowEngine.execute() (7 steps, fake handler)[2m > [22m[2mmedian wall time stays within budget[22m[39m
-[perf] WorkflowEngine.execute (7 steps): 0.1ms median / 10000ms budget (0%) — OK
+[perf] WorkflowEngine.execute (7 steps): 0.2ms median / 10000ms budget (0%) ΓÇö OK
 
 [90mstdout[2m | src/__perf__/performance.test.ts[2m > [22m[2mPerf: LearningDatabase.getWorkflowStats() (1,000 records)[2m > [22m[2mmedian query time stays within budget[22m[39m
-[perf] LearningDatabase.getWorkflowStats (1k rows): 1.6ms median / 250ms budget (1%) — OK
+[perf] LearningDatabase.getWorkflowStats (1k rows): 4.1ms median / 250ms budget (2%) ΓÇö OK
 
- [32m✓[39m src/__perf__/performance.test.ts [2m ([22m[2m4 tests[22m[2m)[22m[33m 4131[2mms[22m[39m
- [32m✓[39m src/__integration__/durability.test.ts [2m ([22m[2m1 test[22m[2m)[22m[90m 250[2mms[22m[39m
- [32m✓[39m src/analyzer/directory-scanner-calculator.test.ts [2m ([22m[2m9 tests[22m[2m)[22m[90m 121[2mms[22m[39m
-[90mstdout[2m | src/__integration__/degraded-mode.test.ts[2m > [22m[2mLearningDatabase — degraded-mode safety[2m > [22m[2mgetWorkflowStats() on 1000 records returns in under 500ms[22m[39m
-[perf] getWorkflowStats(1000 records): 5.2ms
+(node:37388) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32mΓ£ô[39m src/shell/__tests__/diagnostics.test.ts [2m ([22m[2m3 tests[22m[2m)[22m[90m 65[2mms[22m[39m
+ [32mΓ£ô[39m src/__integration__/cancellation.test.ts [2m ([22m[2m9 tests[22m[2m)[22m[90m 26[2mms[22m[39m
+ [32mΓ£ô[39m src/model/project-model-persistence.test.ts [2m ([22m[2m31 tests[22m[2m)[22m[90m 106[2mms[22m[39m
+(node:37388) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32mΓ£ô[39m src/analyzer/dependency-scanner.test.ts [2m ([22m[2m9 tests[22m[2m)[22m[33m 317[2mms[22m[39m
+(node:37388) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32mΓ£ô[39m src/shell/__tests__/logger-rotation.test.ts [2m ([22m[2m5 tests[22m[2m)[22m[90m 77[2mms[22m[39m
+ [32mΓ£ô[39m src/__integration__/migration-corpus.test.ts [2m ([22m[2m5 tests[22m[2m)[22m[90m 124[2mms[22m[39m
+ [32mΓ£ô[39m src/analyzer/dependency-scanner-calculator.test.ts [2m ([22m[2m11 tests[22m[2m)[22m[90m 106[2mms[22m[39m
+ [32mΓ£ô[39m src/learning/__tests__/error-handling.test.ts [2m ([22m[2m6 tests[22m[2m)[22m[90m 101[2mms[22m[39m
+ [32mΓ£ô[39m src/watcher/file-watcher-manager.test.ts [2m ([22m[2m24 tests[22m[2m)[22m[90m 138[2mms[22m[39m
+ [32mΓ£ô[39m src/analyzer/directory-scanner-calculator.test.ts [2m ([22m[2m9 tests[22m[2m)[22m[90m 196[2mms[22m[39m
+(node:37388) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:37388) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+[90mstdout[2m | src/__perf__/activation.test.ts[2m > [22m[2mF1 ΓÇö Activation latency (BLOCKING)[2m > [22m[2mmedian activation time is < 250ms[22m[39m
+[perf] activation median: 1.1ms (budget: 250ms)
 
- [32m✓[39m src/__integration__/degraded-mode.test.ts [2m ([22m[2m5 tests[22m[2m)[22m[33m 5397[2mms[22m[39m
-(node:7048) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ [32mΓ£ô[39m src/__perf__/activation.test.ts [2m ([22m[2m1 test[22m[2m)[22m[90m 167[2mms[22m[39m
+ [32mΓ£ô[39m src/model/database.test.ts [2m ([22m[2m9 tests[22m[2m)[22m[90m 117[2mms[22m[39m
+ [32mΓ£ô[39m src/spawner/prompt-builder.test.ts [2m ([22m[2m8 tests[22m[2m)[22m[90m 15[2mms[22m[39m
+ [32mΓ£ô[39m src/watcher/__tests__/debounce.test.ts [2m ([22m[2m4 tests[22m[2m)[22m[90m 65[2mms[22m[39m
+ [32mΓ£ô[39m src/__integration__/durability.test.ts [2m ([22m[2m1 test[22m[2m)[22m[33m 526[2mms[22m[39m
+(node:37388) ExperimentalWarning: SQLite is an experimental feature and might change at any time
 (Use `node --trace-warnings ...` to show where the warning was created)
- [32m✓[39m src/analyzer/dependency-scanner-calculator.test.ts [2m ([22m[2m11 tests[22m[2m)[22m[90m 64[2mms[22m[39m
- [32m✓[39m src/__integration__/migration-corpus.test.ts [2m ([22m[2m5 tests[22m[2m)[22m[90m 104[2mms[22m[39m
-(node:7048) ExperimentalWarning: SQLite is an experimental feature and might change at any time
-(Use `node --trace-warnings ...` to show where the warning was created)
-(node:7048) ExperimentalWarning: SQLite is an experimental feature and might change at any time
-(Use `node --trace-warnings ...` to show where the warning was created)
- [32m✓[39m src/learning/__tests__/error-handling.test.ts [2m ([22m[2m6 tests[22m[2m)[22m[90m 121[2mms[22m[39m
- [32m✓[39m src/dictionary/dictionary-query.test.ts [2m ([22m[2m13 tests[22m[2m)[22m[90m 72[2mms[22m[39m
- [32m✓[39m src/analyzer/dependency-scanner.test.ts [2m ([22m[2m9 tests[22m[2m)[22m[90m 191[2mms[22m[39m
- [32m✓[39m src/shell/__tests__/diagnostics.test.ts [2m ([22m[2m3 tests[22m[2m)[22m[90m 116[2mms[22m[39m
- [32m✓[39m src/__integration__/classifier-eval.test.ts [2m ([22m[2m9 tests[22m[2m)[22m[90m 114[2mms[22m[39m
-[90mstdout[2m | src/__integration__/classifier-eval.test.ts[2m > [22m[2mClassifier eval: macro-accuracy[2m > [22m[2mmacro-averaged accuracy is ≥ 80%[22m[39m
+ [32mΓ£ô[39m src/__integration__/workflow-end-to-end.test.ts [2m ([22m[2m9 tests[22m[2m)[22m[90m 57[2mms[22m[39m
+ [32mΓ£ô[39m src/__integration__/classifier-eval.test.ts [2m ([22m[2m9 tests[22m[2m)[22m[90m 81[2mms[22m[39m
+[90mstdout[2m | src/__integration__/classifier-eval.test.ts[2m > [22m[2mClassifier eval: macro-accuracy[2m > [22m[2mmacro-averaged accuracy is ΓëÑ 80%[22m[39m
 [eval] macro-acc: 95.2% (204/214 correct)
 
-[90mstdout[2m | src/__integration__/classifier-eval.test.ts[2m > [22m[2mClassifier eval: per-intent accuracy[2m > [22m[2mbug_fix: accuracy ≥ 80% (28 samples)[22m[39m
+[90mstdout[2m | src/__integration__/classifier-eval.test.ts[2m > [22m[2mClassifier eval: per-intent accuracy[2m > [22m[2mbug_fix: accuracy ΓëÑ 80% (28 samples)[22m[39m
 [eval] bug_fix: 100.0% (threshold=80%, n=28)
 
-[90mstdout[2m | src/__integration__/classifier-eval.test.ts[2m > [22m[2mClassifier eval: per-intent accuracy[2m > [22m[2mfeature: accuracy ≥ 80% (28 samples)[22m[39m
-[eval] feature: 92.9% (threshold=80%, n=28)
+[90mstdout[2m | src/__integration__/classifier-eval.test.ts[2m > [22m[2mClassifier eval: per-intent accuracy[2m > [22m[2mfeature: accuracy ΓëÑ 80% (28 samples)[22m[39m
+[eval] feature: 96.4% (threshold=80%, n=28)
 
-[90mstdout[2m | src/__integration__/classifier-eval.test.ts[2m > [22m[2mClassifier eval: per-intent accuracy[2m > [22m[2mrefactor: accuracy ≥ 80% (29 samples)[22m[39m
+[90mstdout[2m | src/__integration__/classifier-eval.test.ts[2m > [22m[2mClassifier eval: per-intent accuracy[2m > [22m[2mrefactor: accuracy ΓëÑ 80% (29 samples)[22m[39m
 [eval] refactor: 93.1% (threshold=80%, n=29)
 
-[90mstdout[2m | src/__integration__/classifier-eval.test.ts[2m > [22m[2mClassifier eval: per-intent accuracy[2m > [22m[2mreview: accuracy ≥ 80% (27 samples)[22m[39m
-[eval] review: 100.0% (threshold=80%, n=27)
+[90mstdout[2m | src/__integration__/classifier-eval.test.ts[2m > [22m[2mClassifier eval: per-intent accuracy[2m > [22m[2mreview: accuracy ΓëÑ 80% (27 samples)[22m[39m
+[eval] review: 96.3% (threshold=80%, n=27)
 
-[90mstdout[2m | src/__integration__/classifier-eval.test.ts[2m > [22m[2mClassifier eval: per-intent accuracy[2m > [22m[2mdocument: accuracy ≥ 80% (27 samples)[22m[39m
+[90mstdout[2m | src/__integration__/classifier-eval.test.ts[2m > [22m[2mClassifier eval: per-intent accuracy[2m > [22m[2mdocument: accuracy ΓëÑ 80% (27 samples)[22m[39m
 [eval] document: 100.0% (threshold=80%, n=27)
 
-[90mstdout[2m | src/__integration__/classifier-eval.test.ts[2m > [22m[2mClassifier eval: per-intent accuracy[2m > [22m[2mdependency: accuracy ≥ 80% (28 samples)[22m[39m
+[90mstdout[2m | src/__integration__/classifier-eval.test.ts[2m > [22m[2mClassifier eval: per-intent accuracy[2m > [22m[2mdependency: accuracy ΓëÑ 80% (28 samples)[22m[39m
 [eval] dependency: 85.7% (threshold=80%, n=28)
 
-[90mstdout[2m | src/__integration__/classifier-eval.test.ts[2m > [22m[2mClassifier eval: per-intent accuracy[2m > [22m[2monboard: accuracy ≥ 80% (27 samples)[22m[39m
+[90mstdout[2m | src/__integration__/classifier-eval.test.ts[2m > [22m[2mClassifier eval: per-intent accuracy[2m > [22m[2monboard: accuracy ΓëÑ 80% (27 samples)[22m[39m
 [eval] onboard: 100.0% (threshold=80%, n=27)
 
-[90mstdout[2m | src/__integration__/classifier-eval.test.ts[2m > [22m[2mClassifier eval: per-intent accuracy[2m > [22m[2mgeneral_chat: accuracy ≥ 80% (20 samples)[22m[39m
+[90mstdout[2m | src/__integration__/classifier-eval.test.ts[2m > [22m[2mClassifier eval: per-intent accuracy[2m > [22m[2mgeneral_chat: accuracy ΓëÑ 80% (20 samples)[22m[39m
 [eval] general_chat: 90.0% (threshold=80%, n=20)
 
- [32m✓[39m src/shell/__tests__/logger-rotation.test.ts [2m ([22m[2m5 tests[22m[2m)[22m[90m 61[2mms[22m[39m
- [32m✓[39m src/shell/chat-participant.test.ts [2m ([22m[2m17 tests[22m[2m)[22m[90m 125[2mms[22m[39m
- [32m✓[39m src/watcher/change-classifier.test.ts [2m ([22m[2m77 tests[22m[2m)[22m[90m 55[2mms[22m[39m
- [32m✓[39m src/analyzer/project-analyzer-calculator.test.ts [2m ([22m[2m10 tests[22m[2m)[22m[33m 3227[2mms[22m[39m
- [32m✓[39m src/analyzer/directory-scanner.test.ts [2m ([22m[2m4 tests[22m[2m)[22m[90m 54[2mms[22m[39m
-(node:7048) ExperimentalWarning: SQLite is an experimental feature and might change at any time
-(Use `node --trace-warnings ...` to show where the warning was created)
- [32m✓[39m src/__integration__/fs-boundary.test.ts [2m ([22m[2m1 test[22m[2m)[22m[90m 47[2mms[22m[39m
+ [32mΓ£ô[39m src/analyzer/directory-scanner.test.ts [2m ([22m[2m4 tests[22m[2m)[22m[90m 87[2mms[22m[39m
+ [32mΓ£ô[39m src/engine/model-priority.test.ts [2m ([22m[2m6 tests[22m[2m)[22m[90m 38[2mms[22m[39m
+ [32mΓ£ô[39m src/dictionary/dictionary-query.test.ts [2m ([22m[2m13 tests[22m[2m)[22m[90m 54[2mms[22m[39m
+ [32mΓ£ô[39m src/watcher/change-classifier.test.ts [2m ([22m[2m77 tests[22m[2m)[22m[90m 58[2mms[22m[39m
+ [32mΓ£ô[39m src/__integration__/fs-boundary.test.ts [2m ([22m[2m1 test[22m[2m)[22m[90m 51[2mms[22m[39m
 [90mstdout[2m | src/__integration__/fs-boundary.test.ts[2m > [22m[2mFilesystem write boundary[2m > [22m[2msource files that write to disk only reference allowed path prefixes[22m[39m
 [fs-boundary] Files with write calls: [
   [32m'C:\\dev\\Roadie\\roadie-App\\src\\generator\\file-generator.ts'[39m,
@@ -145,196 +148,169 @@
   [32m'C:\\dev\\Roadie\\roadie-App\\src\\shell\\vscode-providers.ts'[39m
 ]
 
- [32m✓[39m src/dictionary/entity-writer.test.ts [2m ([22m[2m12 tests[22m[2m)[22m[90m 47[2mms[22m[39m
- [32m✓[39m src/__integration__/workflow-end-to-end.test.ts [2m ([22m[2m9 tests[22m[2m)[22m[90m 80[2mms[22m[39m
- [32m✓[39m src/generator/file-generator.snapshot.test.ts [2m ([22m[2m13 tests[22m[2m)[22m[90m 48[2mms[22m[39m
- [32m✓[39m src/tracking/edit-tracker.test.ts [2m ([22m[2m17 tests[22m[2m)[22m[90m 37[2mms[22m[39m
- [32m✓[39m src/__integration__/no-network.test.ts [2m ([22m[2m1 test[22m[2m)[22m[90m 57[2mms[22m[39m
- [32m✓[39m src/__integration__/general-chat-fallback.test.ts [2m ([22m[2m7 tests[22m[2m)[22m[90m 48[2mms[22m[39m
- [33m❯[39m src/engine/definitions/workflows.test.ts [2m ([22m[2m67 tests[22m [2m|[22m [31m3 failed[39m[2m)[22m[90m 82[2mms[22m[39m
-[31m   [33m❯[31m src/engine/definitions/workflows.test.ts[2m > [22mAll Workflow Definitions — structure[2m > [22mFeature steps all have prompt templates[39m
-[31m     → Cannot read properties of undefined (reading 'length')[39m
-[31m   [33m❯[31m src/engine/definitions/workflows.test.ts[2m > [22mAll Workflow Definitions — structure[2m > [22mFeature steps all have a non-empty contextScope[39m
-[31m     → Step gather-app-context has invalid contextScope 'undefined': expected [ 'full', 'stack', 'structure', …(2) ] to include undefined[39m
-[31m   [33m❯[31m src/engine/definitions/workflows.test.ts[2m > [22mFeature Workflow[2m > [22mcompletes all steps with mock handler[39m
-[31m     → expected 'WAITING_FOR_APPROVAL' to be 'COMPLETED' // Object.is equality[39m
- [32m✓[39m src/engine/definitions/bug-fix.test.ts [2m ([22m[2m12 tests[22m[2m)[22m[90m 53[2mms[22m[39m
- [32m✓[39m src/generator/templates/copilot-instructions.test.ts [2m ([22m[2m11 tests[22m[2m)[22m[90m 27[2mms[22m[39m
- [32m✓[39m src/engine/workflow-engine.test.ts [2m ([22m[2m11 tests[22m[2m)[22m[90m 34[2mms[22m[39m
- [32m✓[39m src/generator/templates/path-instructions.test.ts [2m ([22m[2m15 tests[22m[2m)[22m[90m 37[2mms[22m[39m
- [32m✓[39m src/__integration__/manifest-consistency.test.ts [2m ([22m[2m10 tests[22m[2m)[22m[90m 27[2mms[22m[39m
- [32m✓[39m src/generator/templates/cursor-rules-dir.test.ts [2m ([22m[2m16 tests[22m[2m)[22m[90m 29[2mms[22m[39m
- [32m✓[39m src/shell/commands.test.ts [2m ([22m[2m13 tests[22m[2m)[22m[90m 45[2mms[22m[39m
- [32m✓[39m src/model/project-model.test.ts [2m ([22m[2m9 tests[22m[2m)[22m[90m 12[2mms[22m[39m
- [32m✓[39m src/generator/templates/claude-md.test.ts [2m ([22m[2m14 tests[22m[2m)[22m[90m 32[2mms[22m[39m
- [32m✓[39m src/shell/__tests__/telemetry.test.ts [2m ([22m[2m12 tests[22m[2m)[22m[90m 22[2mms[22m[39m
- [32m✓[39m src/shell/__contract__/vscode.contract.test.ts [2m ([22m[2m6 tests[22m[2m)[22m[90m 24[2mms[22m[39m
- [32m✓[39m src/engine/model-resolver.test.ts [2m ([22m[2m12 tests[22m[2m)[22m[90m 27[2mms[22m[39m
- [32m✓[39m src/shell/error-reporter.test.ts [2m ([22m[2m3 tests[22m[2m)[22m[90m 23[2mms[22m[39m
- [32m✓[39m src/spawner/agent-spawner.test.ts [2m ([22m[2m7 tests[22m[2m)[22m[90m 34[2mms[22m[39m
- [32m✓[39m src/__integration__/cancellation.test.ts [2m ([22m[2m9 tests[22m[2m)[22m[90m 40[2mms[22m[39m
- [32m✓[39m src/shell/session-manager.test.ts [2m ([22m[2m8 tests[22m[2m)[22m[90m 22[2mms[22m[39m
- [32m✓[39m src/generator/templates/cursor-rules.test.ts [2m ([22m[2m12 tests[22m[2m)[22m[90m 20[2mms[22m[39m
- [32m✓[39m src/__integration__/slash-command-routing.test.ts [2m ([22m[2m10 tests[22m[2m)[22m[90m 7[2mms[22m[39m
- [32m✓[39m evals/classifier/dataset.test.ts [2m ([22m[2m6 tests[22m[2m)[22m[90m 6[2mms[22m[39m
- [32m✓[39m src/engine/model-priority.test.ts [2m ([22m[2m6 tests[22m[2m)[22m[90m 15[2mms[22m[39m
- [32m✓[39m src/spawner/tool-registry.test.ts [2m ([22m[2m5 tests[22m[2m)[22m[90m 12[2mms[22m[39m
- [32m✓[39m src/spawner/prompt-builder.test.ts [2m ([22m[2m8 tests[22m[2m)[22m[90m 19[2mms[22m[39m
- [32m✓[39m src/shell/code-action-provider.test.ts [2m ([22m[2m9 tests[22m[2m)[22m[90m 14[2mms[22m[39m
- [32m✓[39m src/shell/__contract__/fake.contract.test.ts [2m ([22m[2m8 tests[22m[2m)[22m[90m 16[2mms[22m[39m
- [32m✓[39m src/__integration__/concurrent-access.test.ts [2m ([22m[2m3 tests[22m[2m)[22m[33m 15455[2mms[22m[39m
+ [32mΓ£ô[39m src/tracking/edit-tracker.test.ts [2m ([22m[2m17 tests[22m[2m)[22m[90m 49[2mms[22m[39m
+ [32mΓ£ô[39m src/generator/file-generator.snapshot.test.ts [2m ([22m[2m13 tests[22m[2m)[22m[90m 47[2mms[22m[39m
+(node:37388) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32mΓ£ô[39m src/__integration__/general-chat-fallback.test.ts [2m ([22m[2m7 tests[22m[2m)[22m[90m 53[2mms[22m[39m
+ [32mΓ£ô[39m src/dictionary/entity-writer.test.ts [2m ([22m[2m12 tests[22m[2m)[22m[90m 58[2mms[22m[39m
+ [32mΓ£ô[39m src/spawner/agent-spawner.test.ts [2m ([22m[2m7 tests[22m[2m)[22m[90m 45[2mms[22m[39m
+ [32mΓ£ô[39m src/generator/templates/claude-md.test.ts [2m ([22m[2m14 tests[22m[2m)[22m[90m 37[2mms[22m[39m
+ [32mΓ£ô[39m src/shell/commands.test.ts [2m ([22m[2m13 tests[22m[2m)[22m[90m 58[2mms[22m[39m
+ [32mΓ£ô[39m src/__integration__/manifest-consistency.test.ts [2m ([22m[2m10 tests[22m[2m)[22m[90m 62[2mms[22m[39m
+ [32mΓ£ô[39m src/__integration__/slash-command-routing.test.ts [2m ([22m[2m10 tests[22m[2m)[22m[90m 27[2mms[22m[39m
+ [33mΓ¥»[39m src/engine/workflow-engine.test.ts [2m ([22m[2m21 tests[22m [2m|[22m [31m2 failed[39m[2m)[22m[90m 115[2mms[22m[39m
+[31m   [33mΓ¥»[31m src/engine/workflow-engine.test.ts[2m > [22mWorkflowEngine ΓÇö pausedSessionId fields[2m > [22msets pausedSessionId on result when a step requiresApproval[39m
+[31m     ΓåÆ expected undefined to be 'approval' // Object.is equality[39m
+[31m   [33mΓ¥»[31m src/engine/workflow-engine.test.ts[2m > [22mWorkflowEngine ΓÇö rebindTurnHandles[2m > [22mrebinds cancellation so new token isCancelled is observed[39m
+[31m     ΓåÆ engine.rebindTurnHandles is not a function[39m
+ [32mΓ£ô[39m src/engine/definitions/bug-fix.test.ts [2m ([22m[2m12 tests[22m[2m)[22m[90m 164[2mms[22m[39m
+ [32mΓ£ô[39m src/generator/templates/path-instructions.test.ts [2m ([22m[2m15 tests[22m[2m)[22m[90m 53[2mms[22m[39m
+ [32mΓ£ô[39m src/__integration__/feature-workflow-real-agents.test.ts [2m ([22m[2m5 tests[22m[2m)[22m[90m 35[2mms[22m[39m
+ [32mΓ£ô[39m evals/classifier/dataset.test.ts [2m ([22m[2m6 tests[22m[2m)[22m[90m 19[2mms[22m[39m
+ [32mΓ£ô[39m src/generator/templates/cursor-rules.test.ts [2m ([22m[2m12 tests[22m[2m)[22m[90m 29[2mms[22m[39m
+ [32mΓ£ô[39m src/shell/code-action-provider.test.ts [2m ([22m[2m9 tests[22m[2m)[22m[90m 16[2mms[22m[39m
+ [32mΓ£ô[39m src/generator/templates/copilot-instructions.test.ts [2m ([22m[2m11 tests[22m[2m)[22m[90m 37[2mms[22m[39m
+ [32mΓ£ô[39m src/shell/__contract__/fake.contract.test.ts [2m ([22m[2m8 tests[22m[2m)[22m[90m 91[2mms[22m[39m
+ [32mΓ£ô[39m src/engine/model-resolver.test.ts [2m ([22m[2m12 tests[22m[2m)[22m[90m 29[2mms[22m[39m
+ [32mΓ£ô[39m src/shell/__contract__/vscode.contract.test.ts [2m ([22m[2m6 tests[22m[2m)[22m[90m 38[2mms[22m[39m
+ [32mΓ£ô[39m src/shell/error-reporter.test.ts [2m ([22m[2m3 tests[22m[2m)[22m[90m 103[2mms[22m[39m
+ [32mΓ£ô[39m src/model/project-model.test.ts [2m ([22m[2m9 tests[22m[2m)[22m[90m 44[2mms[22m[39m
+ [32mΓ£ô[39m src/spawner/tool-registry.test.ts [2m ([22m[2m5 tests[22m[2m)[22m[90m 19[2mms[22m[39m
+ [32mΓ£ô[39m src/__integration__/p4-p7-e2e.test.ts [2m ([22m[2m9 tests[22m[2m)[22m[90m 27[2mms[22m[39m
+ [32mΓ£ô[39m src/shell/__tests__/telemetry.test.ts [2m ([22m[2m12 tests[22m[2m)[22m[90m 26[2mms[22m[39m
+ [32mΓ£ô[39m src/shell/session-manager.test.ts [2m ([22m[2m8 tests[22m[2m)[22m[90m 19[2mms[22m[39m
+ [32mΓ£ô[39m src/generator/templates/cursor-rules-dir.test.ts [2m ([22m[2m16 tests[22m[2m)[22m[90m 37[2mms[22m[39m
+ [32mΓ£ô[39m src/__integration__/concurrent-access.test.ts [2m ([22m[2m3 tests[22m[2m)[22m[33m 18618[2mms[22m[39m
 
-[31m⎯⎯⎯⎯⎯⎯[1m[7m Failed Suites 3 [27m[22m⎯⎯⎯⎯⎯⎯⎯[39m
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ» Failed Tests 8 ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»
 
-[31m[1m[7m FAIL [27m[22m[39m evals/classifier/fuzz.test.ts [2m[ evals/classifier/fuzz.test.ts ][22m
-[31m[1m[7m FAIL [27m[22m[39m src/shell/__tests__/cancellation.test.ts [2m[ src/shell/__tests__/cancellation.test.ts ][22m
-[31m[1mError[22m: Failed to load url fast-check (resolved id: fast-check) in C:/dev/Roadie/roadie-App/src/shell/__tests__/cancellation.test.ts. Does the file exist?[39m
-[90m [2m❯[22m loadAndTransform node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:[2m51969:17[22m[39m
+ FAIL  src/engine/workflow-engine.test.ts > WorkflowEngine ΓÇö pausedSessionId fields > sets pausedSessionId on result when a step requiresApproval
+AssertionError: expected undefined to be 'approval' // Object.is equality
 
-[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/13]⎯[22m[39m
+- Expected: 
+"approval"
 
-[31m[1m[7m FAIL [27m[22m[39m src/watcher/__tests__/debounce.test.ts [2m[ src/watcher/__tests__/debounce.test.ts ][22m
-[31m[1mError[22m: Failed to load url fast-check (resolved id: fast-check) in C:/dev/Roadie/roadie-App/src/shell/__tests__/cancellation.test.ts. Does the file exist?[39m
-[90m [2m❯[22m loadAndTransform node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:[2m51969:17[22m[39m
++ Received: 
+undefined
 
-[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/13]⎯[22m[39m
+ Γ¥» src/engine/workflow-engine.test.ts:295:32
+    293|     expect(result.pausedSessionId).toBeDefined();
+    294|     expect(typeof result.pausedSessionId).toBe('string');
+    295|     expect(result.pauseReason).toBe('approval');
+       |                                ^
+    296|     expect(result.lastStepName).toBe('Step 1');
+    297|   });
 
-[31m⎯⎯⎯⎯⎯⎯[1m[7m Failed Tests 10 [27m[22m⎯⎯⎯⎯⎯⎯⎯[39m
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[1/8]ΓÄ»
 
-[31m[1m[7m FAIL [27m[22m[39m test/harness/scenario.test.ts[2m > [22mscenario runner[2m > [22mexecutes confidence-adjusted.json
-[31m[1mError[22m: intent.confidence failed comparator >= 0.7. actual=0.5800000000000001[39m
-[36m [2m❯[22m assertComparator test/harness/scenario-runner.ts:[2m363:11[22m[39m
-    [90m361| [39m
-    [90m362| [39m  if (!pass) {
-    [90m363| [39m    throw new Error(`${label} failed comparator ${expression}. actual=…
-    [90m   | [39m          [31m^[39m
-    [90m364| [39m  }
-    [90m365| [39m}
-[90m [2m❯[22m assertScenarioExpectations test/harness/scenario-runner.ts:[2m289:3[22m[39m
-[90m [2m❯[22m Module.runScenario test/harness/scenario-runner.ts:[2m148:5[22m[39m
-[90m [2m❯[22m test/harness/scenario.test.ts:[2m17:22[22m[39m
+ FAIL  src/engine/workflow-engine.test.ts > WorkflowEngine ΓÇö rebindTurnHandles > rebinds cancellation so new token isCancelled is observed
+TypeError: engine.rebindTurnHandles is not a function
+ Γ¥» src/engine/workflow-engine.test.ts:343:12
+    341|     const newProgress = { report: vi.fn(), reportMarkdown: vi.fn() };
+    342| 
+    343|     engine.rebindTurnHandles(result.pausedSessionId!, {
+       |            ^
+    344|       cancellation: newCancellation,
+    345|       progress: newProgress,
 
-[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/13]⎯[22m[39m
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[2/8]ΓÄ»
 
-[31m[1m[7m FAIL [27m[22m[39m test/harness/scenario.test.ts[2m > [22mscenario runner[2m > [22mexecutes mixed-js-ts-onboard.json
-[31m[1m[7m FAIL [27m[22m[39m test/harness/scenario.test.ts[2m > [22mscenario runner[2m > [22mexecutes nested-monorepo-review.json
-[31m[1mError[22m: intent.confidence failed comparator >= 0.6. actual=0.55[39m
-[36m [2m❯[22m assertComparator test/harness/scenario-runner.ts:[2m363:11[22m[39m
-    [90m361| [39m
-    [90m362| [39m  if (!pass) {
-    [90m363| [39m    throw new Error(`${label} failed comparator ${expression}. actual=…
-    [90m   | [39m          [31m^[39m
-    [90m364| [39m  }
-    [90m365| [39m}
-[90m [2m❯[22m assertScenarioExpectations test/harness/scenario-runner.ts:[2m289:3[22m[39m
-[90m [2m❯[22m Module.runScenario test/harness/scenario-runner.ts:[2m148:5[22m[39m
-[90m [2m❯[22m test/harness/scenario.test.ts:[2m17:22[22m[39m
+ FAIL  src/shell/chat-participant.test.ts > general_chat LLM fallback > reuses prior workflow context for short follow-up prompts
+AssertionError: expected false to be true // Object.is equality
 
-[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/13]⎯[22m[39m
+- Expected
++ Received
 
-[31m[1m[7m FAIL [27m[22m[39m test/harness/scenario.test.ts[2m > [22mscenario runner[2m > [22mexecutes review-codebase-summary.json
-[31m[1mError[22m: intent.confidence failed comparator >= 0.7. actual=0.55[39m
-[36m [2m❯[22m assertComparator test/harness/scenario-runner.ts:[2m363:11[22m[39m
-    [90m361| [39m
-    [90m362| [39m  if (!pass) {
-    [90m363| [39m    throw new Error(`${label} failed comparator ${expression}. actual=…
-    [90m   | [39m          [31m^[39m
-    [90m364| [39m  }
-    [90m365| [39m}
-[90m [2m❯[22m assertScenarioExpectations test/harness/scenario-runner.ts:[2m289:3[22m[39m
-[90m [2m❯[22m Module.runScenario test/harness/scenario-runner.ts:[2m148:5[22m[39m
-[90m [2m❯[22m test/harness/scenario.test.ts:[2m17:22[22m[39m
+- true
++ false
 
-[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/13]⎯[22m[39m
+ Γ¥» src/shell/chat-participant.test.ts:390:85
+    388|       .map((c: unknown[]) => String(c[0]));
+    389| 
+    390|     expect(secondTurnCalls.some((c) => c.includes('detected intent: **ΓÇª
+       |                                                                                     ^
+    391|     expect(secondTurnCalls.some((c) => c.includes('Intent unclear'))).ΓÇª
+    392|     expect(secondTurnCalls.some((c) => c.includes('**Echo:**'))).toBe(ΓÇª
 
-[31m[1m[7m FAIL [27m[22m[39m src/classifier/intent-classifier-intents.test.ts[2m > [22mbug_fix intent[2m > [22mdetects "fix the login error"
-[31m[1mAssertionError[22m: expected 0.55 to be greater than or equal to 0.7[39m
-[36m [2m❯[22m src/classifier/intent-classifier-intents.test.ts:[2m15:26[22m[39m
-    [90m 13| [39m    const r = classifier.classify('fix the login error');
-    [90m 14| [39m    expect(r.intent).toBe('bug_fix');
-    [90m 15| [39m    expect(r.confidence).toBeGreaterThanOrEqual(CONFIDENCE_THRESHOLDS.…
-    [90m   | [39m                         [31m^[39m
-    [90m 16| [39m  });
-    [90m 17| [39m
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[3/8]ΓÄ»
 
-[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/13]⎯[22m[39m
+ FAIL  src/shell/chat-participant.test.ts > extractThreadId > returns same threadId for two calls with identical first prompt
+TypeError: extractThreadId is not a function
+ Γ¥» src/shell/chat-participant.test.ts:412:17
+    410|     } as any;
+    411| 
+    412|     const id1 = extractThreadId(ctx1, cache);
+       |                 ^
+    413|     const id2 = extractThreadId(ctx2, cache);
+    414|     expect(id1).toBe(id2);
 
-[31m[1m[7m FAIL [27m[22m[39m src/classifier/intent-classifier-intents.test.ts[2m > [22mfeature intent[2m > [22mdetects "implement"
-[31m[1mAssertionError[22m: expected 'command' to be 'feature' // Object.is equality[39m
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[4/8]ΓÄ»
 
-[32m- Expected[39m
-[31m+ Received[39m
+ FAIL  src/shell/chat-participant.test.ts > extractThreadId > returns different threadIds for different first prompts
+TypeError: extractThreadId is not a function
+ Γ¥» src/shell/chat-participant.test.ts:425:12
+    423|     const ctx2 = { history: [{ kind: 'request', prompt: 'first unique ΓÇª
+    424| 
+    425|     expect(extractThreadId(ctx1, cache)).not.toBe(extractThreadId(ctx2ΓÇª
+       |            ^
+    426|   });
+    427| 
 
-[32m- feature[39m
-[31m+ command[39m
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[5/8]ΓÄ»
 
-[36m [2m❯[22m src/classifier/intent-classifier-intents.test.ts:[2m61:22[22m[39m
-    [90m 59| [39m  it('detects "implement"', () => {
-    [90m 60| [39m    const r = classifier.classify('Implement a password reset flow');
-    [90m 61| [39m    expect(r.intent).toBe('feature');
-    [90m   | [39m                     [31m^[39m
-    [90m 62| [39m  });
-    [90m 63| [39m
+ FAIL  src/shell/chat-participant.test.ts > extractThreadId > returns an ephemeral id when history is empty
+TypeError: extractThreadId is not a function
+ Γ¥» src/shell/chat-participant.test.ts:433:16
+    431| 
+    432|     const ctx = { history: [] } as any;
+    433|     const id = extractThreadId(ctx, cache);
+       |                ^
+    434|     expect(typeof id).toBe('string');
+    435|     expect(id.length).toBeGreaterThan(0);
 
-[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/13]⎯[22m[39m
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[6/8]ΓÄ»
 
-[31m[1m[7m FAIL [27m[22m[39m src/classifier/intent-classifier.test.ts[2m > [22mIntentClassifier accuracy (reference dataset)[2m > [22mconfidence is within +/-0.20 of expected for correctly classified prompts
-[31m[1mAssertionError[22m: "Fix the login bug" confidence: got 0.55, expected 0.8: expected 0.25 to be less than or equal to 0.21[39m
-[36m [2m❯[22m src/classifier/intent-classifier.test.ts:[2m46:11[22m[39m
-    [90m 44| [39m          Math.abs(result.confidence - row.expectedConfidence),
-    [90m 45| [39m          `"${row.prompt}" confidence: got ${result.confidence}, expec…
-    [90m 46| [39m        ).toBeLessThanOrEqual(0.21); // 0.21 accounts for IEEE 754 rou…
-    [90m   | [39m          [31m^[39m
-    [90m 47| [39m      }
-    [90m 48| [39m    }
+ FAIL  src/__integration__/feature-workflow-e2e.test.ts > Feature Workflow E2E ΓÇö Multi-turn Interview & Approval > completes full feature workflow: classification ΓåÆ interview ΓåÆ approval ΓåÆ agents
+AssertionError: expected 4 to be 5 // Object.is equality
 
-[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/13]⎯[22m[39m
+- Expected
++ Received
 
-[31m[1m[7m FAIL [27m[22m[39m src/engine/definitions/workflows.test.ts[2m > [22mAll Workflow Definitions — structure[2m > [22mFeature steps all have prompt templates
-[31m[1mTypeError[22m: Cannot read properties of undefined (reading 'length')[39m
-[36m [2m❯[22m src/engine/definitions/workflows.test.ts:[2m84:34[22m[39m
-    [90m 82| [39m  it.each(ALL_WORKFLOWS)('%s steps all have prompt templates', (_name,…
-    [90m 83| [39m    for (const step of wf.steps) {
-    [90m 84| [39m      expect(step.promptTemplate.length, `Step ${step.id} missing temp…
-    [90m   | [39m                                 [31m^[39m
-    [90m 85| [39m    }
-    [90m 86| [39m  });
+- 5
++ 4
 
-[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/13]⎯[22m[39m
+ Γ¥» src/__integration__/feature-workflow-e2e.test.ts:756:40
+    754|     expect(result2.state).toBe(WorkflowState.COMPLETED);
+    755|     // Should have all 5 steps (1 interviewer + 1 approve + 3 agents)
+    756|     expect(result2.stepResults.length).toBe(5);
+       |                                        ^
+    757|     expect(result2.stepResults.every((r) => r.status === 'success')).tΓÇª
+    758| 
 
-[31m[1m[7m FAIL [27m[22m[39m src/engine/definitions/workflows.test.ts[2m > [22mAll Workflow Definitions — structure[2m > [22mFeature steps all have a non-empty contextScope
-[31m[1mAssertionError[22m: Step gather-app-context has invalid contextScope 'undefined': expected [ 'full', 'stack', 'structure', …(2) ] to include undefined[39m
-[36m [2m❯[22m src/engine/definitions/workflows.test.ts:[2m97:96[22m[39m
-    [90m 95| [39m    for (const step of wf.steps) {
-    [90m 96| [39m      if (step.type !== 'parallel') {
-    [90m 97| [39m        expect(validScopes, `Step ${step.id} has invalid contextScope …
-    [90m   | [39m                                                                                               [31m^[39m
-    [90m 98| [39m      }
-    [90m 99| [39m    }
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[7/8]ΓÄ»
 
-[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/13]⎯[22m[39m
+ FAIL  src/engine/definitions/workflows.test.ts > Feature Workflow > completes all steps with mock handler
+AssertionError: expected 1 to be 2 // Object.is equality
 
-[31m[1m[7m FAIL [27m[22m[39m src/engine/definitions/workflows.test.ts[2m > [22mFeature Workflow[2m > [22mcompletes all steps with mock handler
-[31m[1mAssertionError[22m: expected 'WAITING_FOR_APPROVAL' to be 'COMPLETED' // Object.is equality[39m
+- Expected
++ Received
 
-[32m- Expected[39m
-[31m+ Received[39m
+- 2
++ 1
 
-[32m- COMPLETED[39m
-[31m+ WAITING_FOR_APPROVAL[39m
+ Γ¥» src/engine/definitions/workflows.test.ts:131:23
+    129|     // Feature workflow now pauses at step 2 (present-plan) which requΓÇª
+    130|     expect(state).toBe(WorkflowState.WAITING_FOR_APPROVAL);
+    131|     expect(stepCount).toBe(2); // gather-app-context + present-plan
+       |                       ^
+    132|   });
+    133| });
 
-[36m [2m❯[22m src/engine/definitions/workflows.test.ts:[2m125:19[22m[39m
-    [90m123| [39m  it('completes all steps with mock handler', async () => {
-    [90m124| [39m    const { state, stepCount } = await executeWorkflow(FEATURE_WORKFLO…
-    [90m125| [39m    expect(state).toBe(WorkflowState.COMPLETED);
-    [90m   | [39m                  [31m^[39m
-    [90m126| [39m    expect(stepCount).toBe(7);
-    [90m127| [39m  });
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[8/8]ΓÄ»
 
-[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/13]⎯[22m[39m
-
-[2m Test Files [22m [1m[31m7 failed[39m[22m[2m | [22m[1m[32m64 passed[39m[22m[90m (71)[39m
-[2m      Tests [22m [1m[31m10 failed[39m[22m[2m | [22m[1m[32m847 passed[39m[22m[90m (857)[39m
-[2m   Start at [22m 18:25:36
-[2m   Duration [22m 17.43s[2m (transform 5.64s, setup 46ms, collect 16.72s, tests 41.37s, environment 31ms, prepare 35.75s)[22m
+[2m Test Files [22m [1m[31m4 failed[39m[22m[2m | [22m[1m[32m70 passed[39m[22m[90m (74)[39m
+[2m      Tests [22m [1m[31m8 failed[39m[22m[2m | [22m[1m[32m980 passed[39m[22m[90m (988)[39m
+[2m   Start at [22m 02:42:10
+[2m   Duration [22m 20.12s[2m (transform 17.82s, setup 16ms, collect 31.21s, tests 47.08s, environment 57ms, prepare 36.78s)[22m
 

@@ -26,7 +26,6 @@ export interface ConversationSession {
   workflowId?: string; // Last workflow executed in this thread
   paused: boolean; // True if waiting to resume a paused workflow
   pausedSessionId?: string; // Reference to PausedWorkflowSession in WorkflowEngine
-  clarifying?: boolean; // True if user just sent a clarification message (meta-conversation)
 }
 
 /**
@@ -51,7 +50,6 @@ export class SessionManager {
         workflowId: undefined,
         paused: false,
         pausedSessionId: undefined,
-        clarifying: false,
       });
     }
     return this.sessions.get(threadId)!;
@@ -94,18 +92,6 @@ export class SessionManager {
     const session = this.getSession(threadId);
     session.paused = false;
     // Keep pausedSessionId for logging; it will be overwritten on next pause
-  }
-
-  /**
-   * Mark a session as having received a clarification message (meta-conversation).
-   * Called when 'clarify' intent is detected, allowing workflow context to be updated
-   * with refined user intent instead of starting a new workflow.
-   *
-   * @param threadId Unique conversation thread ID
-   */
-  markClarifying(threadId: string): void {
-    const session = this.getSession(threadId);
-    session.clarifying = true;
   }
 
   /**

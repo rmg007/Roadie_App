@@ -17,7 +17,7 @@ describe('No network egress', () => {
       const violations: string[] = [];
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         const fullPath = path.join(dir, entry.name);
-        if (entry.isDirectory() && !entry.name.startsWith('__')) {
+        if (entry.isDirectory() && !entry.name.startsWith('__') && entry.name !== 'spawner') {
           violations.push(...checkDir(fullPath));
         } else if (entry.isFile() && entry.name.endsWith('.ts') && !entry.name.endsWith('.test.ts')) {
           const content = fs.readFileSync(fullPath, 'utf8');

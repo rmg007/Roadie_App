@@ -123,6 +123,66 @@ export class WorkflowEngine {
 
       log.info(`[${definition.id}] Step ${i + 1}/${totalSteps}: "${step.name}" — starting`);
 
+      // Pre-execution approval gate: pause BEFORE running the step body
+      if (step.requiresApproval === true) {
+        const sessionId = `${definition.id}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+        this.transition(definition.id, state, WorkflowState.WAITING_FOR_APPROVAL, log);
+        state = WorkflowState.WAITING_FOR_APPROVAL;
+
+        this.pausedSessions.set(sessionId, {
+          sessionId,
+          workflowId: definition.id,
+          currentStepIndex: i,
+          definition,
+          context,
+          stepResults: [...stepResults],
+          modelTiersUsed: [...tiersUsed],
+          timestamp: new Date(),
+        });
+
+        if (this.learningDb) {
+          const threadId = context.threadId || 'unknown';
+          const snapshot: WorkflowSnapshot = {
+            id: sessionId,
+            workflowId: definition.id,
+            currentStepIndex: i,
+            definition: definition.id,
+            context: this.serializeContext(context),
+            stepResults: [...stepResults],
+            completedStepIds: stepResults.map((r) => r.stepId),
+            modelTiersUsed: [...tiersUsed],
+            status: 'paused',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            threadId,
+          };
+          await this.learningDb.saveWorkflowSnapshot(snapshot);
+          log.debug(`Workflow snapshot saved for approval: ${definition.id} at step ${i + 1}`);
+        }
+
+        log.info(
+          `[${definition.id}] Step ${i + 1}/${totalSteps} paused — ` +
+          `requires approval. Session ID: ${sessionId}`,
+        );
+
+        context.progress.report(
+          `**Proceed with "${step.name}"?** Reply \`yes\` to continue or \`no\` to abort. (Session: ${sessionId})`,
+        );
+
+        this.executionState.set(definition.id, state);
+        return {
+          workflowId: definition.id,
+          state,
+          stepResults,
+          duration: Date.now() - startTime,
+          modelTiersUsed: [...tiersUsed],
+          summary: `Workflow '${definition.name}': ${stepResults.length}/${totalSteps} steps completed, awaiting approval on "${step.name}". Session: ${sessionId}`,
+          pausedSessionId: sessionId,
+          pauseReason: 'approval',
+          lastStepName: step.name,
+        };
+      }
+
       // Stream progress to chat
       context.progress.report(`Running: ${step.name}…`);
 
@@ -170,67 +230,6 @@ export class WorkflowEngine {
         `done (${result.status}, ${result.attempts} attempt(s), ` +
         `model: ${result.modelUsed || 'n/a'}, ${stepMs}ms)`,
       );
-
-      // Check if step requires approval
-      if (step.requiresApproval === true) {
-        const sessionId = `${definition.id}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-        this.transition(definition.id, state, WorkflowState.WAITING_FOR_APPROVAL, log);
-        state = WorkflowState.WAITING_FOR_APPROVAL;
-
-        // Save session snapshot
-        this.pausedSessions.set(sessionId, {
-          sessionId,
-          workflowId: definition.id,
-          currentStepIndex: i,
-          definition,
-          context,
-          stepResults: [...stepResults],
-          modelTiersUsed: [...tiersUsed],
-          timestamp: new Date(),
-        });
-
-        // H1: Save workflow snapshot to learning database
-        if (this.learningDb) {
-          const threadId = (context as any).threadId || 'unknown';
-          const snapshot: WorkflowSnapshot = {
-            id: sessionId,
-            workflowId: definition.id,
-            currentStepIndex: i,
-            definition: definition.id, // H4: Store only definition ID, not full object
-            context: this.serializeContext(context),
-            stepResults: [...stepResults],
-            completedStepIds: stepResults.map((r) => r.stepId), // H5: Store completed step IDs
-            modelTiersUsed: [...tiersUsed], // H10: Store model tiers used
-            status: 'paused',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            threadId,
-          };
-          await this.learningDb.saveWorkflowSnapshot(snapshot);
-          log.debug(`Workflow snapshot saved for approval: ${definition.id} at step ${i + 1}`);
-        }
-
-        log.info(
-          `[${definition.id}] Step ${i + 1}/${totalSteps} paused — ` +
-          `requires approval. Session ID: ${sessionId}`,
-        );
-
-        // Stream approval prompt to chat
-        context.progress.report(
-          `**Proceed with "${step.name}"?** Reply \`yes\` to continue or \`no\` to abort. (Session: ${sessionId})`,
-        );
-
-        // Return early; caller will invoke resume() with user approval
-        this.executionState.set(definition.id, state);
-        return {
-          workflowId: definition.id,
-          state,
-          stepResults,
-          duration: Date.now() - startTime,
-          modelTiersUsed: [...tiersUsed],
-          summary: `Workflow '${definition.name}': ${stepResults.length}/${totalSteps} steps completed, awaiting approval on "${step.name}". Session: ${sessionId}`,
-        };
-      }
 
       // Back to RUNNING for next step
       state = WorkflowState.RUNNING;
@@ -486,16 +485,8 @@ export class WorkflowEngine {
     const log = getLogger();
     const modelProvider = (context.projectModel as any)?.modelProvider;
     if (!modelProvider) {
-      log.error('[interview] ModelProvider not available in context');
-      return {
-        stepId: step.id,
-        status: 'failed',
-        output: 'Interview failed: ModelProvider not available',
-        tokenUsage: { input: 0, output: 0 },
-        attempts: 1,
-        modelUsed: '',
-        error: 'ModelProvider not configured',
-      };
+      log.warn('[interview] ModelProvider not available — falling back to stepExecutor');
+      return this.stepExecutor.executeStep(step, context);
     }
     const interviewer = new InterviewerAgent(modelProvider, context.progress);
     const result = await interviewer.conduct(context, step.modelTier || 'standard');
@@ -534,6 +525,21 @@ export class WorkflowEngine {
    * @param userApproval true to continue, false to cancel
    * @returns Updated WorkflowResult (either COMPLETED, CANCELLED, or WAITING_FOR_APPROVAL again)
    */
+
+  /**
+   * Replace stale cancellation/progress handles from a previous chat turn
+   * with the current turn's handles. Must be called before resume().
+   */
+  rebindTurnHandles(
+    sessionId: string,
+    handles: { cancellation: { isCancelled: boolean; onCancelled: (cb: () => void) => void }; progress: { report: (msg: string) => void } },
+  ): void {
+    const session = this.pausedSessions.get(sessionId);
+    if (!session) return;
+    session.context.cancellation = handles.cancellation;
+    session.context.progress = handles.progress as any;
+  }
+
   async resume(
     sessionId: string,
     userApproval: boolean,
@@ -606,6 +612,46 @@ export class WorkflowEngine {
         `[${workflowId}] Step ${i + 1}/${totalSteps}: "${step.name}" — starting (resumed)`,
       );
 
+      // Pre-execution approval gate
+      if (step.requiresApproval === true) {
+        const newSessionId = `${workflowId}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+        this.transition(workflowId, state, WorkflowState.WAITING_FOR_APPROVAL, log);
+        state = WorkflowState.WAITING_FOR_APPROVAL;
+
+        this.pausedSessions.set(newSessionId, {
+          sessionId: newSessionId,
+          workflowId,
+          currentStepIndex: i,
+          definition,
+          context,
+          stepResults: [...stepResults],
+          modelTiersUsed: [...tiersUsed],
+          timestamp: new Date(),
+        });
+
+        log.info(
+          `[${workflowId}] Step ${i + 1}/${totalSteps} paused — ` +
+          `requires approval. Session ID: ${newSessionId}`,
+        );
+
+        context.progress.report(
+          `**Proceed with "${step.name}"?** Reply \`yes\` to continue or \`no\` to abort. (Session: ${newSessionId})`,
+        );
+
+        this.executionState.set(workflowId, state);
+        return {
+          workflowId,
+          state,
+          stepResults,
+          duration: Date.now() - resumeStartTime,
+          modelTiersUsed: [...tiersUsed],
+          summary: `Workflow '${definition.name}': ${stepResults.length}/${totalSteps} steps completed, awaiting approval on "${step.name}". Session: ${newSessionId}`,
+          pausedSessionId: newSessionId,
+          pauseReason: 'approval',
+          lastStepName: step.name,
+        };
+      }
+
       // Stream progress to chat
       context.progress.report(`Running: ${step.name}…`);
 
@@ -654,46 +700,6 @@ export class WorkflowEngine {
         `done (${result.status}, ${result.attempts} attempt(s), ` +
         `model: ${result.modelUsed || 'n/a'}, ${stepMs}ms)`,
       );
-
-      // Check if step requires approval
-      if (step.requiresApproval === true) {
-        const newSessionId = `${workflowId}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-        this.transition(workflowId, state, WorkflowState.WAITING_FOR_APPROVAL, log);
-        state = WorkflowState.WAITING_FOR_APPROVAL;
-
-        // Save new session snapshot
-        this.pausedSessions.set(newSessionId, {
-          sessionId: newSessionId,
-          workflowId,
-          currentStepIndex: i,
-          definition,
-          context,
-          stepResults: [...stepResults],
-          modelTiersUsed: [...tiersUsed],
-          timestamp: new Date(),
-        });
-
-        log.info(
-          `[${workflowId}] Step ${i + 1}/${totalSteps} paused — ` +
-          `requires approval. Session ID: ${newSessionId}`,
-        );
-
-        // Stream approval prompt to chat
-        context.progress.report(
-          `**Proceed with "${step.name}"?** Reply \`yes\` to continue or \`no\` to abort. (Session: ${newSessionId})`,
-        );
-
-        // Return with new session
-        this.executionState.set(workflowId, state);
-        return {
-          workflowId,
-          state,
-          stepResults,
-          duration: Date.now() - resumeStartTime,
-          modelTiersUsed: [...tiersUsed],
-          summary: `Workflow '${definition.name}': ${stepResults.length}/${totalSteps} steps completed, awaiting approval on "${step.name}". Session: ${newSessionId}`,
-        };
-      }
 
       // Back to RUNNING for next step
       state = WorkflowState.RUNNING;
@@ -856,6 +862,42 @@ export class WorkflowEngine {
       }
 
       log.info(`[${workflowId}] Step ${i + 1}/${totalSteps}: "${step.name}" — starting (snapshot resume)`);
+
+      // Pre-execution approval gate
+      if (step.requiresApproval === true) {
+        const newSessionId = `${workflowId}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+        this.transition(workflowId, state, WorkflowState.WAITING_FOR_APPROVAL, log);
+        state = WorkflowState.WAITING_FOR_APPROVAL;
+        this.pausedSessions.set(newSessionId, {
+          sessionId: newSessionId,
+          workflowId,
+          currentStepIndex: i,
+          definition,
+          context,
+          stepResults: [...stepResults],
+          modelTiersUsed: [...tiersUsed],
+          timestamp: new Date(),
+        });
+
+        log.info(`[${workflowId}] Approval required at step ${i + 1}. Session: ${newSessionId}`);
+        context.progress.report(
+          `**Proceed with "${step.name}"?** Reply \`yes\` to continue or \`no\` to abort. (Session: ${newSessionId})`,
+        );
+
+        this.executionState.set(workflowId, state);
+        return {
+          workflowId,
+          state,
+          stepResults,
+          duration: Date.now() - resumeStartTime,
+          modelTiersUsed: [...tiersUsed],
+          summary: `Snapshot resumed: ${stepResults.length}/${totalSteps} steps completed, awaiting approval. Session: ${newSessionId}`,
+          pausedSessionId: newSessionId,
+          pauseReason: 'approval',
+          lastStepName: step.name,
+        };
+      }
+
       context.progress.report(`Running: ${step.name}…`);
 
       let result: StepResult;
@@ -919,37 +961,7 @@ export class WorkflowEngine {
         log.debug(`Workflow snapshot saved: ${workflowId} at step ${i + 1}`);
       }
 
-      // Check approval requirement
-      if (step.requiresApproval === true) {
-        const newSessionId = `${workflowId}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-        this.transition(workflowId, state, WorkflowState.WAITING_FOR_APPROVAL, log);
-        state = WorkflowState.WAITING_FOR_APPROVAL;
-        this.pausedSessions.set(newSessionId, {
-          sessionId: newSessionId,
-          workflowId,
-          currentStepIndex: i,
-          definition,
-          context,
-          stepResults: [...stepResults],
-          modelTiersUsed: [...tiersUsed],
-          timestamp: new Date(),
-        });
-
-        log.info(`[${workflowId}] Approval required at step ${i + 1}. Session: ${newSessionId}`);
-        context.progress.report(
-          `**Proceed with "${step.name}"?** Reply \`yes\` to continue or \`no\` to abort. (Session: ${newSessionId})`,
-        );
-
-        this.executionState.set(workflowId, state);
-        return {
-          workflowId,
-          state,
-          stepResults,
-          duration: Date.now() - resumeStartTime,
-          modelTiersUsed: [...tiersUsed],
-          summary: `Snapshot resumed: ${stepResults.length}/${totalSteps} steps completed, awaiting approval. Session: ${newSessionId}`,
-        };
-      }
+      // Check approval requirement (now handled by pre-execution gate above)
 
       state = WorkflowState.RUNNING;
     }
@@ -981,7 +993,8 @@ export class WorkflowEngine {
     to: WorkflowState,
     log: ReturnType<typeof getLogger>,
   ): void {
-    log.debug(`[${workflowId}] ${from} → ${to}`);
+    const state = this.executionState.get(workflowId) ?? 'UNKNOWN';
+    log.debug(`[${workflowId}] ${state} → ${to}`);
     // H9: Update execution state map instead of instance field
     this.executionState.set(workflowId, to);
   }

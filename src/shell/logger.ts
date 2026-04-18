@@ -36,6 +36,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { promises as fsPromises } from 'node:fs';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Public interface
@@ -76,6 +77,11 @@ class NullLogger implements Logger {
 export class RoadieLogger implements Logger {
   private readonly channel: { appendLine(s: string): void; show(preserveFocus?: boolean): void; dispose(): void };
   private readonly logFilePath: string | null;
+  // H14: Async serial queue for non-blocking JSON line writes
+  private writeChain: Promise<void> = Promise.resolve();
+  // H14: Cached byte count to avoid statSync on every log call
+  private cachedByteCount: number = 0;
+  private writeErrorCount: number = 0;
 
   constructor(globalStoragePath?: string) {
     // Lazy require so this file is safe to import outside VS Code.
@@ -87,6 +93,13 @@ export class RoadieLogger implements Logger {
       try {
         fs.mkdirSync(globalStoragePath, { recursive: true });
         this.logFilePath = path.join(globalStoragePath, LOG_FILE_NAME);
+        // Initialize byte count from existing file if present
+        try {
+          const stat = fs.statSync(this.logFilePath);
+          this.cachedByteCount = stat.size;
+        } catch {
+          this.cachedByteCount = 0;
+        }
       } catch {
         this.logFilePath = null;
       }
@@ -152,32 +165,40 @@ export class RoadieLogger implements Logger {
 
   private writeJsonLine(level: string, msg: string, err?: unknown): void {
     if (!this.logFilePath) return;
-    try {
-      const entry = JSON.stringify({
-        ts: new Date().toISOString(),
-        level,
-        msg,
-        ...(err !== undefined
-          ? {
-              err: err instanceof Error
-                ? { message: err.message, stack: err.stack }
-                : String(err),
-            }
-          : {}),
+    const entry = JSON.stringify({
+      ts: new Date().toISOString(),
+      level,
+      msg,
+      ...(err !== undefined
+        ? {
+            err: err instanceof Error
+              ? { message: err.message, stack: err.stack }
+              : String(err),
+          }
+        : {}),
+    });
+    this.enqueueWrite(entry + '\n');
+  }
+
+  private enqueueWrite(data: string): void {
+    this.writeChain = this.writeChain
+      .then(() => fsPromises.appendFile(this.logFilePath!, data, 'utf8'))
+      .then(() => {
+        this.cachedByteCount += Buffer.byteLength(data);
+        this.maybeRotate();
+      })
+      .catch(() => {
+        this.writeErrorCount++;
+        // Silent fail: don't throw from logger
       });
-      fs.appendFileSync(this.logFilePath, entry + '\n', 'utf8');
-      this.maybeRotate();
-    } catch {
-      // Best-effort: never throw from logger
-    }
   }
 
   private maybeRotate(): void {
     if (!this.logFilePath) return;
+    if (this.cachedByteCount < MAX_LOG_BYTES) return;
     try {
-      const stat = fs.statSync(this.logFilePath);
-      if (stat.size < MAX_LOG_BYTES) return;
       rotateLogs(this.logFilePath);
+      this.cachedByteCount = 0;
     } catch {
       // Best-effort
     }

@@ -172,6 +172,8 @@ export interface WorkflowContext {
   interviewConfidence?: number;
   /** Project conventions from CLAUDE.md (H2: P7 conventions injection) */
   conventions?: ProjectConventions;
+  /** Thread ID for chat continuity and snapshot lookups (Bug 4: P3) */
+  threadId?: string;
   /** Dynamic fields for storing question responses and custom data */
   [key: string]: unknown;
 }
@@ -214,6 +216,12 @@ export interface WorkflowResult {
   modelTiersUsed: ModelTier[];
   /** Human-readable summary for chat display */
   summary: string;
+  /** Session ID when workflow is paused (for resume) */
+  pausedSessionId?: string;
+  /** Reason the workflow was paused */
+  pauseReason?: 'approval' | 'step-failure';
+  /** Name of the last step that triggered the pause */
+  lastStepName?: string;
 }
 
 /**

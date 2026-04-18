@@ -165,9 +165,12 @@ export class IntentClassifier {
 
     // 6. Clear winner — map confidence to threshold based on signal type
     const hasSignalPattern = topData.signals.some((s) => s.startsWith('signal:'));
+    const keywordCount = topData.signals.filter((s) => s.startsWith('keyword:')).length;
     const confidence = hasSignalPattern
       ? CONFIDENCE_THRESHOLDS.primaryPlusSecondary
-      : CONFIDENCE_THRESHOLDS.primaryOnly;
+      : keywordCount >= 2
+        ? CONFIDENCE_THRESHOLDS.primaryMultiple
+        : CONFIDENCE_THRESHOLDS.primaryOnly;
 
     return {
       intent: topIntent as IntentType,

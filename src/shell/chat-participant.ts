@@ -37,6 +37,9 @@ let _lastContextSnapshot = '';
 /** Global SessionManager instance — tracks conversation state across chat turns. */
 const _sessionManager = new SessionManager();
 
+/** Cache for extractThreadId — maps FNV-1a hashes to stable thread IDs. */
+const _threadIdCache = { byFirstPromptHash: new Map<number, string>() };
+
 // H8: Set learning database on session manager when available
 let _sessionManagerInitialized = false;
 
@@ -99,10 +102,8 @@ export function registerChatParticipant(deps?: {
       _sessionManagerInitialized = true;
     }
 
-    // Extract threadId from chat context history
-    const threadId = context.history && context.history.length > 0
-      ? context.history[context.history.length - 1].id || generateThreadId()
-      : generateThreadId();
+    // Extract threadId from chat context history using FNV-1a hash of first prompt
+    const threadId = extractThreadId(context as any, _threadIdCache);
 
     const session = _sessionManager.getSession(threadId);
 
@@ -119,21 +120,72 @@ export function registerChatParticipant(deps?: {
         `Routing to resumption instead of classification.`,
       );
 
-      // Parse user approval: "yes" resumes, anything else aborts
-      const userApproval = request.prompt.toLowerCase().trim() === 'yes';
+      // Parse user approval (B9 — stricter acceptance: accept y, yes, ok, confirm, etc.)
+      const ack = /^(y|yes|ok(ay)?|confirm|continue|proceed|go|sure)[!.\s]*$/i;
+      const nack = /^(n|no|cancel|abort|stop|nope)[!.\s]*$/i;
+      const trimmed = request.prompt.trim();
+      const approval: 'approve' | 'reject' | 'unclear' =
+        ack.test(trimmed) ? 'approve' : nack.test(trimmed) ? 'reject' : 'unclear';
+
+      if (approval === 'unclear') {
+        response.markdown(
+          `I didn't catch that — reply \`yes\` to continue or \`no\` to abort.`,
+        );
+        return {};
+      }
+
+      const userApproval = approval === 'approve';
 
       response.markdown(
         `**Resuming paused workflow** (${session.workflowId || 'unknown'}) ` +
         `with approval: ${userApproval ? '✓ Continue' : '✗ Abort'}\n\n`,
       );
 
-      // TODO: Call engine.resume(session.pausedSessionId, userApproval) when resume() is available
-      // For now, mark as resumed and continue workflow logic
-      _sessionManager.resumeFromPaused(threadId);
+      const storedEngine = _activeEngines.get(threadId);
+      if (storedEngine && session.pausedSessionId) {
+        // Rebind stale turn handles (P0-γ)
+        storedEngine.rebindTurnHandles(session.pausedSessionId, {
+          cancellation: { isCancelled: token.isCancellationRequested, onCancelled: token.onCancellationRequested },
+          progress: { report: (msg: string) => response.markdown(msg) },
+        });
 
-      // Early return after pause handling — await engine.resume() implementation
+        let resumeResult;
+        try {
+          resumeResult = await storedEngine.resume(session.pausedSessionId, userApproval);
+        } catch (e) {
+          if (String(e).includes('Session not found') && deps?.learningDb) {
+            resumeResult = await storedEngine.resumeFromSnapshot(
+              session.pausedSessionId,
+              { report: (msg: string) => response.markdown(msg) } as any,
+              deps?.projectModel,
+            );
+          } else {
+            throw e;
+          }
+        }
+
+        _sessionManager.resumeFromPaused(threadId);
+        if (
+          resumeResult.state === 'COMPLETED' ||
+          resumeResult.state === 'CANCELLED' ||
+          resumeResult.state === 'FAILED'
+        ) {
+          _activeEngines.delete(threadId);
+        } else if (resumeResult.pausedSessionId) {
+          _sessionManager.markPaused(threadId, resumeResult.pausedSessionId);
+        }
+
+        response.markdown(`\n---\n\n${resumeResult.summary}\n\n`);
+        response.markdown(
+          `*Completed in ${resumeResult.duration}ms — ${resumeResult.stepResults.length} steps executed.*`,
+        );
+        return {};
+      }
+
+      // No stored engine — fall back, clear paused state
+      _sessionManager.resumeFromPaused(threadId);
       response.markdown(
-        `*Pause resumption logic will integrate with WorkflowEngine.resume() in next iteration.*`,
+        `*No active engine for this workflow. Please start a new task.*`,
       );
       return {};
     }
@@ -149,8 +201,10 @@ export function registerChatParticipant(deps?: {
     };
 
     let classification: ClassificationResult;
-    if (request.command && COMMAND_WORKFLOW_MAP[request.command]) {
-      const intentKey = COMMAND_WORKFLOW_MAP[request.command];
+    // Normalize command by removing 'workflow:' prefix if present (VS Code passes declared name)
+    const normalizedCmd = (request.command ?? '').replace(/^workflow:/, '');
+    if (normalizedCmd && COMMAND_WORKFLOW_MAP[normalizedCmd]) {
+      const intentKey = COMMAND_WORKFLOW_MAP[normalizedCmd];
       log.info(`Slash command /${request.command} → intent: ${intentKey} (no classification)`);
       // Build a synthetic classification result so the rest of the handler is unchanged
       classification = {
@@ -217,7 +271,7 @@ export function registerChatParticipant(deps?: {
       return {};
     }
 
-    // 3. Handle 'clarify' intent — user is correcting/refining previous intent
+    // 3. Handle 'clarify' intent — user is correcting/refining previous intent (Bug 5)
     if (classification.intent === 'clarify') {
       log.info(`Detected 'clarify' intent (signals: ${classification.signals.join(', ')})`);
 
@@ -238,9 +292,28 @@ export function registerChatParticipant(deps?: {
           `*Clarification noted. Ready to resume when the workflow engine supports it.*`,
         );
         return {};
+      } else if (
+        session.workflowId &&
+        isLikelyWorkflowContinuationPrompt(request.prompt) &&
+        WORKFLOW_MAP[session.workflowId]
+      ) {
+        // No paused workflow — check if this looks like a workflow continuation (Bug 5 hardening)
+        log.info(
+          `'clarify' intent with prior workflow ${session.workflowId} + short prompt → carry-over`,
+        );
+        classification = {
+          intent: session.workflowId,
+          confidence: 0.75,
+          signals: [...classification.signals, 'clarify:carry-over'],
+          requiresLLM: false,
+        };
+        // Fall through to workflow dispatch
       } else {
-        // No paused workflow — ask user to clarify what they mean
-        log.info(`'clarify' intent detected but no paused workflow. Asking for clarification.`);
+        // No paused workflow, no continuation prompt, or workflow unknown — ask for clarification
+        log.info(
+          `'clarify' intent detected but no paused workflow or continuation prompt. ` +
+          `Asking for clarification.`,
+        );
         response.markdown(
           `**I'm not sure what you mean.** Are you:\n\n` +
           `1. Refining the previous task or request?\n` +
@@ -252,7 +325,28 @@ export function registerChatParticipant(deps?: {
     }
 
     // 4. Check if we have a workflow for this intent
-    const workflow = WORKFLOW_MAP[classification.intent];
+    let workflow = WORKFLOW_MAP[classification.intent];
+
+    // Carry-over: if no workflow matched but a prior workflow exists and
+    // the prompt looks like a continuation, re-use the prior intent
+    if (
+      !workflow &&
+      session.workflowId &&
+      WORKFLOW_MAP[session.workflowId] &&
+      isLikelyWorkflowContinuationPrompt(request.prompt)
+    ) {
+      log.info(
+        `No workflow for '${classification.intent}' but prior workflow '${session.workflowId}' ` +
+        `exists and prompt looks like continuation → carry-over`,
+      );
+      classification = {
+        intent: session.workflowId,
+        confidence: 0.75,
+        signals: [...classification.signals, 'carry-over:prior-workflow'],
+        requiresLLM: false,
+      };
+      workflow = WORKFLOW_MAP[classification.intent];
+    }
 
     if (!workflow) {
       // No workflow — enriched passthrough (general_chat or unimplemented intent)
@@ -325,6 +419,7 @@ export function registerChatParticipant(deps?: {
       progress:     new VSCodeProgressReporter(response),
       cancellation: new VSCodeCancellationHandle(token),
       conventions,
+      threadId,
     };
 
     // 5b. Context snapshot + level-gated logging
@@ -418,6 +513,23 @@ export function buildContextWithHotFiles(
 }
 
 /**
+ * Check if a prompt looks like a workflow continuation (Bug 5 — clarify hardening).
+ * Continuations are short, natural prompts without question marks, conversational acks, or many words.
+ * This prevents real clarifications ("explain step 3?") from being misclassified as carry-over.
+ */
+function isLikelyWorkflowContinuationPrompt(prompt: string): boolean {
+  const CONVERSATIONAL_ACK_PATTERN =
+    /^(ok|okay|k|thanks|thank you|thx|got it|great|cool|nice|hello|hi|hey|yes|no|yep|nope|sure|sounds good)[!.\s]*$/i;
+  const normalized = prompt.trim();
+  if (normalized.length < 2 || normalized.length > 60) return false;
+  if (CONVERSATIONAL_ACK_PATTERN.test(normalized)) return false;
+  if (normalized.includes('?')) return false;
+
+  const words = normalized.split(/\s+/).filter(Boolean);
+  return words.length <= 8;
+}
+
+/**
  * Generate a unique thread ID when vscode.ChatContext does not provide one.
  * Fallback for threads without explicit IDs.
  *
@@ -425,4 +537,41 @@ export function buildContextWithHotFiles(
  */
 function generateThreadId(): string {
   return `thread-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+/**
+ * FNV-1a 32-bit hash of a string.
+ */
+function fnv1a(str: string): number {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) {
+    hash ^= str.charCodeAt(i);
+    hash = (hash * 0x01000193) >>> 0;
+  }
+  return hash;
+}
+
+/**
+ * Extract a stable thread ID from chat context by hashing the first user prompt.
+ * Uses a cache to return the same ID for repeated calls with the same first prompt.
+ */
+export function extractThreadId(
+  context: { history?: Array<{ kind?: string; prompt?: string }> },
+  cache: { byFirstPromptHash: Map<number, string> },
+): string {
+  if (!context.history || context.history.length === 0) {
+    return generateThreadId();
+  }
+  const firstRequest = context.history.find(
+    (h) => h.kind === 'request' && typeof h.prompt === 'string',
+  );
+  if (!firstRequest || !firstRequest.prompt) {
+    return generateThreadId();
+  }
+  const hash = fnv1a(firstRequest.prompt);
+  const cached = cache.byFirstPromptHash.get(hash);
+  if (cached) return cached;
+  const id = `thread-${hash.toString(36)}`;
+  cache.byFirstPromptHash.set(hash, id);
+  return id;
 }

@@ -86,14 +86,14 @@ export class ClaudeMdParser {
     const items: string[] = [];
 
     // Match bullet points (- or *)
-    const bulletMatches = text.matchAll(/[-*]\s+(.+?)(?=\n[-*]|\n[^-*\s]|\Z)/g);
+    const bulletMatches = text.matchAll(/[-*]\s+(.+?)(?=\n[-*]|\n[^-*\s]|$)/g);
     for (const match of bulletMatches) {
       const item = match[1].trim();
       if (item) items.push(item);
     }
 
     // Match numbered lists
-    const numberedMatches = text.matchAll(/^\d+\.\s+(.+?)(?=\n\d+\.|\n[^\d]|\Z)/gm);
+    const numberedMatches = text.matchAll(/^\d+\.\s+(.+?)(?=\n\d+\.|\n[^\d]|$)/gm);
     for (const match of numberedMatches) {
       const item = match[1].trim();
       if (item) items.push(item);
@@ -107,7 +107,7 @@ export class ClaudeMdParser {
     }
 
     // Extract nested list items under ** headers **
-    const nestedMatches = text.matchAll(/\*\*(.+?)\*\*[\s\n]+(?:[-*]|\d+\.)\s+(.+?)(?=\n[-*\d*]|\n\*\*|\Z)/g);
+    const nestedMatches = text.matchAll(/\*\*(.+?)\*\*[\s\n]+(?:[-*]|\d+\.)\s+(.+?)(?=\n[-*\d]|\n\*\*|$)/g);
     for (const match of nestedMatches) {
       const item = match[2].trim();
       if (item) items.push(item);

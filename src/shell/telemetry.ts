@@ -11,6 +11,8 @@
  * @depended-on-by extension.ts
  */
 
+import { appendFileSync } from 'node:fs';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // PII redaction
 // ─────────────────────────────────────────────────────────────────────────────
@@ -92,7 +94,6 @@ export class TelemetryReporter {
       return;
     }
     try {
-      const { appendFileSync } = require('node:fs') as typeof import('node:fs');
       const lines = this.queue.map(
         (e) => JSON.stringify({ ...e, _telemetry: true }),
       );
