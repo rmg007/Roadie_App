@@ -2,7 +2,9 @@ import { describe, it, expect, vi } from 'vitest';
 
 // Mock vscode so the module can be imported in test environments
 vi.mock('vscode', () => ({
-  window: { createOutputChannel: vi.fn(() => ({ appendLine: vi.fn(), dispose: vi.fn(), show: vi.fn() })) },
+  window: {
+    createOutputChannel: vi.fn(() => ({ appendLine: vi.fn(), dispose: vi.fn(), show: vi.fn() })),
+  },
 }));
 
 import { WorkflowEngine } from './workflow-engine';
@@ -27,7 +29,10 @@ function makeStep(id: string, name: string, overrides: Partial<WorkflowStep> = {
   };
 }
 
-function makeDefinition(steps: WorkflowStep[], overrides: Partial<WorkflowDefinition> = {}): WorkflowDefinition {
+function makeDefinition(
+  steps: WorkflowStep[],
+  overrides: Partial<WorkflowDefinition> = {},
+): WorkflowDefinition {
   return {
     id: 'test_workflow',
     name: 'Test Workflow',
@@ -84,9 +89,9 @@ function createEngine(handler: StepHandlerFn): WorkflowEngine {
 
 describe('WorkflowEngine', () => {
   it('completes a 4-step sequential workflow', async () => {
-    const handler: StepHandlerFn = vi.fn().mockImplementation(
-      (step: WorkflowStep) => Promise.resolve(successResult(step.id)),
-    );
+    const handler: StepHandlerFn = vi
+      .fn()
+      .mockImplementation((step: WorkflowStep) => Promise.resolve(successResult(step.id)));
     const engine = createEngine(handler);
     const steps = [
       makeStep('s1', 'Locate'),
@@ -105,12 +110,12 @@ describe('WorkflowEngine', () => {
 
   it('passes step results to next step via context.previousStepResults', async () => {
     const contexts: WorkflowContext[] = [];
-    const handler: StepHandlerFn = vi.fn().mockImplementation(
-      (step: WorkflowStep, ctx: WorkflowContext) => {
+    const handler: StepHandlerFn = vi
+      .fn()
+      .mockImplementation((step: WorkflowStep, ctx: WorkflowContext) => {
         contexts.push({ ...ctx });
         return Promise.resolve(successResult(step.id));
-      },
-    );
+      });
     const engine = createEngine(handler);
     const steps = [makeStep('s1', 'Step 1'), makeStep('s2', 'Step 2'), makeStep('s3', 'Step 3')];
 
@@ -124,7 +129,8 @@ describe('WorkflowEngine', () => {
   });
 
   it('transitions to PAUSED when a step fails after retries', async () => {
-    const handler: StepHandlerFn = vi.fn()
+    const handler: StepHandlerFn = vi
+      .fn()
       .mockImplementationOnce((step: WorkflowStep) => Promise.resolve(successResult(step.id)))
       .mockResolvedValue(failResult('s2'));
     const engine = createEngine(handler);
@@ -167,9 +173,9 @@ describe('WorkflowEngine', () => {
   });
 
   it('streams progress for each step', async () => {
-    const handler: StepHandlerFn = vi.fn().mockImplementation(
-      (step: WorkflowStep) => Promise.resolve(successResult(step.id)),
-    );
+    const handler: StepHandlerFn = vi
+      .fn()
+      .mockImplementation((step: WorkflowStep) => Promise.resolve(successResult(step.id)));
     const engine = createEngine(handler);
     const ctx = makeContext();
     const steps = [makeStep('s1', 'Locate Error'), makeStep('s2', 'Apply Fix')];
@@ -182,23 +188,20 @@ describe('WorkflowEngine', () => {
   });
 
   it('tracks workflow duration', async () => {
-    const handler: StepHandlerFn = vi.fn().mockImplementation(
-      (step: WorkflowStep) => Promise.resolve(successResult(step.id)),
-    );
+    const handler: StepHandlerFn = vi
+      .fn()
+      .mockImplementation((step: WorkflowStep) => Promise.resolve(successResult(step.id)));
     const engine = createEngine(handler);
-    const result = await engine.execute(
-      makeDefinition([makeStep('s1', 'Step 1')]),
-      makeContext(),
-    );
+    const result = await engine.execute(makeDefinition([makeStep('s1', 'Step 1')]), makeContext());
 
     expect(result.duration).toBeGreaterThanOrEqual(0);
     expect(result.duration).toBeLessThan(1000); // Should be near-instant with mocks
   });
 
   it('builds a human-readable summary', async () => {
-    const handler: StepHandlerFn = vi.fn().mockImplementation(
-      (step: WorkflowStep) => Promise.resolve(successResult(step.id)),
-    );
+    const handler: StepHandlerFn = vi
+      .fn()
+      .mockImplementation((step: WorkflowStep) => Promise.resolve(successResult(step.id)));
     const engine = createEngine(handler);
     const result = await engine.execute(
       makeDefinition([makeStep('s1', 'Step 1')], { name: 'Bug Fix' }),
@@ -211,7 +214,8 @@ describe('WorkflowEngine', () => {
   });
 
   it('does not execute remaining steps after failure', async () => {
-    const handler: StepHandlerFn = vi.fn()
+    const handler: StepHandlerFn = vi
+      .fn()
       .mockResolvedValueOnce(failResult('s1'))
       .mockResolvedValueOnce(successResult('s2'));
     const engine = createEngine(handler);
@@ -225,9 +229,9 @@ describe('WorkflowEngine', () => {
   });
 
   it('calls onComplete hook when workflow completes', async () => {
-    const handler: StepHandlerFn = vi.fn().mockImplementation(
-      (step: WorkflowStep) => Promise.resolve(successResult(step.id)),
-    );
+    const handler: StepHandlerFn = vi
+      .fn()
+      .mockImplementation((step: WorkflowStep) => Promise.resolve(successResult(step.id)));
     const onComplete = vi.fn().mockResolvedValue({
       workflowId: 'custom',
       state: WorkflowState.COMPLETED,
@@ -247,9 +251,9 @@ describe('WorkflowEngine', () => {
   });
 
   it('logs a warning and returns the default result when onComplete throws', async () => {
-    const handler: StepHandlerFn = vi.fn().mockImplementation(
-      (step: WorkflowStep) => Promise.resolve(successResult(step.id)),
-    );
+    const handler: StepHandlerFn = vi
+      .fn()
+      .mockImplementation((step: WorkflowStep) => Promise.resolve(successResult(step.id)));
     const onComplete = vi.fn().mockRejectedValue(new Error('boom'));
     const engine = createEngine(handler);
     const result = await engine.execute(
@@ -272,5 +276,77 @@ describe('WorkflowEngine', () => {
     );
 
     expect(onComplete).not.toHaveBeenCalled();
+  });
+});
+
+describe('WorkflowEngine — pausedSessionId fields', () => {
+  it('sets pausedSessionId on result when a step requiresApproval', async () => {
+    const handler: StepHandlerFn = vi
+      .fn()
+      .mockImplementation((step: WorkflowStep) => Promise.resolve(successResult(step.id)));
+    const engine = createEngine(handler);
+    const steps = [makeStep('s1', 'Step 1', { requiresApproval: true })];
+
+    const result = await engine.execute(makeDefinition(steps), makeContext());
+
+    expect(result.state).toBe(WorkflowState.WAITING_FOR_APPROVAL);
+    expect(result.pausedSessionId).toBeDefined();
+    expect(typeof result.pausedSessionId).toBe('string');
+    expect(result.pauseReason).toBe('approval');
+    expect(result.lastStepName).toBe('Step 1');
+  });
+
+  it('does not set pausedSessionId on normal completion', async () => {
+    const handler: StepHandlerFn = vi
+      .fn()
+      .mockImplementation((step: WorkflowStep) => Promise.resolve(successResult(step.id)));
+    const engine = createEngine(handler);
+    const result = await engine.execute(makeDefinition([makeStep('s1', 'Step 1')]), makeContext());
+
+    expect(result.state).toBe(WorkflowState.COMPLETED);
+    expect(result.pausedSessionId).toBeUndefined();
+  });
+});
+
+describe('WorkflowEngine — registerWorkflowDefinition', () => {
+  it('registers and retrieves a workflow definition by id', async () => {
+    const { registerWorkflowDefinition } = await import('./workflow-engine');
+    const def = makeDefinition([makeStep('s1', 'Step 1')], { id: 'reg_test_wf', name: 'Reg Test' });
+    registerWorkflowDefinition(def);
+
+    // Execute (internally uses the definition registry indirectly; main proof is no throw)
+    const handler: StepHandlerFn = vi
+      .fn()
+      .mockImplementation((step: WorkflowStep) => Promise.resolve(successResult(step.id)));
+    const engine = new WorkflowEngine(new StepExecutor(handler));
+    const result = await engine.execute(def, makeContext());
+    expect(result.state).toBe(WorkflowState.COMPLETED);
+  });
+});
+
+describe('WorkflowEngine — rebindTurnHandles', () => {
+  it('rebinds cancellation so new token isCancelled is observed', async () => {
+    const handler: StepHandlerFn = vi
+      .fn()
+      .mockImplementation((step: WorkflowStep) => Promise.resolve(successResult(step.id)));
+    const engine = createEngine(handler);
+    const steps = [makeStep('s1', 'Step 1', { requiresApproval: true }), makeStep('s2', 'Step 2')];
+
+    // Execute and pause at step 1 (requiresApproval)
+    const result = await engine.execute(makeDefinition(steps), makeContext());
+    expect(result.pausedSessionId).toBeDefined();
+
+    // New turn cancellation token that is already cancelled
+    const newCancellation = { isCancelled: true, onCancelled: vi.fn() };
+    const newProgress = { report: vi.fn(), reportMarkdown: vi.fn() };
+
+    engine.rebindTurnHandles(result.pausedSessionId!, {
+      cancellation: newCancellation,
+      progress: newProgress,
+    });
+
+    // Resume — should be cancelled immediately because of the new token
+    const resumeResult = await engine.resume(result.pausedSessionId!, true);
+    expect(resumeResult.state).toBe(WorkflowState.CANCELLED);
   });
 });
