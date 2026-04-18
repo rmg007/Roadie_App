@@ -19,7 +19,7 @@ import fg from 'fast-glob';
 import { scanDependencies } from './dependency-scanner';
 import { scanDirectories } from './directory-scanner';
 import type { InMemoryProjectModel } from '../model/project-model';
-import { ClaudeMdParser } from './claude-md-parser';
+import { ProjectConventionsExtractor } from './project-conventions-extractor';
 import { getLogger } from '../shell/logger';
 import type { TechStackEntry, DirectoryNode, DetectedPattern, EntityWriter } from '../types';
 import type { LearningDatabase } from '../learning/learning-database';
@@ -63,13 +63,17 @@ export class ProjectAnalyzer {
 
     // 2.5. Parse Project Conventions (CLAUDE.md)
     log.debug('ProjectAnalyzer: parsing project conventions…');
-    const conventionsParser = new ClaudeMdParser();
-    const conventions = await conventionsParser.parse(workspaceRoot);
-    this.model.setConventions(conventions);
-    log.info(
-      `ProjectAnalyzer: convention parsing complete — ` +
-      `${conventions.techStack.length} tech, ${conventions.codingStyle.length} styles`,
-    );
+    const conventionsExtractor = new ProjectConventionsExtractor();
+    const conventions = await conventionsExtractor.extract(workspaceRoot);
+    if (conventions) {
+      this.model.setConventions(conventions);
+      log.info(
+        `ProjectAnalyzer: convention parsing complete — ` +
+        `${conventions.techStack?.length ?? 0} tech, ${conventions.codingStyle?.length ?? 0} styles`,
+      );
+    } else {
+      log.info('ProjectAnalyzer: no project conventions found (CLAUDE.md missing)');
+    }
 
     // 3. Derive detected patterns from tech stack + directory structure
     log.debug('ProjectAnalyzer: deriving patterns…');

@@ -47,6 +47,7 @@ export class InMemoryProjectModel implements ProjectModel {
     if (root) this.directoryTree = root;
     this.patterns = db.loadPatterns();
     this.commands = db.loadCommands();
+    this.conventions = db.loadConventions() || undefined;
   }
 
   // ---- ProjectModel interface ----
@@ -181,6 +182,9 @@ export class InMemoryProjectModel implements ProjectModel {
     this.database.saveDirectories(this.directoryTree);
     this.database.savePatterns(this.patterns);
     this.database.saveCommands(this.commands);
+    if (this.conventions) {
+      this.database.saveConventions(this.conventions);
+    }
     this.dirty = false;
   }
 

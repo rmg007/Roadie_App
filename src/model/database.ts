@@ -19,7 +19,7 @@ import type { TechStackEntry, DirectoryNode, DetectedPattern, ProjectCommand } f
 const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite');
 type SqliteDb = InstanceType<typeof DatabaseSync>;
 
-const CURRENT_SCHEMA_VERSION = 1;
+const CURRENT_SCHEMA_VERSION = 2;
 
 const SCHEMA_V1 = `
   CREATE TABLE IF NOT EXISTS schema_version (
@@ -56,6 +56,18 @@ const SCHEMA_V1 = `
     command TEXT NOT NULL,
     source_file TEXT NOT NULL,
     type TEXT NOT NULL CHECK(type IN ('build', 'test', 'dev', 'lint', 'format', 'other'))
+  );
+
+  CREATE TABLE IF NOT EXISTS project_conventions (
+    id INTEGER PRIMARY KEY CHECK (id = 1), -- Singleton record
+    data_json TEXT NOT NULL
+  );
+`;
+
+const SCHEMA_V2 = `
+  CREATE TABLE IF NOT EXISTS project_conventions (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    data_json TEXT NOT NULL
   );
 `;
 
@@ -126,10 +138,11 @@ export class RoadieDatabase {
   private migrate(): void {
     const version = this.getSchemaVersion();
     if (version < CURRENT_SCHEMA_VERSION) {
-      this.db.exec(SCHEMA_V1);
       if (version === 0) {
+        this.db.exec(SCHEMA_V1);
         this.db.prepare('INSERT INTO schema_version (version) VALUES (?)').run(CURRENT_SCHEMA_VERSION);
-      } else {
+      } else if (version === 1) {
+        this.db.exec(SCHEMA_V2);
         this.db.prepare('UPDATE schema_version SET version = ?').run(CURRENT_SCHEMA_VERSION);
       }
     }
@@ -295,6 +308,23 @@ export class RoadieDatabase {
       sourceFile: r.source_file,
       type: r.type as ProjectCommand['type'],
     }));
+  }
+
+  // ---- Conventions CRUD ----
+
+  saveConventions(conventions: any): void {
+    this.db.prepare('INSERT OR REPLACE INTO project_conventions (id, data_json) VALUES (1, ?)').run(
+      JSON.stringify(conventions),
+    );
+  }
+
+  loadConventions(): any | null {
+    try {
+      const row = this.db.prepare('SELECT data_json FROM project_conventions WHERE id = 1').get() as { data_json: string } | undefined;
+      return row ? JSON.parse(row.data_json) : null;
+    } catch {
+      return null;
+    }
   }
 
   /**

@@ -418,17 +418,23 @@ export function registerChatParticipant(deps?: {
           const prompt = request.prompt.toLowerCase();
           log.info(`[command] Executing built-in command for: ${prompt}`);
           
-          if (prompt.includes('init')) {
-            await vscode.commands.executeCommand('roadie.init');
-            response.markdown("Initializing Roadie... check the Output channel for progress.");
-          } else if (prompt.includes('rescan')) {
-            await vscode.commands.executeCommand('roadie.rescan');
-            response.markdown("Scanning project... check the Output channel for details.");
-          } else if (prompt.includes('reset')) {
-            await vscode.commands.executeCommand('roadie.reset');
-            response.markdown("Roadie state has been reset.");
-          } else {
-            response.markdown(`**Roadie v0.10.2**\n\nUnknown command. Try "init", "rescan", or "reset".`);
+          try {
+            if (prompt.includes('init')) {
+              await vscode.commands.executeCommand('roadie.init');
+              response.markdown("Initializing Roadie... check the Output channel for progress.");
+            } else if (prompt.includes('rescan')) {
+              await vscode.commands.executeCommand('roadie.rescan');
+              response.markdown("Scanning project... check the Output channel for details.");
+            } else if (prompt.includes('reset')) {
+              await vscode.commands.executeCommand('roadie.reset');
+              response.markdown("Roadie state has been reset.");
+            } else {
+              response.markdown(`Unknown command. Try "init", "rescan", or "reset".`);
+            }
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            log.error(`[command] Failed to execute: ${msg}`);
+            response.markdown(`**Command failed:** ${msg}\n\nTry running it from the Command Palette instead: \`Ctrl+Shift+P\` → "Roadie: Initialize"`);
           }
           return { metadata: { command: 'system' } };
       } else {
