@@ -76,6 +76,19 @@ export interface PruneResult {
   deletedPatternObservations: number;
 }
 
+export interface WorkflowSnapshot {
+  id: string;
+  workflowId: string;
+  currentStepIndex: number;
+  definition: Record<string, unknown>;
+  context: Record<string, unknown>;
+  stepResults: Record<string, unknown>[];
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  threadId: string;
+}
+
 export interface LearningDatabaseConfig {
   workflowHistory?: boolean;
 }
@@ -133,6 +146,25 @@ const LEARNING_SCHEMA = `
   CREATE TABLE IF NOT EXISTS learning_schema_version (
     version INTEGER NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS workflow_snapshots (
+    id TEXT PRIMARY KEY,
+    workflow_id TEXT NOT NULL,
+    current_step_index INTEGER NOT NULL,
+    definition TEXT NOT NULL,
+    context TEXT NOT NULL,
+    step_results TEXT NOT NULL,
+    completed_step_ids TEXT,
+    model_tiers_used TEXT,
+    status TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    thread_id TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_snapshots_workflow_id ON workflow_snapshots(workflow_id);
+  CREATE INDEX IF NOT EXISTS idx_snapshots_thread_id ON workflow_snapshots(thread_id);
+  CREATE INDEX IF NOT EXISTS idx_snapshots_status ON workflow_snapshots(status);
+  CREATE INDEX IF NOT EXISTS idx_snapshots_updated_at ON workflow_snapshots(updated_at DESC);
 `;
 
 // ---- Helper ----
@@ -582,6 +614,88 @@ export class LearningDatabase {
       workflowType: r.workflow_type,
       totalRuns: r.total_runs,
       cancelledRuns: r.cancelled_runs,
+    }));
+  }
+
+  // ---- Workflow Snapshots ----
+
+  saveWorkflowSnapshot(snapshot: WorkflowSnapshot): void {
+    if (!this.db) return;
+    if (!this.isTrusted) return;
+    const db = this.db;
+    this.safeExec(() =>
+      db.prepare(
+        `INSERT OR REPLACE INTO workflow_snapshots (id, workflow_id, current_step_index, definition, context, step_results, completed_step_ids, model_tiers_used, status, created_at, updated_at, thread_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)`,
+      ).run(
+        snapshot.id,
+        snapshot.workflowId,
+        snapshot.currentStepIndex,
+        JSON.stringify(snapshot.definition),
+        JSON.stringify(snapshot.context),
+        JSON.stringify(snapshot.stepResults),
+        JSON.stringify(snapshot.completedStepIds || []),
+        JSON.stringify(snapshot.modelTiersUsed || []),
+        snapshot.status,
+        snapshot.createdAt,
+        snapshot.threadId,
+      ),
+    );
+  }
+
+  loadWorkflowSnapshot(snapshotId: string): WorkflowSnapshot | null {
+    if (!this.db) return null;
+    const db = this.db;
+    const row = db.prepare(
+      'SELECT * FROM workflow_snapshots WHERE id = ?',
+    ).get(snapshotId) as {
+      id: string; workflow_id: string; current_step_index: number;
+      definition: string; context: string; step_results: string;
+      completed_step_ids: string; model_tiers_used: string;
+      status: string; created_at: string; updated_at: string; thread_id: string;
+    } | undefined;
+    if (!row) return null;
+    return {
+      id: row.id,
+      workflowId: row.workflow_id,
+      currentStepIndex: row.current_step_index,
+      definition: JSON.parse(row.definition),
+      context: JSON.parse(row.context),
+      stepResults: JSON.parse(row.step_results),
+      completedStepIds: row.completed_step_ids ? JSON.parse(row.completed_step_ids) : [],
+      modelTiersUsed: row.model_tiers_used ? JSON.parse(row.model_tiers_used) : [],
+      status: row.status,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      threadId: row.thread_id,
+    };
+  }
+
+  listIncompleteWorkflows(threadId: string): WorkflowSnapshot[] {
+    if (!this.db) return [];
+    const db = this.db;
+    // H7: Filter for both 'paused' (approval waiting) and 'saved' (intermediate snapshots)
+    const rows = db.prepare(
+      'SELECT * FROM workflow_snapshots WHERE status IN (?, ?) AND thread_id = ? ORDER BY updated_at DESC',
+    ).all('paused', 'saved', threadId) as Array<{
+      id: string; workflow_id: string; current_step_index: number;
+      definition: string; context: string; step_results: string;
+      completed_step_ids: string; model_tiers_used: string;
+      status: string; created_at: string; updated_at: string; thread_id: string;
+    }>;
+    return rows.map((row) => ({
+      id: row.id,
+      workflowId: row.workflow_id,
+      currentStepIndex: row.current_step_index,
+      definition: JSON.parse(row.definition),
+      context: JSON.parse(row.context),
+      stepResults: JSON.parse(row.step_results),
+      completedStepIds: row.completed_step_ids ? JSON.parse(row.completed_step_ids) : [],
+      modelTiersUsed: row.model_tiers_used ? JSON.parse(row.model_tiers_used) : [],
+      status: row.status,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      threadId: row.thread_id,
     }));
   }
 

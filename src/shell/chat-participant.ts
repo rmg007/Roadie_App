@@ -27,6 +27,7 @@ import { ONBOARD_WORKFLOW } from '../engine/definitions/onboard';
 import type { LearningDatabase } from '../learning/learning-database';
 import { getLogger } from './logger';
 import { SessionManager } from './session-manager';
+import { ClaudeMdParser } from '../analyzer/claude-md-parser';
 
 const PARTICIPANT_ID = 'roadie.roadie';
 
@@ -35,6 +36,9 @@ let _lastContextSnapshot = '';
 
 /** Global SessionManager instance — tracks conversation state across chat turns. */
 const _sessionManager = new SessionManager();
+
+// H8: Set learning database on session manager when available
+let _sessionManagerInitialized = false;
 
 /** Returns the last context snapshot written before an LLM call. */
 export function getChatLastContext(): string {
@@ -50,6 +54,7 @@ const WORKFLOW_MAP: Record<string, WorkflowDefinition> = {
   document:   DOCUMENT_WORKFLOW,
   dependency: DEPENDENCY_WORKFLOW,
   onboard:    ONBOARD_WORKFLOW,
+  resume:     undefined, // Handled specially, no workflow def
 };
 
 /**
@@ -86,6 +91,12 @@ export function registerChatParticipant(deps?: {
   ): Promise<vscode.ChatResult> => {
     const log = getLogger();
     const startMs = Date.now();
+
+    // H8: Initialize session manager with learning database on first call
+    if (!_sessionManagerInitialized && deps?.learningDb) {
+      _sessionManager.setLearningDatabase(deps.learningDb);
+      _sessionManagerInitialized = true;
+    }
 
     // Extract threadId from chat context history
     const threadId = context.history && context.history.length > 0
@@ -171,7 +182,41 @@ export function registerChatParticipant(deps?: {
       `signals: [${classification.signals.join(', ')}])`,
     );
 
-    // 2. Handle 'clarify' intent separately — user is correcting/refining previous intent
+    // 2. Handle 'resume' intent — list or auto-resume incomplete workflows
+    if (classification.intent === 'resume') {
+      log.info(`Detected 'resume' intent (signals: ${classification.signals.join(', ')})`);
+      const workflows = _sessionManager.listIncompleteWorkflows(threadId);
+
+      if (workflows.length === 0) {
+        log.info(`No incomplete workflows to resume.`);
+        response.markdown(`**No incomplete workflows found.** Start a new task or ask for help!`);
+        return {};
+      }
+
+      if (workflows.length === 1) {
+        // Auto-resume single workflow
+        const workflow = workflows[0];
+        log.info(`Auto-resuming single workflow: ${workflow.workflowId} (${workflow.progress})`);
+        response.markdown(
+          `**Resuming workflow:** ${workflow.workflowId}\n\n` +
+          `*Progress: ${workflow.progress}*\n\n`,
+        );
+        // TODO: Call engine.resumeFromSnapshot(workflow.id) when available
+        response.markdown(`*Resume logic awaits WorkflowEngine.resumeFromSnapshot() implementation.*`);
+        return {};
+      }
+
+      // Multiple workflows — ask user to pick
+      const list = workflows.map((w) => `- **${w.workflowId}** (${w.progress})`).join('\n');
+      log.info(`Found ${workflows.length} incomplete workflows; listing for user selection.`);
+      response.markdown(
+        `**Found ${workflows.length} incomplete workflows:**\n\n${list}\n\n` +
+        `Which would you like to resume? (e.g., "resume task-xyz")`,
+      );
+      return {};
+    }
+
+    // 3. Handle 'clarify' intent — user is correcting/refining previous intent
     if (classification.intent === 'clarify') {
       log.info(`Detected 'clarify' intent (signals: ${classification.signals.join(', ')})`);
 
@@ -205,7 +250,7 @@ export function registerChatParticipant(deps?: {
       }
     }
 
-    // 3. Check if we have a workflow for this intent
+    // 4. Check if we have a workflow for this intent
     const workflow = WORKFLOW_MAP[classification.intent];
 
     if (!workflow) {
@@ -237,7 +282,7 @@ export function registerChatParticipant(deps?: {
       return {};
     }
 
-    // 4. Build workflow context
+    // 5. Build workflow context
     let enrichedPrompt = request.prompt;
     if (
       deps?.learningDb &&
@@ -253,15 +298,29 @@ export function registerChatParticipant(deps?: {
       }
     }
 
+    // H2: Parse project conventions from CLAUDE.md
+    let conventions = undefined;
+    try {
+      if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+        const workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
+        const parser = new ClaudeMdParser();
+        conventions = await parser.parse(workspaceRoot);
+        log.debug(`Parsed conventions from ${workspaceRoot}: ${conventions.techStack.length} tech items`);
+      }
+    } catch (err) {
+      log.warn(`Failed to parse CLAUDE.md conventions: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
     const workflowContext: WorkflowContext = {
       prompt:       enrichedPrompt,
       intent:       classification,
       projectModel: (deps?.projectModel ?? {}) as ProjectModel,
       progress:     new VSCodeProgressReporter(response),
       cancellation: new VSCodeCancellationHandle(token),
+      conventions,
     };
 
-    // 4b. Context snapshot + level-gated logging
+    // 5b. Context snapshot + level-gated logging
     _lastContextSnapshot = enrichedPrompt;
     const lensLevel = deps?.contextLensLevel ?? 'summary';
     if (lensLevel !== 'off') {
@@ -276,7 +335,7 @@ export function registerChatParticipant(deps?: {
       }
     }
 
-    // 5. Execute workflow
+    // 6. Execute workflow
     log.info(`Starting workflow: ${workflow.name}`);
     response.markdown(
       `**Roadie** detected intent: **${classification.intent}** ` +
@@ -304,7 +363,7 @@ export function registerChatParticipant(deps?: {
       // _sessionManager.markPaused(threadId, pausedSessionId);
     }
 
-    // 6. Persist outcome to LearningDatabase (if available)
+    // 7. Persist outcome to LearningDatabase (if available)
     if (deps?.learningDb) {
       try {
         const failedStep = result.stepResults.find((r) => r.status === 'failed');
@@ -324,7 +383,7 @@ export function registerChatParticipant(deps?: {
       }
     }
 
-    // 7. Stream final result
+    // 8. Stream final result
     response.markdown(`\n---\n\n${result.summary}\n\n`);
     response.markdown(
       `*Completed in ${result.duration}ms — ${result.stepResults.length} steps executed.*`,

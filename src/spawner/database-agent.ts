@@ -9,7 +9,7 @@
  * @depends-on ModelProvider, ProgressReporter
  */
 
-import type { ConversationTurn } from '../types';
+import type { ConversationTurn, ProjectConventions } from '../types';
 import type { ModelProvider, ProgressReporter } from '../providers';
 
 /**
@@ -37,15 +37,17 @@ export class DatabaseAgent {
    * Generate Prisma schema and TypeScript types from requirements.
    * @param requirements Natural language requirements (e.g., "User has email, password, posts")
    * @param transcript Interview conversation turns (optional context)
+   * @param conventions Project conventions from CLAUDE.md (optional)
    * @returns Promise<DatabaseOutput> with schemaPrisma and typesTS
    */
   async generate(
     requirements: string,
     transcript: ConversationTurn[] = [],
+    conventions?: ProjectConventions,
   ): Promise<DatabaseOutput> {
     this.progress.report('Generating database schema...');
 
-    const prompt = this.buildPrompt(requirements, transcript);
+    const prompt = this.buildPrompt(requirements, transcript, conventions);
     const response = await this.callModel(prompt);
 
     const output = this.parseResponse(response);
@@ -56,13 +58,16 @@ export class DatabaseAgent {
    * Build concise prompt for Prisma schema generation.
    * Token budget: <300 tokens including requirements.
    */
-  private buildPrompt(requirements: string, transcript: ConversationTurn[]): string {
+  private buildPrompt(requirements: string, transcript: ConversationTurn[], conventions?: ProjectConventions): string {
     const transcriptContext =
       transcript.length > 0
         ? `\nInterview context:\n${transcript.map((t) => `Q: ${t.question}\nA: ${t.answer}`).join('\n\n')}`
         : '';
+    const conventionsContext = conventions
+      ? `\nFollow schema conventions: ${conventions.codingStyle.join(', ')}`
+      : '';
 
-    return `Generate Prisma schema + TS types.
+    return `Generate Prisma schema + TS types.${conventionsContext}
 
 Requirements:
 ${requirements}${transcriptContext}

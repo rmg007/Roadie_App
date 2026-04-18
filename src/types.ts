@@ -170,6 +170,8 @@ export interface WorkflowContext {
   requirementsBrief?: string;
   /** Final confidence score from interviewer agent (if conducted) */
   interviewConfidence?: number;
+  /** Project conventions from CLAUDE.md (H2: P7 conventions injection) */
+  conventions?: ProjectConventions;
   /** Dynamic fields for storing question responses and custom data */
   [key: string]: unknown;
 }
@@ -718,4 +720,106 @@ export interface InterviewResult {
   totalQuestions: number;
   /** Reason the interview stopped: confidence threshold met, max questions reached, or user signal */
   stoppedBy: 'confidence' | 'max_questions' | 'user_signal';
+}
+
+// =====================================================================
+// P4 Engine Types (Workflow Snapshot Persistence)
+// =====================================================================
+
+/**
+ * Serializable workflow definition (H4: Function Serialization).
+ * Contains only data fields, no function closures or callbacks.
+ */
+export interface SerializableWorkflowDefinition {
+  /** Unique ID for this workflow */
+  id: string;
+  /** Human-readable name */
+  name: string;
+  /** Sequential list of steps (data only) */
+  steps: Array<{
+    id: string;
+    name: string;
+    type: 'sequential' | 'parallel' | 'conditional';
+    agentRole: AgentRole;
+    modelTier: ModelTier;
+    toolScope: ToolScope;
+    promptTemplate: string;
+    timeoutMs: number;
+    maxRetries: number;
+    branches?: Array<any>;
+    contextScope?: 'full' | 'stack' | 'structure' | 'commands' | 'patterns';
+    requiresApproval?: boolean;
+  }>;
+}
+
+/**
+ * Serializable context snapshot for workflow persistence.
+ * Contains only safe, serializable fields — no function refs or provider objects.
+ */
+export interface SerializableWorkflowContext {
+  prompt: string;
+  intent: ClassificationResult;
+  projectModel: { tech?: string }; // Minimal serializable projection
+  interviewTranscript?: ConversationTurn[];
+  requirementsBrief?: string;
+  interviewConfidence?: number;
+  databaseSchema?: string;
+  backendRoutes?: string;
+  backendAuth?: string;
+  frontendPages?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Snapshot of a workflow state for persistence and resumption.
+ * Stored in learning database for later recovery.
+ */
+export interface WorkflowSnapshot {
+  /** Unique snapshot ID */
+  id: string;
+  /** Workflow ID this snapshot belongs to */
+  workflowId: string;
+  /** Index of the last completed step */
+  currentStepIndex: number;
+  /** Workflow definition ID (string ref, not full definition) (H4) */
+  definition: string;
+  /** Serialized context at time of snapshot */
+  context: SerializableWorkflowContext;
+  /** Results from completed steps */
+  stepResults: StepResult[];
+  /** IDs of steps that have been completed (H5: Idempotency on Resume) */
+  completedStepIds: string[];
+  /** Model tiers used so far (H10: Model Tier Tracking) */
+  modelTiersUsed: ModelTier[];
+  /** Snapshot status: 'paused' | 'failed' | 'saved' | 'completed' */
+  status: string;
+  /** ISO 8601 timestamp when snapshot was created */
+  createdAt: string;
+  /** ISO 8601 timestamp of last update */
+  updatedAt: string;
+  /** Associated thread ID for chat continuity */
+  threadId: string;
+}
+
+// =====================================================================
+// Project Conventions (from CLAUDE.md)
+// =====================================================================
+
+/**
+ * Extracted project conventions from CLAUDE.md.
+ * Used to guide code generation agents to follow project-specific patterns.
+ */
+export interface ProjectConventions {
+  /** Tech stack entries (languages, frameworks, tools) */
+  techStack: string[];
+  /** Coding style rules (formatting, structure, patterns) */
+  codingStyle: string[];
+  /** Naming conventions (variables, functions, classes) */
+  namingConventions: string[];
+  /** Forbidden patterns or practices */
+  forbidden: string[];
+  /** Project-specific constraints and requirements */
+  constraints: string[];
+  /** Recent patterns detected in the codebase */
+  recentPatterns: string[];
 }

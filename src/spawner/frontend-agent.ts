@@ -10,6 +10,7 @@
  */
 
 import type { ModelProvider, ProgressReporter } from '../providers';
+import type { ProjectConventions } from '../types';
 
 /**
  * Output structure for frontend agent.
@@ -38,12 +39,13 @@ export class FrontendAgent {
    * Generate React components (pages, forms, hooks, types).
    * @param requirements Natural language UI requirements
    * @param apiSpec API endpoint specification
+   * @param conventions Project conventions from CLAUDE.md (optional)
    * @returns Promise<FrontendOutput> with pages, forms, hook, types
    */
-  async generate(requirements: string, apiSpec: string): Promise<FrontendOutput> {
+  async generate(requirements: string, apiSpec: string, conventions?: ProjectConventions): Promise<FrontendOutput> {
     this.progress.report('Generating frontend components...');
 
-    const prompt = this.buildPrompt(requirements, apiSpec);
+    const prompt = this.buildPrompt(requirements, apiSpec, conventions);
     const response = await this.callModel(prompt);
 
     const output = this.parseResponse(response);
@@ -54,8 +56,11 @@ export class FrontendAgent {
    * Build concise prompt for React component generation.
    * Token budget: <350 tokens.
    */
-  private buildPrompt(requirements: string, apiSpec: string): string {
-    return `Generate React pages, forms, useApi hook, and types. Use shadcn/ui.
+  private buildPrompt(requirements: string, apiSpec: string, conventions?: ProjectConventions): string {
+    const conventionsContext = conventions
+      ? `Tech stack: ${conventions.techStack.join(', ')}\nNaming: ${conventions.namingConventions.join(', ')}`
+      : '';
+    return `Generate React pages, forms, useApi hook, and types. Use shadcn/ui.${conventionsContext ? '\n\n' + conventionsContext : ''}
 
 Requirements:
 ${requirements}

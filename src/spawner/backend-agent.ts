@@ -10,6 +10,7 @@
  */
 
 import type { ModelProvider, ProgressReporter } from '../providers';
+import type { ProjectConventions } from '../types';
 
 /**
  * Output structure for backend agent.
@@ -38,16 +39,18 @@ export class BackendAgent {
    * @param requirements Natural language API requirements
    * @param apiSpec OpenAPI/REST spec or endpoint list
    * @param schema Prisma schema string (for types reference)
+   * @param conventions Project conventions from CLAUDE.md (optional)
    * @returns Promise<BackendOutput> with routes, auth, errors
    */
   async generate(
     requirements: string,
     apiSpec: string,
     schema: string,
+    conventions?: ProjectConventions,
   ): Promise<BackendOutput> {
     this.progress.report('Generating backend endpoints...');
 
-    const prompt = this.buildPrompt(requirements, apiSpec, schema);
+    const prompt = this.buildPrompt(requirements, apiSpec, schema, conventions);
     const response = await this.callModel(prompt);
 
     const output = this.parseResponse(response);
@@ -62,8 +65,12 @@ export class BackendAgent {
     requirements: string,
     apiSpec: string,
     schema: string,
+    conventions?: ProjectConventions,
   ): string {
-    return `Generate Express routes + JWT auth + error handlers.
+    const conventionsContext = conventions
+      ? `Use these naming conventions: ${conventions.namingConventions.join(', ')}\nForbidden: ${conventions.forbidden.join(', ')}`
+      : '';
+    return `Generate Express routes + JWT auth + error handlers.${conventionsContext ? '\n\n' + conventionsContext : ''}
 
 Requirements:
 ${requirements}

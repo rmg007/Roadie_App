@@ -178,6 +178,11 @@ export const INTENT_PATTERNS: Record<string, IntentPattern[]> = {
     { regex: /\bvulns?\b/i,                                 weight: 0.45, label: 'signal:vulns' },
   ],
 
+  resume: [
+    { regex: /\bresume\b/i,                                 weight: 0.95, label: 'keyword:resume' },
+    { regex: /\bpick up where|continue|where i left off/i,  weight: 0.80, label: 'signal:continue' },
+  ],
+
   onboard: [
     { regex: /\bonboard(ed|ing)?\b/i,                       weight: 0.50, label: 'keyword:onboard' },
     { regex: /\bnew to\b/i,                                 weight: 0.35, label: 'keyword:new-to' },

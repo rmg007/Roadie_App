@@ -10,6 +10,15 @@
  */
 
 /**
+ * Represents an incomplete workflow available for resumption.
+ */
+export interface IncompleteWorkflow {
+  id: string; // Unique ID for the workflow snapshot
+  workflowId: string; // Type of workflow (bug_fix, feature, etc.)
+  progress: string; // Human-readable progress summary
+}
+
+/**
  * Represents the state of a single conversation thread.
  */
 export interface ConversationSession {
@@ -26,6 +35,8 @@ export interface ConversationSession {
  */
 export class SessionManager {
   private sessions: Map<string, ConversationSession> = new Map();
+  // H8: Learning database for querying incomplete workflows
+  private learningDb?: any;
 
   /**
    * Get or create a session for the given threadId.
@@ -111,5 +122,40 @@ export class SessionManager {
    */
   getAllSessions(): ConversationSession[] {
     return Array.from(this.sessions.values());
+  }
+
+  /**
+   * Set the learning database for querying incomplete workflows (H8).
+   *
+   * @param learningDb LearningDatabase instance for snapshot queries
+   */
+  setLearningDatabase(learningDb: any): void {
+    this.learningDb = learningDb;
+  }
+
+  /**
+   * List all incomplete workflows available for resumption in the given thread.
+   * H8: Queries learning database for paused/saved workflow snapshots.
+   *
+   * @param threadId Unique conversation thread ID
+   * @returns Array of IncompleteWorkflow objects (name, progress)
+   */
+  listIncompleteWorkflows(threadId: string): IncompleteWorkflow[] {
+    // H8: Query learning database for incomplete workflows
+    if (!this.learningDb) {
+      return [];
+    }
+
+    try {
+      const snapshots = this.learningDb.listIncompleteWorkflows(threadId);
+      return snapshots.map((snapshot: any) => ({
+        id: snapshot.id,
+        workflowId: snapshot.workflowId,
+        progress: `${snapshot.currentStepIndex + 1}/${snapshot.stepResults.length} steps completed`,
+      }));
+    } catch {
+      // Non-fatal — return empty array if query fails
+      return [];
+    }
   }
 }
