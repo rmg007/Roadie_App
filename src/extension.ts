@@ -336,10 +336,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   };
 
   // ── Chat Participant ─────────────────────────────────────────────────────
+  const modelProvider = new VSCodeModelProvider();
   c.register(
     registerChatParticipant({
       stepHandler,
       projectModel,
+      modelProvider,
       learningDb: learningDb ?? undefined,
       contextLensLevel: config.contextLensLevel,
     }),

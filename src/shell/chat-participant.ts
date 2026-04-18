@@ -68,6 +68,7 @@ export function registerChatParticipant(deps?: {
   classifier?: IntentClassifier;
   stepHandler?: StepHandlerFn;
   projectModel?: ProjectModel;
+  modelProvider?: any; // ModelProvider from vscode-providers
   learningDb?: LearningDatabase;
   contextLensLevel?: 'off' | 'summary' | 'full';
 }): vscode.Disposable {
@@ -311,10 +312,16 @@ export function registerChatParticipant(deps?: {
       log.warn(`Failed to parse CLAUDE.md conventions: ${err instanceof Error ? err.message : String(err)}`);
     }
 
+    const projectModel = deps?.projectModel ?? ({} as ProjectModel);
+    // Store modelProvider on projectModel for InterviewerAgent access
+    if (deps?.modelProvider && projectModel) {
+      (projectModel as any).modelProvider = deps.modelProvider;
+    }
+
     const workflowContext: WorkflowContext = {
       prompt:       enrichedPrompt,
       intent:       classification,
-      projectModel: (deps?.projectModel ?? {}) as ProjectModel,
+      projectModel,
       progress:     new VSCodeProgressReporter(response),
       cancellation: new VSCodeCancellationHandle(token),
       conventions,
