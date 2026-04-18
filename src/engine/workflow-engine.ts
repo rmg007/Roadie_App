@@ -484,7 +484,9 @@ export class WorkflowEngine {
     context: WorkflowContext,
   ): Promise<StepResult> {
     const log = getLogger();
-    const interviewer = new InterviewerAgent(this.stepExecutor, context.progress);
+    const modelProvider = (context.projectModel as any)?.modelProvider;
+    if (!modelProvider) throw new Error('ModelProvider not available in context');
+    const interviewer = new InterviewerAgent(modelProvider, context.progress);
     const result = await interviewer.conduct(context, step.modelTier || 'standard');
 
     // Store interview results in context for downstream steps
