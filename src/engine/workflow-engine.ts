@@ -485,7 +485,18 @@ export class WorkflowEngine {
   ): Promise<StepResult> {
     const log = getLogger();
     const modelProvider = (context.projectModel as any)?.modelProvider;
-    if (!modelProvider) throw new Error('ModelProvider not available in context');
+    if (!modelProvider) {
+      log.error('[interview] ModelProvider not available in context');
+      return {
+        stepId: step.id,
+        status: 'failed',
+        output: 'Interview failed: ModelProvider not available',
+        tokenUsage: { input: 0, output: 0 },
+        attempts: 1,
+        modelUsed: '',
+        error: 'ModelProvider not configured',
+      };
+    }
     const interviewer = new InterviewerAgent(modelProvider, context.progress);
     const result = await interviewer.conduct(context, step.modelTier || 'standard');
 
