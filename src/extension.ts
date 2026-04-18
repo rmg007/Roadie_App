@@ -367,25 +367,29 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
 
   // #roadie chat variable — exposes ProjectModel.toContext() to any participant
-  const chatApi = vscode.chat as unknown as ChatVariableResolverApi;
-  const chatVariableDisposable = chatApi.registerChatVariableResolver(
-    'roadie',
-    'roadie',
-    'Inject Roadie project context (tech stack, patterns, commands) into any chat.',
-    'Roadie project context: tech stack, directory structure, patterns, and detected commands.',
-    false,
-    async (_chatContext: unknown, _token: vscode.CancellationToken) => {
-      await ensureProjectReady().catch(() => undefined);
-      const ctx = projectModel.toContext({ maxTokens: 2_000, scope: 'full' });
-      return [
-        {
-          level: vscode.ChatVariableLevel.Full,
-          value: ctx.serialized,
-        },
-      ];
-    },
-  );
-  c.register(chatVariableDisposable);
+  if (vscode.chat && (vscode.chat as any).registerChatVariableResolver) {
+    const chatApi = vscode.chat as unknown as ChatVariableResolverApi;
+    const chatVariableDisposable = chatApi.registerChatVariableResolver(
+      'roadie',
+      'roadie',
+      'Inject Roadie project context (tech stack, patterns, commands) into any chat.',
+      'Roadie project context: tech stack, directory structure, patterns, and detected commands.',
+      false,
+      async (_chatContext: unknown, _token: vscode.CancellationToken) => {
+        await ensureProjectReady().catch(() => undefined);
+        const ctx = projectModel.toContext({ maxTokens: 2_000, scope: 'full' });
+        return [
+          {
+            level: vscode.ChatVariableLevel.Full,
+            value: ctx.serialized,
+          },
+        ];
+      },
+    );
+    c.register(chatVariableDisposable);
+  } else {
+    logger.debug('vscode.chat.registerChatVariableResolver not available — skipping variable registration');
+  }
 
   // ── Status bar ───────────────────────────────────────────────────────────
   c.register(createStatusBar());

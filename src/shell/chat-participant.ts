@@ -561,6 +561,9 @@ export function registerChatParticipant(deps?: {
     return {};
   };
 
+  if (!(vscode as any).chat?.createChatParticipant) {
+    return { dispose: () => {} };
+  }
   const participant = vscode.chat.createChatParticipant(PARTICIPANT_ID, handler);
   participant.iconPath = new vscode.ThemeIcon('zap');
   return participant;
