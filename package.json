@@ -1,6 +1,6 @@
 {
   "name": "roadie",
-  "displayName": "Roadie v0.11.0 — Universal Context Orchestrator",
+  "displayName": "Roadie v0.11.0 — AI Workflow Engine for Copilot",
   "description": "The Configuration-First AI Workflow Engine. Orchestrate project context for Copilot, Claude, and Cursor.",
   "version": "0.11.0",
   "publisher": "roadie",
@@ -207,7 +207,8 @@
     "test:scenarios": "vitest run test/harness/scenario.test.ts",
     "package": "vsce package --no-dependencies",
     "publish": "vsce publish --no-dependencies",
-    "prepublish:test": "npm run test && npm run lint && npm run build"
+    "prepublish:test": "npm run test && npm run lint && npm run build",
+    "deploy:local": "git add . && git commit -m \"chore: sync and install\" && git push && npm run build && npm run package && code --install-extension roadie-0.11.0.vsix && Remove-Item roadie-0.11.0.vsix"
   },
   "dependencies": {
     "better-sqlite3": "^9.4.3",
