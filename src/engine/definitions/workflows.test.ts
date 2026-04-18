@@ -81,6 +81,10 @@ describe('All Workflow Definitions — structure', () => {
 
   it.each(ALL_WORKFLOWS)('%s steps all have prompt templates', (_name, wf) => {
     for (const step of wf.steps) {
+      // Skip interviewer agents and layer agents (database, backend, frontend) which have hardcoded prompts
+      if (step.agentRole === 'interviewer' || ['database', 'backend', 'frontend'].includes(step.agentRole as string)) {
+        continue;
+      }
       expect(step.promptTemplate.length, `Step ${step.id} missing template`).toBeGreaterThan(0);
     }
   });
@@ -111,9 +115,9 @@ describe('Feature Workflow', () => {
     const s = FEATURE_WORKFLOW.steps[2];
     expect(s.type).toBe('parallel');
     expect(s.branches).toHaveLength(3);
-    expect(s.branches![0].agentRole).toBe('database_agent');
-    expect(s.branches![1].agentRole).toBe('backend_agent');
-    expect(s.branches![2].agentRole).toBe('frontend_agent');
+    expect(s.branches![0].agentRole).toBe('database');
+    expect(s.branches![1].agentRole).toBe('backend');
+    expect(s.branches![2].agentRole).toBe('frontend');
   });
 
   it('step 6 (quality review) uses standard tier', () => {

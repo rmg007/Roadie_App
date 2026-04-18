@@ -48,9 +48,30 @@ export const FEATURE_WORKFLOW: WorkflowDefinition = {
       timeoutMs: 120_000,
       maxRetries: 2,
       branches: [
-        { id: 'database-agent', name: 'Database changes', type: 'sequential', agentRole: 'database_agent', modelTier: 'free', toolScope: 'implementation', promptTemplate: 'Implement database layer changes per the approved plan.\n\n{previous_output}', timeoutMs: 60_000, maxRetries: 2 },
-        { id: 'backend-agent', name: 'Backend implementation', type: 'sequential', agentRole: 'backend_agent', modelTier: 'free', toolScope: 'implementation', promptTemplate: 'Implement backend layer changes per the approved plan.\n\n{previous_output}', timeoutMs: 60_000, maxRetries: 2 },
-        { id: 'frontend-agent', name: 'Frontend implementation', type: 'sequential', agentRole: 'frontend_agent', modelTier: 'free', toolScope: 'implementation', promptTemplate: 'Implement frontend layer changes per the approved plan.\n\n{previous_output}', timeoutMs: 60_000, maxRetries: 2 },
+        {
+          id: 'design-database',
+          name: 'Designing database schema',
+          type: 'agent' as const,
+          agentRole: 'database',
+          modelTier: 'standard',
+          timeoutMs: 120_000,
+        } as any,
+        {
+          id: 'implement-backend',
+          name: 'Implementing backend API',
+          type: 'agent' as const,
+          agentRole: 'backend',
+          modelTier: 'standard',
+          timeoutMs: 120_000,
+        } as any,
+        {
+          id: 'build-frontend',
+          name: 'Building frontend UI',
+          type: 'agent' as const,
+          agentRole: 'frontend',
+          modelTier: 'standard',
+          timeoutMs: 120_000,
+        } as any,
       ],
     },
     {

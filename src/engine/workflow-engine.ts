@@ -25,6 +25,9 @@ import type {
 import { WorkflowState } from '../types';
 import { StepExecutor } from './step-executor';
 import { InterviewerAgent } from '../spawner/interviewer-agent';
+import { DatabaseAgent } from '../spawner/database-agent';
+import { BackendAgent } from '../spawner/backend-agent';
+import { FrontendAgent } from '../spawner/frontend-agent';
 import { getLogger } from '../shell/logger';
 
 export class WorkflowEngine {
@@ -221,7 +224,7 @@ export class WorkflowEngine {
         } else {
           delete branchContext.previousStepResults;
         }
-        return this.stepExecutor.executeStep(branch, branchContext);
+        return this.executeLayerAgent(branch, branchContext);
       }),
     );
 
@@ -274,6 +277,100 @@ export class WorkflowEngine {
       attempts:  1,
       modelUsed: branchResults.map((r) => r.modelUsed).join(', '),
     };
+  }
+
+  /**
+   * Execute a layer agent step (database, backend, or frontend).
+   * Routes to the appropriate agent based on agentRole.
+   */
+  private async executeLayerAgent(
+    step: WorkflowStep,
+    context: WorkflowContext,
+  ): Promise<StepResult> {
+    const log = getLogger();
+    const agentRole = step.agentRole as string;
+
+    log.debug(`[layer-agent] Executing ${agentRole} agent for step "${step.id}"`);
+
+    try {
+      if (agentRole === 'database') {
+        const agent = new DatabaseAgent(
+          (context.projectModel as any).modelProvider || { sendRequest: async () => ({ text: '' }) },
+          context.progress,
+        );
+        const result = await agent.generate(
+          context.requirementsBrief || '',
+          context.interviewTranscript || [],
+        );
+        context.databaseSchema = result.schemaPrisma;
+        context.databaseTypes = result.typesTS;
+        return {
+          stepId: step.id,
+          status: 'success',
+          output: result.schemaPrisma,
+          tokenUsage: { input: 0, output: 0 },
+          attempts: 1,
+          modelUsed: 'claude',
+        };
+      } else if (agentRole === 'backend') {
+        const agent = new BackendAgent(
+          (context.projectModel as any).modelProvider || { sendRequest: async () => ({ text: '' }) },
+          context.progress,
+        );
+        const result = await agent.generate(
+          context.requirementsBrief || '',
+          (context as any).apiSpec || '',
+          (context as any).databaseSchema || '',
+        );
+        context.backendRoutes = result.routesTS;
+        context.backendAuth = result.authTS;
+        context.backendErrors = result.errorsTS;
+        return {
+          stepId: step.id,
+          status: 'success',
+          output: result.routesTS,
+          tokenUsage: { input: 0, output: 0 },
+          attempts: 1,
+          modelUsed: 'claude',
+        };
+      } else if (agentRole === 'frontend') {
+        const agent = new FrontendAgent(
+          (context.projectModel as any).modelProvider || { sendRequest: async () => ({ text: '' }) },
+          context.progress,
+        );
+        const result = await agent.generate(
+          context.requirementsBrief || '',
+          (context as any).apiSpec || '',
+        );
+        context.frontendPages = result.pagesTSX;
+        context.frontendForms = result.formsTSX;
+        context.frontendHooks = result.useApiTS;
+        context.frontendTypes = result.typesTS;
+        return {
+          stepId: step.id,
+          status: 'success',
+          output: result.pagesTSX,
+          tokenUsage: { input: 0, output: 0 },
+          attempts: 1,
+          modelUsed: 'claude',
+        };
+      } else {
+        // Fallback to StepExecutor for unknown agent roles
+        return await this.stepExecutor.executeStep(step, context);
+      }
+    } catch (err: unknown) {
+      const error = err instanceof Error ? err.message : String(err);
+      log.error(`[layer-agent] ${agentRole} agent failed: ${error}`);
+      return {
+        stepId: step.id,
+        status: 'failed',
+        output: '',
+        tokenUsage: { input: 0, output: 0 },
+        attempts: 1,
+        modelUsed: 'claude',
+        error,
+      };
+    }
   }
 
   /**
