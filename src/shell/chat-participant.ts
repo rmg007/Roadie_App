@@ -26,11 +26,15 @@ import { DEPENDENCY_WORKFLOW } from '../engine/definitions/dependency';
 import { ONBOARD_WORKFLOW } from '../engine/definitions/onboard';
 import type { LearningDatabase } from '../learning/learning-database';
 import { getLogger } from './logger';
+import { SessionManager } from './session-manager';
 
 const PARTICIPANT_ID = 'roadie.roadie';
 
 /** Stores the most recent serialized context snapshot for `Roadie: Show Last Context`. */
 let _lastContextSnapshot = '';
+
+/** Global SessionManager instance — tracks conversation state across chat turns. */
+const _sessionManager = new SessionManager();
 
 /** Returns the last context snapshot written before an LLM call. */
 export function getChatLastContext(): string {
@@ -76,18 +80,51 @@ export function registerChatParticipant(deps?: {
 
   const handler: vscode.ChatRequestHandler = async (
     request: vscode.ChatRequest,
-    _context: vscode.ChatContext,
+    context: vscode.ChatContext,
     response: vscode.ChatResponseStream,
     token: vscode.CancellationToken,
   ): Promise<vscode.ChatResult> => {
     const log = getLogger();
     const startMs = Date.now();
 
+    // Extract threadId from chat context history
+    const threadId = context.history && context.history.length > 0
+      ? context.history[context.history.length - 1].id || generateThreadId()
+      : generateThreadId();
+
+    const session = _sessionManager.getSession(threadId);
+
     // Truncate the prompt for log readability (max 80 chars)
     const preview = request.prompt.length > 80
       ? `${request.prompt.slice(0, 80)}…`
       : request.prompt;
-    log.info(`@roadie received: "${preview}"`);
+    log.info(`@roadie received: "${preview}" (threadId: ${threadId})`);
+
+    // Check if this thread has a paused workflow awaiting resumption
+    if (session.paused && session.pausedSessionId) {
+      log.info(
+        `Thread ${threadId} has paused workflow (sessionId: ${session.pausedSessionId}). ` +
+        `Routing to resumption instead of classification.`,
+      );
+
+      // Parse user approval: "yes" resumes, anything else aborts
+      const userApproval = request.prompt.toLowerCase().trim() === 'yes';
+
+      response.markdown(
+        `**Resuming paused workflow** (${session.workflowId || 'unknown'}) ` +
+        `with approval: ${userApproval ? '✓ Continue' : '✗ Abort'}\n\n`,
+      );
+
+      // TODO: Call engine.resume(session.pausedSessionId, userApproval) when resume() is available
+      // For now, mark as resumed and continue workflow logic
+      _sessionManager.resumeFromPaused(threadId);
+
+      // Early return after pause handling — await engine.resume() implementation
+      response.markdown(
+        `*Pause resumption logic will integrate with WorkflowEngine.resume() in next iteration.*`,
+      );
+      return {};
+    }
 
     // Slash subcommand: skip classification, route directly to workflow
     const COMMAND_WORKFLOW_MAP: Record<string, string> = {
@@ -213,6 +250,9 @@ export function registerChatParticipant(deps?: {
     );
     response.markdown(`Starting **${workflow.name}** workflow…\n\n`);
 
+    // Track this workflow in the session
+    _sessionManager.setWorkflow(threadId, workflow.id);
+
     const engine = new WorkflowEngine(new StepExecutor(stepHandler));
     const result = await engine.execute(workflow, workflowContext);
     const durationMs = Date.now() - startMs;
@@ -223,8 +263,11 @@ export function registerChatParticipant(deps?: {
       `${succeededSteps}/${result.stepResults.length} steps succeeded, ` +
       `state: ${result.state}, ${durationMs}ms`,
     );
-    if (result.state === 'PAUSED') {
+    if (result.state === 'PAUSED' || result.state === 'WAITING_FOR_APPROVAL') {
       log.warn(`Workflow paused (step failure): ${workflow.name}`);
+      // TODO: When engine.getPausedSessions() is available, extract sessionId and call:
+      // const pausedSessionId = engine.getLastPausedSessionId();
+      // _sessionManager.markPaused(threadId, pausedSessionId);
     }
 
     // 5. Persist outcome to LearningDatabase (if available)
@@ -272,4 +315,14 @@ export function buildContextWithHotFiles(
   if (hotFiles.length === 0) return base;
   const lines = hotFiles.map((f) => `- ${f.filePath} (${f.editCount} edits)`);
   return `${base}\n\n## Most-Edited Files\n\n${lines.join('\n')}`;
+}
+
+/**
+ * Generate a unique thread ID when vscode.ChatContext does not provide one.
+ * Fallback for threads without explicit IDs.
+ *
+ * @returns A unique thread identifier
+ */
+function generateThreadId(): string {
+  return `thread-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }

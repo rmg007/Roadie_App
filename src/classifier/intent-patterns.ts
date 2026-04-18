@@ -17,6 +17,13 @@ export interface IntentPattern {
 }
 
 export const INTENT_PATTERNS: Record<string, IntentPattern[]> = {
+  command: [
+    { regex: /\brescan\b/i,  weight: 1.0, label: 'keyword:rescan' },
+    { regex: /\breset\b/i,   weight: 1.0, label: 'keyword:reset' },
+    { regex: /\binit\b/i,    weight: 1.0, label: 'keyword:init' },
+    { regex: /\bscan\b/i,    weight: 1.0, label: 'keyword:scan' },
+  ],
+
   bug_fix: [
     { regex: /\bfix\b/i,                                    weight: 0.35, label: 'keyword:fix' },
     { regex: /\bbugs?\b/i,                                  weight: 0.35, label: 'keyword:bug' },
@@ -222,7 +229,7 @@ export const NEGATIVE_SIGNALS: IntentPattern[] = [
 // downstream code receives literal types (e.g. `0.80`, not `number`).
 export const CONFIDENCE_THRESHOLDS = {
   /** Single primary signal matched -> confidence returned by classifier. */
-  primaryOnly: 0.80,
+  primaryOnly: 0.55,
   /** Primary + at least one secondary signal matched -> highest local confidence. */
   primaryPlusSecondary: 0.90,
   /** Two or more intents scored within this delta of each other -> confidence is capped. */

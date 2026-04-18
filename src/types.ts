@@ -77,13 +77,14 @@ export interface IntentClassifier {
 
 /**
  * Workflow execution states.
- * Transitions: PENDING -> RUNNING -> [WAITING_PARALLEL | RETRYING] -> COMPLETED | PAUSED | FAILED | CANCELLED
+ * Transitions: PENDING -> RUNNING -> [WAITING_PARALLEL | RETRYING | WAITING_FOR_APPROVAL] -> COMPLETED | PAUSED | FAILED | CANCELLED
  */
 export enum WorkflowState {
   PENDING = 'PENDING', // Created, not yet started
   RUNNING = 'RUNNING', // Currently executing a step
   WAITING_PARALLEL = 'WAITING_PARALLEL', // Waiting for parallel branches
   RETRYING = 'RETRYING', // Step failed, retrying with escalation
+  WAITING_FOR_APPROVAL = 'WAITING_FOR_APPROVAL', // Step requires user approval before continuing
   PAUSED = 'PAUSED', // Step failed 3x, awaiting developer intervention
   COMPLETED = 'COMPLETED', // All steps succeeded
   FAILED = 'FAILED', // Workflow aborted (only on cancellation)
@@ -137,6 +138,8 @@ export interface WorkflowStep {
    *  with this scope instead of 'full', reducing prompt token usage.
    *  Defaults to 'full' if omitted. */
   contextScope?: 'full' | 'stack' | 'structure' | 'commands' | 'patterns';
+  /** If true, pause workflow after this step completes successfully and wait for user approval */
+  requiresApproval?: boolean;
 }
 
 /**
@@ -156,6 +159,8 @@ export interface WorkflowContext {
   cancellation: CancellationHandle;
   /** Results from previous step (if any) */
   previousStepResults?: StepResult[];
+  /** Dynamic fields for storing question responses and custom data */
+  [key: string]: unknown;
 }
 
 /**
@@ -198,6 +203,29 @@ export interface WorkflowResult {
   summary: string;
 }
 
+/**
+ * Snapshot of a paused workflow waiting for user approval.
+ * Stored in WorkflowEngine's session map and keyed by session ID.
+ */
+export interface PausedWorkflowSession {
+  /** Unique session ID */
+  sessionId: string;
+  /** Workflow ID */
+  workflowId: string;
+  /** Current step index that just completed and requires approval */
+  currentStepIndex: number;
+  /** Workflow definition for later resumption */
+  definition: WorkflowDefinition;
+  /** Workflow context threaded through steps */
+  context: WorkflowContext;
+  /** Results from all completed steps so far */
+  stepResults: StepResult[];
+  /** Model tiers used so far */
+  modelTiersUsed: ModelTier[];
+  /** Timestamp when paused */
+  timestamp: Date;
+}
+
 // =====================================================================
 // Agent Spawner Types
 // =====================================================================
@@ -231,6 +259,21 @@ export type ModelTier = 'free' | 'standard' | 'premium';
  * Tool scoping per step type.
  */
 export type ToolScope = 'research' | 'implementation' | 'review' | 'documentation';
+
+/**
+ * Step type union including interactive question steps.
+ */
+export type StepType = 'sequential' | 'parallel' | 'conditional' | 'question';
+
+/**
+ * Configuration for question/interactive steps.
+ * Pauses workflow and prompts user for input.
+ */
+export interface QuestionStepConfig {
+  type: 'question';
+  prompt: string;
+  responseField: string;
+}
 
 /**
  * Configuration passed to AgentSpawner to create a subagent.

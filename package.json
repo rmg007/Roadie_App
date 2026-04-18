@@ -1,8 +1,8 @@
 {
   "name": "roadie",
-  "displayName": "Roadie v0.7.10 — AI Workflow Engine for Copilot",
+  "displayName": "Roadie v0.7.14 — AI Workflow Engine for Copilot",
   "description": "Turn GitHub Copilot Chat into structured workflows for bug fixes, features, reviews, refactors, docs, dependency upgrades, and onboarding.",
-  "version": "0.7.10",
+  "version": "0.7.14",
   "publisher": "roadie",
   "engines": {
     "vscode": "^1.93.0",
@@ -23,6 +23,8 @@
   "activationEvents": [
     "onChat:roadie",
     "onCommand:roadie.init",
+    "onCommand:roadie.rescan",
+    "onCommand:roadie.reset",
     "workspaceContains:.github/.roadie/project-model.db"
   ],
   "main": "./out/extension.js",
