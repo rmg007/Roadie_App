@@ -40,6 +40,9 @@ const _sessionManager = new SessionManager();
 /** Cache for extractThreadId — maps FNV-1a hashes to stable thread IDs. */
 const _threadIdCache = { byFirstPromptHash: new Map<number, string>() };
 
+/** Active engines keyed by threadId — keeps instances alive across turns. */
+const _activeEngines = new Map<string, WorkflowEngine>();
+
 // H8: Set learning database on session manager when available
 let _sessionManagerInitialized = false;
 
@@ -48,7 +51,11 @@ export function getChatLastContext(): string {
   return _lastContextSnapshot;
 }
 
-/** Map intent types to workflow definitions. All 7 workflows registered. */
+/**
+ * Map intent types to workflow definitions.
+ * Special intents ('resume', 'clarify', 'general_chat') are NOT in this map
+ * and must be handled by dedicated branches before the lookup.
+ */
 const WORKFLOW_MAP: Record<string, WorkflowDefinition> = {
   bug_fix:    BUG_FIX_WORKFLOW,
   feature:    FEATURE_WORKFLOW,
@@ -57,7 +64,6 @@ const WORKFLOW_MAP: Record<string, WorkflowDefinition> = {
   document:   DOCUMENT_WORKFLOW,
   dependency: DEPENDENCY_WORKFLOW,
   onboard:    ONBOARD_WORKFLOW,
-  resume:     undefined, // Handled specially, no workflow def
 };
 
 /**
@@ -143,10 +149,10 @@ export function registerChatParticipant(deps?: {
 
       const storedEngine = _activeEngines.get(threadId);
       if (storedEngine && session.pausedSessionId) {
-        // Rebind stale turn handles (P0-γ)
+        // Rebind stale turn handles with proper VS Code adapters (P0-γ)
         storedEngine.rebindTurnHandles(session.pausedSessionId, {
-          cancellation: { isCancelled: token.isCancellationRequested, onCancelled: token.onCancellationRequested },
-          progress: { report: (msg: string) => response.markdown(msg) },
+          cancellation: new VSCodeCancellationHandle(token),
+          progress: new VSCodeProgressReporter(response),
         });
 
         let resumeResult;
@@ -156,7 +162,7 @@ export function registerChatParticipant(deps?: {
           if (String(e).includes('Session not found') && deps?.learningDb) {
             resumeResult = await storedEngine.resumeFromSnapshot(
               session.pausedSessionId,
-              { report: (msg: string) => response.markdown(msg) } as any,
+              new VSCodeProgressReporter(response),
               deps?.projectModel,
             );
           } else {
@@ -256,8 +262,18 @@ export function registerChatParticipant(deps?: {
           `**Resuming workflow:** ${workflow.workflowId}\n\n` +
           `*Progress: ${workflow.progress}*\n\n`,
         );
-        // TODO: Call engine.resumeFromSnapshot(workflow.id) when available
-        response.markdown(`*Resume logic awaits WorkflowEngine.resumeFromSnapshot() implementation.*`);
+        const storedEngine = _activeEngines.get(threadId);
+        if (storedEngine && session.pausedSessionId) {
+          storedEngine.rebindTurnHandles(session.pausedSessionId, {
+            cancellation: new VSCodeCancellationHandle(token),
+            progress: new VSCodeProgressReporter(response),
+          });
+          const resumeResult = await storedEngine.resume(session.pausedSessionId, true);
+          _sessionManager.resumeFromPaused(threadId);
+          response.markdown(`\n${resumeResult.summary}\n`);
+        } else {
+          response.markdown(`*No active engine for this workflow. Please start a new task.*`);
+        }
         return {};
       }
 
@@ -285,12 +301,20 @@ export function registerChatParticipant(deps?: {
           `**I see you're refining your previous request.** ` +
           `Let me update the workflow and resume...\n\n`,
         );
-        // TODO: When engine.resume() available, integrate here
-        // For now, mark as clarifying
-        _sessionManager.markClarifying(threadId);
-        response.markdown(
-          `*Clarification noted. Ready to resume when the workflow engine supports it.*`,
-        );
+        const storedEngine = _activeEngines.get(threadId);
+        if (storedEngine) {
+          storedEngine.rebindTurnHandles(session.pausedSessionId, {
+            cancellation: new VSCodeCancellationHandle(token),
+            progress: new VSCodeProgressReporter(response),
+          });
+          const resumeResult = await storedEngine.resume(session.pausedSessionId, true);
+          _sessionManager.resumeFromPaused(threadId);
+          response.markdown(`\n${resumeResult.summary}\n`);
+        } else {
+          response.markdown(
+            `*Clarification noted but no active engine found. Please start a new task.*`,
+          );
+        }
         return {};
       } else if (
         session.workflowId &&
@@ -460,9 +484,9 @@ export function registerChatParticipant(deps?: {
     );
     if (result.state === 'PAUSED' || result.state === 'WAITING_FOR_APPROVAL') {
       log.warn(`Workflow paused (step failure): ${workflow.name}`);
-      // TODO: When engine.getPausedSessions() is available, extract sessionId and call:
-      // const pausedSessionId = engine.getLastPausedSessionId();
-      // _sessionManager.markPaused(threadId, pausedSessionId);
+      if (result.pausedSessionId) {
+        _sessionManager.markPaused(threadId, result.pausedSessionId);
+      }
     }
 
     // 7. Persist outcome to LearningDatabase (if available)

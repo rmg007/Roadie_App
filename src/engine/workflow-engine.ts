@@ -195,7 +195,7 @@ export class WorkflowEngine {
       } else if (step.agentRole === 'interviewer') {
         result = await this.executeInterviewerAgent(step, context);
       } else if (step.type === 'parallel' && step.branches && step.branches.length > 0) {
-        this.transition(definition.id, this.state, WorkflowState.WAITING_PARALLEL, log);
+        this.transition(definition.id, state, WorkflowState.WAITING_PARALLEL, log);
         log.info(`[${definition.id}] Parallel branches: ${step.branches.length}`);
         result = await this.executeParallelBranches(step, context, tiersUsed);
       } else {
@@ -532,12 +532,12 @@ export class WorkflowEngine {
    */
   rebindTurnHandles(
     sessionId: string,
-    handles: { cancellation: { isCancelled: boolean; onCancelled: (cb: () => void) => void }; progress: { report: (msg: string) => void } },
+    handles: Pick<WorkflowContext, 'cancellation' | 'progress'>,
   ): void {
     const session = this.pausedSessions.get(sessionId);
     if (!session) return;
     session.context.cancellation = handles.cancellation;
-    session.context.progress = handles.progress as any;
+    session.context.progress = handles.progress;
   }
 
   async resume(
