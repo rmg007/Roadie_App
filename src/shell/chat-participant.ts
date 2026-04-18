@@ -29,7 +29,7 @@ import { getLogger } from './logger';
 import { SessionManager } from './session-manager';
 import { ClaudeMdParser } from '../analyzer/claude-md-parser';
 
-const PARTICIPANT_ID = 'roadie.roadie';
+const PARTICIPANT_ID = 'roadie';
 
 /** Stores the most recent serialized context snapshot for `Roadie: Show Last Context`. */
 let _lastContextSnapshot = '';
