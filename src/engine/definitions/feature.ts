@@ -13,18 +13,16 @@ export const FEATURE_WORKFLOW: WorkflowDefinition = {
   name: 'Feature Development',
   steps: [
     {
-      id: 'gather-app-context',
-      name: 'Gathering application context',
-      type: 'question' as const,
-      prompt: 'Please describe your application architecture, tech stack, and any constraints we should know about.',
-      responseField: 'app_context',
-      promptTemplate: '[Question step - interactive]',
-      contextScope: 'full' as const,
-      agentRole: 'planner',
-      modelTier: 'free',
+      id: 'interview-requirements',
+      name: 'Interviewing for requirements',
+      type: 'agent' as const,
+      agentRole: 'interviewer',
+      modelTier: 'standard',
       toolScope: 'research',
-      timeoutMs: 30_000,
+      timeoutMs: 180_000,  // 3 min for full interview loop
       maxRetries: 0,
+      promptTemplate: '',  // Placeholder, not used for interviewer agents
+      contextScope: 'full' as const,
     } as any,
     {
       id: 'present-plan',

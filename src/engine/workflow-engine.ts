@@ -24,6 +24,7 @@ import type {
 } from '../types';
 import { WorkflowState } from '../types';
 import { StepExecutor } from './step-executor';
+import { InterviewerAgent } from '../spawner/interviewer-agent';
 import { getLogger } from '../shell/logger';
 
 export class WorkflowEngine {
@@ -80,12 +81,14 @@ export class WorkflowEngine {
       // Stream progress to chat
       context.progress.report(`Running: ${step.name}…`);
 
-      // Execute step (sequential, parallel, or question)
+      // Execute step (sequential, parallel, question, or interviewer agent)
       let result: StepResult;
       const stepStart = Date.now();
 
       if (step.type === 'question') {
         result = await this.executeQuestionStep(step, context);
+      } else if (step.agentRole === 'interviewer') {
+        result = await this.executeInterviewerAgent(step, context);
       } else if (step.type === 'parallel' && step.branches && step.branches.length > 0) {
         this.transition(definition.id, this.state, WorkflowState.WAITING_PARALLEL, log);
         log.info(`[${definition.id}] Parallel branches: ${step.branches.length}`);
@@ -301,6 +304,39 @@ export class WorkflowEngine {
     };
   }
 
+  /**
+   * Execute an interviewer agent step that conducts a requirements interview.
+   * Stores interview results in context for downstream steps to use.
+   */
+  private async executeInterviewerAgent(
+    step: WorkflowStep,
+    context: WorkflowContext,
+  ): Promise<StepResult> {
+    const log = getLogger();
+    const interviewer = new InterviewerAgent(this.stepExecutor, context.progress);
+    const result = await interviewer.conduct(context, step.modelTier || 'standard');
+
+    // Store interview results in context for downstream steps
+    context.interviewTranscript = result.transcript;
+    context.requirementsBrief = result.requirementsBrief;
+    context.interviewConfidence = result.finalConfidence;
+
+    log.info(
+      `[${context.intent.type}] Interview complete: ${result.totalQuestions} questions, ` +
+      `${result.finalConfidence}% confidence, stopped by: ${result.stoppedBy}`,
+    );
+
+    return {
+      stepId: step.id,
+      status: 'success',
+      output: result.requirementsBrief,
+      toolResults: [],
+      tokenUsage: { input: 0, output: 0 },
+      attempts: 1,
+      modelUsed: 'claude',
+    };
+  }
+
   private buildSummary(definition: WorkflowDefinition, results: StepResult[]): string {
     const succeeded = results.filter((r) => r.status === 'success').length;
     const total = results.length;
@@ -382,12 +418,14 @@ export class WorkflowEngine {
       // Stream progress to chat
       context.progress.report(`Running: ${step.name}…`);
 
-      // Execute step (sequential, parallel, or question)
+      // Execute step (sequential, parallel, question, or interviewer agent)
       let result: StepResult;
       const stepStart = Date.now();
 
       if (step.type === 'question') {
         result = await this.executeQuestionStep(step, context);
+      } else if (step.agentRole === 'interviewer') {
+        result = await this.executeInterviewerAgent(step, context);
       } else if (step.type === 'parallel' && step.branches && step.branches.length > 0) {
         this.transition(workflowId, this.state, WorkflowState.WAITING_PARALLEL, log);
         log.info(`[${workflowId}] Parallel branches: ${step.branches.length}`);
