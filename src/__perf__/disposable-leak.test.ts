@@ -147,6 +147,8 @@ vi.mock('vscode', () => ({
       dispose: vi.fn(),
     })),
   },
+  ExtensionMode: { Development: 1, Production: 2, Test: 3 },
+  ConfigurationTarget: { Global: 1, Workspace: 2, WorkspaceFolder: 3 },
   ThemeIcon: class { constructor(public id: string) {} },
 }));
 

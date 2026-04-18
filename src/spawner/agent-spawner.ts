@@ -58,6 +58,9 @@ export class AgentSpawner {
 
       // 4. Send request via ModelProvider
       log.info(`[${config.role}] Sending request (tools: ${config.tools})`);
+      const fullPrompt = messages.map(m => m.content).join('\n');
+      log.debug(`[${config.role}] Request prompt preview: ${fullPrompt.slice(0, 100)}...`);
+
       const response = await this.modelProvider.sendRequest(
         modelInfo.id,
         messages,
@@ -71,7 +74,7 @@ export class AgentSpawner {
         },
       );
 
-      log.info(`[${config.role}] Response received (${response.text.length} chars)`);
+      log.info(`[${config.role}] Response received (${response.text.length} chars): ${response.text.slice(0, 100)}...`);
 
       return {
         output:      response.text,

@@ -13,11 +13,21 @@
 import * as path from 'node:path';
 import type { ProjectModel } from '../../types';
 import type { GeneratedSection } from '../section-manager';
+import { renderConventionsString } from './template-utils';
 
 export const COPILOT_INSTRUCTIONS_PATH = '.github/copilot-instructions.md';
 
 export function generateCopilotInstructions(model: ProjectModel, options?: { simplified?: boolean }): GeneratedSection[] {
   const sections: GeneratedSection[] = [];
+
+  const conventions = model.getConventions();
+  const convString = renderConventionsString(conventions);
+  if (convString) {
+    sections.push({
+      id: 'custom-conventions',
+      content: `## Project Conventions\n\n${convString}`,
+    });
+  }
 
   // Project overview section
   const techStack = model.getTechStack();

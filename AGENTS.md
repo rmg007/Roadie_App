@@ -11,6 +11,7 @@ Custom notes added outside markers are preserved across regenerations.
 <!-- roadie:start:commands -->
 ## Project Commands
 
+- **sync:displayNameVersion**: `npm run sync:displayNameVersion`
 - **vscode:prepublish**: `npm run vscode:prepublish`
 - **build**: `npm run build`
 - **build:watch**: `npm run build:watch`
@@ -20,6 +21,7 @@ Custom notes added outside markers are preserved across regenerations.
 - **test**: `npm run test`
 - **test:watch**: `npm run test:watch`
 - **test:coverage**: `npm run test:coverage`
+- **test:scenarios**: `npm run test:scenarios`
 - **package**: `npm run package`
 - **publish**: `npm run publish`
 - **prepublish:test**: `npm run prepublish:test`
@@ -28,13 +30,13 @@ Custom notes added outside markers are preserved across regenerations.
 <!-- roadie:start:agent-roles -->
 ## Agent Roles
 
-| Role | Scope |
-|------|-------|
-| Diagnostician | Bug location and root cause analysis |
-| Fixer | Code fixes, minimal changes, pattern-following |
-| Planner | Feature planning, architecture decisions |
-| Reviewer | Security, performance, quality, test coverage, standards |
-| Documentarian | Documentation generation from source code |
+| Role | Scope | Name in Dropdown |
+|------|-------|------------------|
+| Diagnostician | Bug location and root cause analysis | `agent: diagnostician` |
+| Fixer | Code fixes, minimal changes, pattern-following | `agent: fixer` |
+| Planner | Feature planning, architecture decisions | `agent: planner` |
+| Reviewer | Security, performance, quality, test coverage, standards | `agent: reviewer` |
+| Documentarian | Documentation generation from source code | `agent: documentarian` |
 <!-- roadie:end:agent-roles -->
 
 <!-- roadie:start:workflows -->
@@ -54,6 +56,32 @@ Custom notes added outside markers are preserved across regenerations.
 <!-- roadie:start:directory-structure -->
 ## Directory Structure
 
-- **Source:** roadie, src, src, src
-- **Tests:** test, __tests__, test
+- **Source:** roadie-App, src, src, __integration__, __perf__, analyzer, api, classifier, detector, dictionary, engine, definitions, generator, __snapshots__, templates, learning, model, shell, __contract__, spawner, tracking, watcher, src, src, src, src, src, src, operations
+- **Tests:** __tests__, __tests__, __tests__, test, fixtures, intent-classification, mixed-js-ts, nested-monorepo, packages, core, ui, utils, node-js-nextjs, __tests__, ts-calculator, test, harness, scenarios, assertions, mocks, tests, fixtures, db-corpus
 <!-- roadie:end:directory-structure -->
+
+<!-- roadie:start:coding-standards -->
+## Coding Standards
+
+**language**
+- TypeScript project (v5.2.0)
+
+**testing**
+- Uses Vitest for testing (v0.34.0)
+
+**build**
+- Uses tsup as build tool (v8.0.0)
+
+**package_manager**
+- Uses npm as package manager
+
+**runtime**
+- Runs on Node.js
+
+**structure**
+- Source code organised under src/
+- Tests in __tests__/
+
+**module_system**
+- Dual ESM+CJS output via tsup
+<!-- roadie:end:coding-standards -->

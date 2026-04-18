@@ -102,7 +102,7 @@ export const INTENT_PATTERNS: Record<string, IntentPattern[]> = {
   ],
 
   review: [
-    { regex: /\breview\b/i,                                 weight: 0.45, label: 'keyword:review' },
+    { regex: /\breview\b/i,                                 weight: 0.55, label: 'keyword:review' },
     { regex: /\baudit\b/i,                                  weight: 0.40, label: 'keyword:audit' },
     { regex: /\banalyze\b/i,                                weight: 0.30, label: 'keyword:analyze' },
     { regex: /\bevaluate\b/i,                               weight: 0.25, label: 'keyword:evaluate' },

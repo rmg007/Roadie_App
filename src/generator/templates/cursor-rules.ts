@@ -18,6 +18,7 @@
 
 import type { ProjectModel } from '../../types';
 import type { GeneratedSection } from '../section-manager';
+import { renderConventionsString } from './template-utils';
 
 export const CURSOR_RULES_PATH = '.cursor/rules/project.mdc';
 
@@ -26,6 +27,15 @@ const MAX_LINES = 80;
 
 export function generateCursorRules(model: ProjectModel, options?: { simplified?: boolean }): GeneratedSection[] {
   const sections: GeneratedSection[] = [];
+
+  const conventions = model.getConventions();
+  const convString = renderConventionsString(conventions);
+  if (convString) {
+    sections.push({
+      id: 'conventions',
+      content: `## Project Conventions\n\n${convString}`,
+    });
+  }
 
   // ── tech-stack ─────────────────────────────────────────────────────────────
   const techStack = model.getTechStack();

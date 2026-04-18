@@ -280,6 +280,13 @@ describe('general_chat LLM fallback', () => {
     await handler(request, {}, mockResponse, mockToken);
 
     expect(mockModel.sendRequest).toHaveBeenCalledOnce();
+    expect(mockModel.sendRequest).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ content: 'what does this project do?' })
+      ]),
+      expect.any(Object),
+      mockToken
+    );
     // Should NOT contain the old echo pattern
     const calls: string[] = mockResponse.markdown.mock.calls.map((c: unknown[]) => String(c[0]));
     expect(calls.some((c) => c.includes('**Echo:**'))).toBe(false);

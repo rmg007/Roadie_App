@@ -110,25 +110,34 @@ describe('generateCopilotInstructions', () => {
         ],
       };
       const m = makeModel({ tree });
-      const sections = generateCopilotInstructions(m, { simplified: true });
+      const sections = generateCopilotInstructions(m, '', { simplified: true });
       expect(sections.find((s) => s.id === 'project-structure')).toBeUndefined();
     });
 
-    it('omits patterns in simplified mode even when high-confidence patterns present', () => {
+    it('omits patterns in simplified mode', () => {
       const m = makeModel({
         patterns: [
-          { category: 'export_style', description: 'Named exports only', confidence: 0.9, evidence: { files: [], matchCount: 5, confidence: 0.9 } },
+          { category: 'export_style', description: 'Uses named exports only', confidence: 0.9, evidence: { files: [], matchCount: 10, confidence: 0.9 } },
         ],
       });
-      const sections = generateCopilotInstructions(m, { simplified: true });
+      const sections = generateCopilotInstructions(m, '', { simplified: true });
       expect(sections.find((s) => s.id === 'patterns')).toBeUndefined();
     });
 
-    it('still includes project-overview, tech-stack, and commands in simplified mode', () => {
-      const sections = generateCopilotInstructions(model, { simplified: true });
-      expect(sections.find((s) => s.id === 'project-overview')).toBeDefined();
+    it('still includes tech-stack and commands in simplified mode', () => {
+      const m = makeModel({
+        stack: [{ category: 'language', name: 'TypeScript', sourceFile: 'package.json' }],
+        commands: [{ name: 'test', command: 'npm test', sourceFile: 'package.json', type: 'test' }],
+      });
+      const sections = generateCopilotInstructions(m, '', { simplified: true });
       expect(sections.find((s) => s.id === 'tech-stack')).toBeDefined();
       expect(sections.find((s) => s.id === 'commands')).toBeDefined();
+    });
+
+    it('returns minimal array when model is empty and in simplified mode', () => {
+      const m = makeModel({ stack: [], commands: [], patterns: [] });
+      const sections = generateCopilotInstructions(m, '', { simplified: true });
+      expect(sections).toHaveLength(1);
     });
   });
 });

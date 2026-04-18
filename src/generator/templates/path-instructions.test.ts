@@ -209,7 +209,7 @@ describe('generatePathInstructions simplified mode', () => {
         { category: 'exports', description: 'Named exports only', confidence: 0.9, evidence: { files: [], matchCount: 5, confidence: 0.9 } },
       ],
     });
-    const results = generatePathInstructions(model, { simplified: true });
+    const results = generatePathInstructions(model, '', { simplified: true });
     const content = results.map((r) => r.sections.map((s) => s.content).join('\n')).join('\n');
     expect(content).not.toContain('Project conventions');
     expect(content).not.toContain('Named exports only');
@@ -222,7 +222,7 @@ describe('generatePathInstructions simplified mode', () => {
         children: [makeDir('src', 'source', 4)],
       },
     });
-    const results = generatePathInstructions(model, { simplified: true });
+    const results = generatePathInstructions(model, '', { simplified: true });
     expect(results).toHaveLength(1);
   });
 });

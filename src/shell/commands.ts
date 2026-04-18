@@ -13,18 +13,8 @@
  */
 
 import * as vscode from 'vscode';
-import type { DeveloperPreferences } from '../types';
+import type { RoadieConfig } from '../types';
 import { getLogger } from './logger';
-
-/**
- * Full Roadie configuration (extends DeveloperPreferences with all settings).
- */
-export interface RoadieConfig extends DeveloperPreferences {
-  testTimeout: number;
-  editTracking: boolean;
-  workflowHistory: boolean;
-  contextLensLevel: 'off' | 'summary' | 'full';
-}
 
 const DEFAULTS: RoadieConfig = {
   modelPreference: 'balanced',

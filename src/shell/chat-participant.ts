@@ -380,23 +380,60 @@ export function registerChatParticipant(deps?: {
           'treating as general_chat, delegating to LLM',
         );
         response.markdown(
-          `*Intent unclear (confidence: ${classification.confidence.toFixed(2)}). Asking the LLM...*\n\n`,
+          `**Roadie v0.10.2**\n\n*Intent unclear (confidence: ${classification.confidence.toFixed(2)}). Asking the LLM...*\n\n`,
         );
 
         try {
-          const result = await request.model.sendRequest(request, [], token);
+          const messages = [
+            vscode.LanguageModelChatMessage.User(request.prompt)
+          ];
+          log.info(`[general_chat] Requesting LLM fallback for prompt: "${request.prompt.slice(0, 50)}..."`);
+          
+          if (!request.model) {
+            log.error('[general_chat] request.model is missing');
+            response.markdown("Roadie encountered an internal error: `request.model` is missing. This usually means the chat participant is being called in an unsupported context.");
+            return { metadata: { command: 'general_chat', error: 'missing_model' } };
+          }
+
+          const result = await request.model.sendRequest(messages, {}, token);
+          log.info(`[general_chat] LLM request initiated with model: ${request.model.name ?? 'unknown'}`);
+          
+          let chunkCount = 0;
           for await (const chunk of result.text) {
             response.markdown(chunk);
+            chunkCount++;
           }
+          log.info(`[general_chat] LLM response complete (${chunkCount} chunks streamed)`);
           return { metadata: { command: 'general_chat' } };
         } catch (err) {
-          log.error(`LLM request failed: ${err instanceof Error ? err.message : String(err)}`);
-          response.markdown(`**Error:** I couldn't reach the model to answer this question. Please try again.`);
-          return { metadata: { command: 'general_chat' } };
+          log.error('LLM request failed', err);
+          response.markdown(
+            "Roadie couldn't reach the model to handle this chat. " +
+              "This can happen if you're offline or your model quota is exceeded. " +
+              `Error: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          return { metadata: { command: 'general_chat', error: 'llm_failed' } };
         }
+      } else if (classification.intent === 'command') {
+          const prompt = request.prompt.toLowerCase();
+          log.info(`[command] Executing built-in command for: ${prompt}`);
+          
+          if (prompt.includes('init')) {
+            await vscode.commands.executeCommand('roadie.init');
+            response.markdown("Initializing Roadie... check the Output channel for progress.");
+          } else if (prompt.includes('rescan')) {
+            await vscode.commands.executeCommand('roadie.rescan');
+            response.markdown("Scanning project... check the Output channel for details.");
+          } else if (prompt.includes('reset')) {
+            await vscode.commands.executeCommand('roadie.reset');
+            response.markdown("Roadie state has been reset.");
+          } else {
+            response.markdown(`**Roadie v0.10.2**\n\nUnknown command. Try "init", "rescan", or "reset".`);
+          }
+          return { metadata: { command: 'system' } };
       } else {
-        log.info('No workflow for intent: general_chat — passthrough');
-        response.markdown(`**Echo:** ${request.prompt}`);
+        log.info(`No workflow for intent: ${classification.intent} — passthrough`);
+        response.markdown(`**Roadie v0.10.2**\n\n**Echo:** ${request.prompt}`);
       }
       return {};
     }

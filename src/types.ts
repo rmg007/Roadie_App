@@ -34,6 +34,8 @@ export type IntentType =
   | 'dependency'
   | 'onboard'
   | 'clarify'
+  | 'resume'
+  | 'command'
   | 'general_chat';
 
 /**
@@ -369,6 +371,8 @@ export interface ProjectModel {
   getPreferences(): DeveloperPreferences;
   /** Build, test, dev, and lint commands */
   getCommands(): ProjectCommand[];
+  /** Returns the detected/parsed project conventions (tech, naming, quality, forbidden). */
+  getConventions(): ProjectConventions | undefined;
   /** Serialized context string for LLM prompts.
    *  Accepts optional parameters for token budgeting and scope filtering.
    *  @param options.maxTokens - Token budget for the serialized output
@@ -477,6 +481,7 @@ export interface ProjectModelDelta {
   directories?: DirectoryNode[];
   patterns?: DetectedPattern[];
   commands?: ProjectCommand[];
+  conventions?: ProjectConventions;
 }
 
 // =====================================================================
@@ -559,6 +564,8 @@ export function isPhase15Active(model: ProjectModel): model is PersistentProject
 export type GeneratedFileType =
   | 'copilot_instructions'  // .github/copilot-instructions.md
   | 'agents_md'             // AGENTS.md at project root
+  | 'agent_operating_rules'  // .github/AGENT_OPERATING_RULES.md
+  | 'granular_agent'        // .github/agents/*.agent.md
   | 'codebase_dictionary'   // .github/codebase-dictionary.md (M24, Phase 1.5)
   | 'claude_md'             // CLAUDE.md at workspace root (Claude Code)
   | 'cursor_rules'          // .cursor/rules/project.mdc (Cursor)
@@ -830,4 +837,31 @@ export interface ProjectConventions {
   constraints: string[];
   /** Recent patterns detected in the codebase */
   recentPatterns: string[];
+}
+
+// =====================================================================
+// Roadie Configuration
+// =====================================================================
+
+/**
+ * Integrated configuration for Roadie.
+ * Mirrored from package.json contributions.
+ */
+export interface RoadieConfig {
+  /** Enable anonymous telemetry */
+  telemetry: boolean;
+  /** Track edits to generated files */
+  editTracking: boolean;
+  /** Persist workflow outcomes */
+  workflowHistory: boolean;
+  /** Model tier preference */
+  modelPreference: 'economy' | 'balanced' | 'quality';
+  /** Auto-commit generated files */
+  autoCommit: boolean;
+  /** Custom test command */
+  testCommand: string;
+  /** Test timeout in seconds */
+  testTimeout: number;
+  /** Context logging level */
+  contextLensLevel: 'off' | 'summary' | 'full';
 }

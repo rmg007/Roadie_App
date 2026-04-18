@@ -19,6 +19,7 @@ import fg from 'fast-glob';
 import { scanDependencies } from './dependency-scanner';
 import { scanDirectories } from './directory-scanner';
 import type { InMemoryProjectModel } from '../model/project-model';
+import { ClaudeMdParser } from './claude-md-parser';
 import { getLogger } from '../shell/logger';
 import type { TechStackEntry, DirectoryNode, DetectedPattern, EntityWriter } from '../types';
 import type { LearningDatabase } from '../learning/learning-database';
@@ -59,6 +60,16 @@ export class ProjectAnalyzer {
     this.model.setDirectoryTree(directoryTree);
     const dirCount = countNodes(directoryTree);
     log.info(`ProjectAnalyzer: directory scan complete — ${dirCount} entries`);
+
+    // 2.5. Parse Project Conventions (CLAUDE.md)
+    log.debug('ProjectAnalyzer: parsing project conventions…');
+    const conventionsParser = new ClaudeMdParser();
+    const conventions = await conventionsParser.parse(workspaceRoot);
+    this.model.setConventions(conventions);
+    log.info(
+      `ProjectAnalyzer: convention parsing complete — ` +
+      `${conventions.techStack.length} tech, ${conventions.codingStyle.length} styles`,
+    );
 
     // 3. Derive detected patterns from tech stack + directory structure
     log.debug('ProjectAnalyzer: deriving patterns…');

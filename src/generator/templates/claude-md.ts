@@ -25,11 +25,17 @@ export const CLAUDE_MD_PATH = 'CLAUDE.md';
 /** Hard line-count budget to stay within Claude Code's auto-read window. */
 const MAX_LINES = 120;
 
-export function generateClaudeMd(model: ProjectModel, options?: { simplified?: boolean }): GeneratedSection[] {
+export function generateClaudeMd(model: ProjectModel, conventions: string = '', options?: { simplified?: boolean }): GeneratedSection[] {
   const sections: GeneratedSection[] = [];
 
   // ── workspace-rules ────────────────────────────────────────────────────────
   const lines: string[] = [];
+
+  if (conventions) {
+    lines.push('## Project Conventions');
+    lines.push(conventions);
+    lines.push('');
+  }
 
   // Tech stack (compact, one line each)
   const techStack = model.getTechStack();

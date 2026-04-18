@@ -105,12 +105,12 @@ describe('generateCursorRules', () => {
           { category: 'export_style', description: 'Named exports only', confidence: 0.9, evidence: { files: [], matchCount: 5, confidence: 0.9 } },
         ],
       });
-      const sections = generateCursorRules(m, { simplified: true });
+      const sections = generateCursorRules(m, '', { simplified: true });
       expect(sections.find((s) => s.id === 'coding-standards')).toBeUndefined();
     });
 
     it('still includes tech-stack and commands in simplified mode', () => {
-      const sections = generateCursorRules(model, { simplified: true });
+      const sections = generateCursorRules(model, '', { simplified: true });
       expect(sections.find((s) => s.id === 'tech-stack')).toBeDefined();
       expect(sections.find((s) => s.id === 'commands')).toBeDefined();
     });

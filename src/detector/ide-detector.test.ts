@@ -117,6 +117,7 @@ describe('IDE Detector', () => {
     });
 
     it('handles missing workspace gracefully', async () => {
+      delete process.env.VSCODE_PID;
       const result = await detectIDEs('/nonexistent/path');
       expect(result.detectedIDEs.length).toBe(0);
       expect(result.primaryIDE).toBeNull();

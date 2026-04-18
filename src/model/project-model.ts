@@ -19,6 +19,7 @@ import type {
   DeveloperPreferences,
   ProjectContext,
   ProjectModelDelta,
+  ProjectConventions,
 } from '../types';
 import type { RoadieDatabase } from './database';
 
@@ -29,6 +30,7 @@ export class InMemoryProjectModel implements ProjectModel {
   private directoryTree: DirectoryNode = { path: '', type: 'directory', children: [] };
   private patterns: DetectedPattern[] = [];
   private commands: ProjectCommand[] = [];
+  private conventions?: ProjectConventions;
   private preferences: DeveloperPreferences = { telemetryEnabled: false, autoCommit: false };
   private dirty = false;
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -67,6 +69,10 @@ export class InMemoryProjectModel implements ProjectModel {
 
   getCommands(): ProjectCommand[] {
     return this.commands;
+  }
+
+  getConventions(): ProjectConventions | undefined {
+    return this.conventions;
   }
 
   toContext(options?: {
@@ -131,6 +137,7 @@ export class InMemoryProjectModel implements ProjectModel {
     }
     if (delta.patterns) this.patterns = delta.patterns;
     if (delta.commands) this.commands = delta.commands;
+    if (delta.conventions) this.conventions = delta.conventions;
 
     this.dirty = true;
     this.scheduleDebouncedWrite();
@@ -157,6 +164,12 @@ export class InMemoryProjectModel implements ProjectModel {
 
   setPatterns(patterns: DetectedPattern[]): void {
     this.patterns = patterns;
+    this.dirty = true;
+    this.scheduleDebouncedWrite();
+  }
+
+  setConventions(conventions: ProjectConventions): void {
+    this.conventions = conventions;
     this.dirty = true;
     this.scheduleDebouncedWrite();
   }

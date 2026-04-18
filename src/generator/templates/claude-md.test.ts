@@ -119,30 +119,30 @@ describe('generateClaudeMd', () => {
 
   describe('simplified mode', () => {
     it('returns only workspace-rules section', () => {
-      const sections = generateClaudeMd(model, { simplified: true });
+      const sections = generateClaudeMd(model, '', { simplified: true });
       expect(sections).toHaveLength(1);
       expect(sections[0].id).toBe('workspace-rules');
     });
 
     it('omits repo-map in simplified mode', () => {
-      const sections = generateClaudeMd(model, { simplified: true });
+      const sections = generateClaudeMd(model, '', { simplified: true });
       expect(sections.find((s) => s.id === 'repo-map')).toBeUndefined();
     });
 
     it('omits forbidden section in simplified mode', () => {
-      const sections = generateClaudeMd(model, { simplified: true });
+      const sections = generateClaudeMd(model, '', { simplified: true });
       expect(sections.find((s) => s.id === 'forbidden')).toBeUndefined();
     });
 
     it('still includes workspace-rules content in simplified mode', () => {
       const m = makeModel({ stack: [{ category: 'language', name: 'TypeScript', sourceFile: 'package.json' }] });
-      const sections = generateClaudeMd(m, { simplified: true });
+      const sections = generateClaudeMd(m, '', { simplified: true });
       expect(sections[0].content.length).toBeGreaterThan(0);
     });
 
     it('passing simplified: false behaves identically to default', () => {
       const full = generateClaudeMd(model);
-      const notSimplified = generateClaudeMd(model, { simplified: false });
+      const notSimplified = generateClaudeMd(model, '', { simplified: false });
       expect(notSimplified.length).toBe(full.length);
       expect(notSimplified.map((s) => s.id)).toEqual(full.map((s) => s.id));
     });

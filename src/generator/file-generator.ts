@@ -26,6 +26,8 @@ import { generateClaudeMd, CLAUDE_MD_PATH } from './templates/claude-md';
 import { generateCursorRules, buildCursorRulesPreamble, CURSOR_RULES_PATH } from './templates/cursor-rules';
 import { generatePathInstructions } from './templates/path-instructions';
 import { generateCursorRulesDir } from './templates/cursor-rules-dir';
+import { generateGranularAgents, type GranularAgentFile } from './templates/granular-agents';
+import { generateOperatingRules, OPERATING_RULES_PATH } from './templates/operating-rules';
 import type { LearningDatabase } from '../learning/learning-database';
 import type { FileSystemProvider } from '../providers';
 import { getLogger } from '../shell/logger';
@@ -38,36 +40,9 @@ interface FileSpec {
   preamble?: () => string;
 }
 
-function buildFileSpecs(learningDb?: LearningDatabase): FileSpec[] {
-  const specs: FileSpec[] = [
-    {
-      type:     'copilot_instructions',
-      path:     COPILOT_INSTRUCTIONS_PATH,
-      generate: generateCopilotInstructions,
-    },
-    {
-      type:     'agents_md',
-      path:     AGENTS_MD_PATH,
-      generate: (model) => generateAgentDefinitions(model, learningDb),
-    },
-    {
-      type:     'claude_md',
-      path:     CLAUDE_MD_PATH,
-      generate: generateClaudeMd,
-    },
-    {
-      type:     'cursor_rules',
-      path:     CURSOR_RULES_PATH,
-      generate: generateCursorRules,
-      preamble: buildCursorRulesPreamble,
-    },
-  ];
-
-  return specs;
-}
-
 export class FileGenerator {
   private fileSystem: FileSystemProvider | null;
+  private fileSpecs: FileSpec[];
 
   constructor(
     private workspaceRoot: string,
@@ -75,6 +50,34 @@ export class FileGenerator {
     fileSystem?: FileSystemProvider,
   ) {
     this.fileSystem = fileSystem ?? null;
+    this.fileSpecs = [
+      {
+        type:     'copilot_instructions',
+        path:     COPILOT_INSTRUCTIONS_PATH,
+        generate: (model, conv) => generateCopilotInstructions(model, conv),
+      },
+      {
+        type:     'agents_md',
+        path:     AGENTS_MD_PATH,
+        generate: (model) => generateAgentDefinitions(model, this.learningDb),
+      },
+      {
+        type:     'claude_md',
+        path:     CLAUDE_MD_PATH,
+        generate: generateClaudeMd,
+      },
+      {
+        type:     'cursor_rules',
+        path:     CURSOR_RULES_PATH,
+        generate: generateCursorRules,
+        preamble: buildCursorRulesPreamble,
+      },
+      {
+        type:     'agent_operating_rules',
+        path:     OPERATING_RULES_PATH,
+        generate: (model) => generateOperatingRules(model),
+      },
+    ];
   }
 
   /**
@@ -92,13 +95,15 @@ export class FileGenerator {
   async generateAll(model: ProjectModel): Promise<GeneratedFile[]> {
     await this.ensureGitignore();
 
-    const fileSpecs = buildFileSpecs(this.learningDb);
-
     const results: GeneratedFile[] = [];
-    for (const spec of fileSpecs) {
+    for (const spec of this.fileSpecs) {
       const result = await this.generateFile(spec, model);
       results.push(result);
     }
+
+    // Granular agents: multi-file output
+    const agentResults = await this.generateGranularAgentFiles(model);
+    results.push(...agentResults);
 
     // Path-instructions: multi-file output
     const pathResults = await this.generatePathInstructionFiles(model);
@@ -112,11 +117,91 @@ export class FileGenerator {
   }
 
   /**
+   * Generate per-agent .github/agents/*.agent.md files.
+   */
+  private async generateGranularAgentFiles(model: ProjectModel): Promise<GeneratedFile[]> {
+    const agents = generateGranularAgents(model);
+    const results: GeneratedFile[] = [];
+
+    for (const agent of agents) {
+      const content = agent.preamble + buildSectionedFile(agent.sections);
+      const fullPath = path.join(this.workspaceRoot, agent.filePath);
+      const newHash  = hashContent(content);
+
+      let existingContent: string | null = null;
+      try {
+        existingContent = await fs.readFile(fullPath, 'utf8');
+      } catch { /* new file */ }
+
+      if (existingContent !== null && hashContent(existingContent) === newHash) {
+        results.push({
+          type: 'granular_agent',
+          path: agent.filePath,
+          content: existingContent,
+          contentHash: `sha256:${newHash}`,
+          written: false,
+          writeReason: 'unchanged',
+        });
+        continue;
+      }
+
+      if (this.isFileOpenInEditor(fullPath)) {
+        results.push({
+          type: 'granular_agent',
+          path: agent.filePath,
+          content,
+          contentHash: `sha256:${newHash}`,
+          written: false,
+          writeReason: 'deferred',
+        });
+        continue;
+      }
+
+      const writeReason: WriteReason = existingContent === null ? 'new' : 'updated';
+      try {
+        await fs.mkdir(path.dirname(fullPath), { recursive: true });
+        await fs.writeFile(fullPath, content, 'utf8');
+      } catch (err: unknown) {
+        const log = getLogger();
+        log.warn(`FileGenerator: failed to write ${agent.filePath}`, err);
+        results.push({
+          type: 'granular_agent',
+          path: agent.filePath,
+          content,
+          contentHash: `sha256:${newHash}`,
+          written: false,
+          writeReason: 'error' as WriteReason,
+        });
+        continue;
+      }
+
+      const log = getLogger();
+      log.info(`FileGenerator: wrote ${agent.filePath} (reason=${writeReason})`);
+
+      if (this.learningDb) {
+        try {
+          this.learningDb.recordSnapshot(agent.filePath, content, 'roadie');
+        } catch { /* snapshots are non-critical */ }
+      }
+
+      results.push({
+        type: 'granular_agent',
+        path: agent.filePath,
+        content,
+        contentHash: `sha256:${newHash}`,
+        written: true,
+        writeReason,
+      });
+    }
+
+    return results;
+  }
+
+  /**
    * Generate per-directory .github/instructions/ files.
    */
   private async generatePathInstructionFiles(model: ProjectModel): Promise<GeneratedFile[]> {
-    const { generatePathInstructions: _gen } = await import('./templates/path-instructions');
-    const files = generatePathInstructions(model);
+    const files = generatePathInstructions(model, this.conventions);
     const results: GeneratedFile[] = [];
 
     for (const file of files) {
@@ -198,7 +283,7 @@ export class FileGenerator {
    * Generate per-directory .cursor/rules/ MDC files.
    */
   private async generateCursorRulesDirFiles(model: ProjectModel): Promise<GeneratedFile[]> {
-    const files = generateCursorRulesDir(model);
+    const files = generateCursorRulesDir(model, this.conventions);
     const results: GeneratedFile[] = [];
 
     for (const file of files) {
@@ -301,7 +386,7 @@ export class FileGenerator {
     log.debug(`FileGenerator: generating ${spec.type} → ${spec.path}`);
 
     // 1. Generate sections from template
-    const sections = spec.generate(model);
+    const sections = spec.generate(model, this.conventions);
     const preamble = spec.preamble ? spec.preamble() : '';
     const content  = preamble + buildSectionedFile(sections);
     const newHash  = hashContent(content);

@@ -15,6 +15,7 @@ import {
   NEGATIVE_SIGNALS,
   CONFIDENCE_THRESHOLDS,
 } from './intent-patterns';
+import { getLogger } from '../shell/logger';
 import { LLMClassificationResponseSchema } from '../schemas';
 import type { WorkflowStats } from '../learning/learning-database';
 
@@ -81,6 +82,14 @@ export class IntentClassifier {
       if (b[1].score !== a[1].score) return b[1].score - a[1].score;
       return a[1].firstMatchIdx - b[1].firstMatchIdx; // earlier mention wins
     });
+
+    const log = getLogger();
+    if (sorted.length > 0) {
+      const topCandidates = sorted.slice(0, 3).map(([intent, data]) => 
+        `${intent}=${data.score.toFixed(2)} [${data.signals.join(',')}]`
+      );
+      log.debug(`Intent candidates: ${topCandidates.join(', ')}`);
+    }
     if (sorted.length === 0) {
       return {
         intent: 'general_chat',
@@ -146,12 +155,14 @@ export class IntentClassifier {
       };
     }
 
-    // 5. Ambiguity check: second-highest must be meaningful (>= 0.3)
+    // 5. Ambiguity check: second-highest must be meaningful (>= 0.2)
     //    and close to the top score (within ambiguousDelta).
+    //    This prevents zero-score intents from triggering an ambiguous cap
+    //    just because the top score is also low but valid.
     if (sorted.length >= 2) {
       const secondScore = sorted[1]![1].score;
       if (
-        secondScore >= 0.3 &&
+        secondScore >= 0.2 &&
         topData.score - secondScore < CONFIDENCE_THRESHOLDS.ambiguousDelta
       ) {
         return {
@@ -222,8 +233,9 @@ export class IntentClassifier {
     const intentType = result.intent;
     const byType = stats.byType[intentType];
 
-    // Gate: not enough data
-    if (!byType || byType.count < 5) return result;
+    // Gate: not enough data — require at least 10 runs to avoid
+    // high variance from a few early test runs.
+    if (!byType || byType.count < 10) return result;
 
     const runs = byType.count;
     const successRate = runs > 0 ? byType.successCount / runs : 0;

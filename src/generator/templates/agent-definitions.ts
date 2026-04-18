@@ -19,9 +19,10 @@
  */
 
 import * as path from 'node:path';
-import type { ProjectModel } from '../../types';
+import type { ProjectModel, ProjectConventions } from '../../types';
 import type { GeneratedSection } from '../section-manager';
 import type { LearningDatabase } from '../../learning/learning-database';
+import { renderConventionsString } from './template-utils';
 
 export const AGENTS_MD_PATH = 'AGENTS.md';
 
@@ -139,21 +140,33 @@ export function generateAgentDefinitions(model: ProjectModel, learningDb?: Learn
         : '_Directory analysis not yet run. Use `roadie.init` to scan._'),
   });
 
-  // ── Coding standards (patterns ≥ 0.7 confidence) ──────────────────────────
+  // ── Coding standards (conventions + high-confidence patterns) ──────────────
+  const conv = model.getConventions();
+  const convString = renderConventionsString(conv);
+  
   const highConfPatterns = model.getPatterns().filter((p) => p.confidence >= 0.7);
+  let patternString = '';
   if (highConfPatterns.length > 0) {
     const grouped: Record<string, string[]> = {};
     for (const p of highConfPatterns) {
       const g = grouped[p.category] ??= [];
       g.push(p.description);
     }
-    const groups = Object.entries(grouped).map(
+    patternString = Object.entries(grouped).map(
       ([cat, descs]) =>
         `**${cat}**\n${descs.map((d) => `- ${d}`).join('\n')}`,
-    );
+    ).join('\n\n');
+  }
+
+  if (convString || patternString) {
+    const content = [
+      convString,
+      patternString ? `### Detected Patterns\n\n${patternString}` : ''
+    ].filter(Boolean).join('\n\n');
+
     sections.push({
       id: 'coding-standards',
-      content: `## Coding Standards\n\n${groups.join('\n\n')}`,
+      content: `## Coding Standards\n\n${content}`,
     });
   }
 

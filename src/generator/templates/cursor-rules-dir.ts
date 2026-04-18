@@ -17,6 +17,7 @@
 import * as path from 'node:path';
 import type { ProjectModel, DirectoryNode } from '../../types';
 import type { GeneratedSection } from '../section-manager';
+import { renderConventionsString } from './template-utils';
 
 /** Allows tests to override the timestamp generation. */
 let getTimestampFn = () => new Date().toISOString();
@@ -124,11 +125,21 @@ export function generateCursorRulesDir(model: ProjectModel, options?: { simplifi
       contentLines.push('- Maintain type safety and avoid `any`.');
     }
 
-    if (!options?.simplified && patterns.length > 0) {
-      contentLines.push('');
-      contentLines.push('**Project conventions:**');
-      for (const p of patterns.slice(0, 5)) {
-        contentLines.push(`- ${p.description}`);
+    if (!options?.simplified) {
+      const conventions = model.getConventions();
+      const convString = renderConventionsString(conventions);
+      if (convString) {
+        contentLines.push('');
+        contentLines.push('**Project Conventions:**');
+        contentLines.push(convString);
+      }
+
+      if (patterns.length > 0) {
+        contentLines.push('');
+        contentLines.push('**Project Patterns:**');
+        for (const p of patterns.slice(0, 5)) {
+          contentLines.push(`- ${p.description}`);
+        }
       }
     }
 
