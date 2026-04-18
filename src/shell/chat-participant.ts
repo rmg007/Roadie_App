@@ -27,7 +27,7 @@ import { ONBOARD_WORKFLOW } from '../engine/definitions/onboard';
 import type { LearningDatabase } from '../learning/learning-database';
 import { getLogger } from './logger';
 import { SessionManager } from './session-manager';
-import { ClaudeMdParser } from '../analyzer/claude-md-parser';
+import { ProjectConventionsExtractor } from '../analyzer/project-conventions-extractor';
 
 const PARTICIPANT_ID = 'roadie';
 
@@ -465,9 +465,9 @@ export function registerChatParticipant(deps?: {
     try {
       if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
         const workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
-        const parser = new ClaudeMdParser();
-        conventions = await parser.parse(workspaceRoot);
-        log.debug(`Parsed conventions from ${workspaceRoot}: ${conventions.techStack.length} tech items`);
+        const extractor = new ProjectConventionsExtractor();
+        conventions = (await extractor.extract(workspaceRoot)) || undefined;
+        log.debug(`Parsed conventions from ${workspaceRoot}: ${conventions?.techStack?.length ?? 0} tech items`);
       }
     } catch (err) {
       log.warn(`Failed to parse CLAUDE.md conventions: ${err instanceof Error ? err.message : String(err)}`);
