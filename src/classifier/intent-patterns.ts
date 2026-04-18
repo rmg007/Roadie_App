@@ -218,10 +218,24 @@ export const INTENT_PATTERNS: Record<string, IntentPattern[]> = {
 };
 
 // Negative signals: if these match, subtract weight from the top-scoring intent
+// Also includes meta-conversation patterns that shift intent to 'clarify'
 export const NEGATIVE_SIGNALS: IntentPattern[] = [
+  // Original denial patterns
   { regex: /\bdon'?t fix\b|\bdo not fix\b/i,        weight: -0.40, label: 'negative:dont-fix' },
   { regex: /\bdon'?t document\b/i,                   weight: -0.40, label: 'negative:dont-document' },
   { regex: /\bnot a bug\b|\bexpected behavior\b/i,   weight: -0.30, label: 'negative:not-a-bug' },
+
+  // NEW: Meta-conversation patterns (user correcting/refining previous intent)
+  // These shift classification toward 'clarify' intent
+  { regex: /you\s+(didn'?t|forgot|missed|didn'?t\s+mention|didn'?t\s+ask)/i, weight: -0.95, label: 'meta:you-missed' },
+  { regex: /that'?s\s+(wrong|not\s+right|incorrect)/i, weight: -0.90, label: 'meta:thats-wrong' },
+  { regex: /wait,?\s+(what|but|hold\s+on)/i, weight: -0.85, label: 'meta:wait' },
+  { regex: /actually,?\s+(let|i\s+need|i\s+want|i\s+mean)/i, weight: -0.80, label: 'meta:actually' },
+  { regex: /(instead|but|however),?\s+(i|we|let'?s)/i, weight: -0.75, label: 'meta:instead-but' },
+  { regex: /can\s+you\s+(ask|check|reconsider|rethink)/i, weight: -0.80, label: 'meta:can-you-reconsider' },
+  { regex: /i\s+meant\b|\bi\s+meant to say\b/i, weight: -0.85, label: 'meta:i-meant' },
+  { regex: /let me (rephrase|clarify|explain|restart)/i, weight: -0.80, label: 'meta:let-me-rephrase' },
+  { regex: /no, (i meant|that'?s not|what i meant)/i, weight: -0.85, label: 'meta:no-i-meant' },
 ];
 
 // Canonical confidence thresholds — every workflow and every test MUST import this

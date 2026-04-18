@@ -171,7 +171,41 @@ export function registerChatParticipant(deps?: {
       `signals: [${classification.signals.join(', ')}])`,
     );
 
-    // 2. Check if we have a workflow for this intent
+    // 2. Handle 'clarify' intent separately — user is correcting/refining previous intent
+    if (classification.intent === 'clarify') {
+      log.info(`Detected 'clarify' intent (signals: ${classification.signals.join(', ')})`);
+
+      // If a paused workflow exists, route to resumption
+      if (session.paused && session.pausedSessionId) {
+        log.info(
+          `'clarify' intent with paused workflow (${session.pausedSessionId}). ` +
+          `Resuming previous task.`,
+        );
+        response.markdown(
+          `**I see you're refining your previous request.** ` +
+          `Let me update the workflow and resume...\n\n`,
+        );
+        // TODO: When engine.resume() available, integrate here
+        // For now, mark as clarifying
+        _sessionManager.markClarifying(threadId);
+        response.markdown(
+          `*Clarification noted. Ready to resume when the workflow engine supports it.*`,
+        );
+        return {};
+      } else {
+        // No paused workflow — ask user to clarify what they mean
+        log.info(`'clarify' intent detected but no paused workflow. Asking for clarification.`);
+        response.markdown(
+          `**I'm not sure what you mean.** Are you:\n\n` +
+          `1. Refining the previous task or request?\n` +
+          `2. Starting something completely new?\n\n` +
+          `Please clarify so I can help you better.`,
+        );
+        return {};
+      }
+    }
+
+    // 3. Check if we have a workflow for this intent
     const workflow = WORKFLOW_MAP[classification.intent];
 
     if (!workflow) {
@@ -203,7 +237,7 @@ export function registerChatParticipant(deps?: {
       return {};
     }
 
-    // 3. Build workflow context
+    // 4. Build workflow context
     let enrichedPrompt = request.prompt;
     if (
       deps?.learningDb &&
@@ -227,7 +261,7 @@ export function registerChatParticipant(deps?: {
       cancellation: new VSCodeCancellationHandle(token),
     };
 
-    // 3b. Context snapshot + level-gated logging
+    // 4b. Context snapshot + level-gated logging
     _lastContextSnapshot = enrichedPrompt;
     const lensLevel = deps?.contextLensLevel ?? 'summary';
     if (lensLevel !== 'off') {
@@ -242,7 +276,7 @@ export function registerChatParticipant(deps?: {
       }
     }
 
-    // 4. Execute workflow
+    // 5. Execute workflow
     log.info(`Starting workflow: ${workflow.name}`);
     response.markdown(
       `**Roadie** detected intent: **${classification.intent}** ` +
@@ -270,7 +304,7 @@ export function registerChatParticipant(deps?: {
       // _sessionManager.markPaused(threadId, pausedSessionId);
     }
 
-    // 5. Persist outcome to LearningDatabase (if available)
+    // 6. Persist outcome to LearningDatabase (if available)
     if (deps?.learningDb) {
       try {
         const failedStep = result.stepResults.find((r) => r.status === 'failed');
@@ -290,7 +324,7 @@ export function registerChatParticipant(deps?: {
       }
     }
 
-    // 6. Stream final result
+    // 7. Stream final result
     response.markdown(`\n---\n\n${result.summary}\n\n`);
     response.markdown(
       `*Completed in ${result.duration}ms — ${result.stepResults.length} steps executed.*`,

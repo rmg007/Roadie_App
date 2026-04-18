@@ -95,7 +95,45 @@ export class IntentClassifier {
     const topIntent = topEntry[0];
     const topData = topEntry[1];
 
-    // 3. If no intent scores above minimum, return general_chat (unknown).
+    // 3. Check negative signals against the original prompt (EARLY, before low-score check)
+    //    This ensures meta-conversation patterns are caught even if no positive patterns matched.
+    let negativeHit = false;
+    let metaConversationHit = false;
+    for (const neg of NEGATIVE_SIGNALS) {
+      if (neg.regex.test(normalized)) {
+        topData.signals.push(neg.label);
+        negativeHit = true;
+
+        // If a meta-conversation pattern matches, set flag to shift intent to 'clarify'
+        if (neg.label.startsWith('meta:')) {
+          metaConversationHit = true;
+        }
+      }
+    }
+
+    // If meta-conversation pattern hit, return 'clarify' intent to SessionManager
+    // instead of collapsing to general_chat. This allows user clarifications to be
+    // routed back to the workflow instead of starting a new task.
+    if (metaConversationHit) {
+      return {
+        intent: 'clarify',
+        confidence: CONFIDENCE_THRESHOLDS.negativeOverride + 0.10, // Slightly higher than negativeOverride
+        signals: topData.signals.filter((s) => s.startsWith('meta:')),
+        requiresLLM: false,
+      };
+    }
+
+    // If non-meta negative hit (e.g., "don't fix"), collapse to general_chat
+    if (negativeHit) {
+      return {
+        intent: 'general_chat',
+        confidence: CONFIDENCE_THRESHOLDS.negativeOverride,
+        signals: topData.signals,
+        requiresLLM: true,
+      };
+    }
+
+    // 4. If no intent scores above minimum, return general_chat (unknown).
     //    Threshold 0.20 accepts single weak signals (weight 0.20 patterns
     //    like "build", "enable", "support", "understand") which the dataset
     //    expects to be classified, not dropped to general_chat.
@@ -104,24 +142,6 @@ export class IntentClassifier {
         intent: 'general_chat',
         confidence: CONFIDENCE_THRESHOLDS.unknown,
         signals: [],
-        requiresLLM: true,
-      };
-    }
-
-    // 4. Check negative signals against the original prompt
-    let negativeHit = false;
-    for (const neg of NEGATIVE_SIGNALS) {
-      if (neg.regex.test(normalized)) {
-        topData.signals.push(neg.label);
-        negativeHit = true;
-      }
-    }
-
-    if (negativeHit) {
-      return {
-        intent: 'general_chat',
-        confidence: CONFIDENCE_THRESHOLDS.negativeOverride,
-        signals: topData.signals,
         requiresLLM: true,
       };
     }
@@ -221,21 +241,38 @@ export class IntentClassifier {
    * Generate the structured-output prefix to prepend to the system prompt
    * when LLM classification is needed (requiresLLM === true).
    * The LLM responds with a JSON block FIRST, then provides its main response.
+   *
+   * Enhanced with:
+   * - "clarify" intent for meta-conversation (user correcting/refining previous intent)
+   * - Explicit guidance on edge cases (vague one-liners, clarifications)
+   * - More detailed instructions for better accuracy
+   *
+   * NOTE: Chat participant MUST use standard-tier model (claude-sonnet-4.6 or equivalent)
+   * for LLM classification fallback to ensure reliable intent detection on edge cases.
+   * Avoid free/budget tier models for this critical classification step.
    */
   getClassificationPromptPrefix(): string {
     return [
-      'Before responding, classify this request as one of:',
-      '  - bug_fix: Fix an error or bug',
-      '  - feature: Add a new feature',
-      '  - refactor: Restructure code',
-      '  - review: Review code changes',
-      '  - document: Write/update documentation',
-      '  - dependency: Update dependencies',
-      '  - onboard: Understand the project',
-      '  - general_chat: General question not matching above',
+      'You are an intent classifier for a VS Code development assistant.',
       '',
-      'Respond with a JSON block FIRST, before your main response:',
-      '{"intent": "<intent>", "reasoning": "<brief explanation>"}',
+      'Classify the user request as ONE of:',
+      '  - feature: Building a new feature or adding functionality',
+      '  - bug_fix: Fixing a bug or broken behavior',
+      '  - refactor: Improving existing code structure without changing behavior',
+      '  - review: Asking for code review or quality feedback',
+      '  - document: Writing or improving documentation',
+      '  - dependency: Upgrading, downgrading, or installing dependencies',
+      '  - onboard: Getting started or understanding the codebase',
+      '  - clarify: User is correcting/refining a PREVIOUS intent (not a new task)',
+      '  - general_chat: Casual conversation, not a development task',
+      '',
+      'IMPORTANT RULES:',
+      '  1. If user is correcting something just said (e.g., "actually...", "wait, I meant..."), return "clarify"',
+      '  2. If it\'s a vague one-liner with no context, prefer "general_chat" over guessing a specific intent',
+      '  3. Be conservative: only pick high-confidence intents. When unsure, pick "general_chat"',
+      '',
+      'Respond ONLY with a JSON block FIRST, before any other text:',
+      '{"intent": "<intent_name>", "confidence": <0-100>, "reasoning": "<one sentence>"}',
       '',
       'Then provide your main response.',
     ].join('\n');

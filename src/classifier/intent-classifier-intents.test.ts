@@ -286,6 +286,43 @@ describe('onboard intent', () => {
   });
 });
 
+describe('clarify intent — meta-conversation', () => {
+  it('detects "actually, let me rephrase"', () => {
+    const r = classifier.classify('Actually, let me rephrase that');
+    expect(r.intent).toBe('clarify');
+  });
+
+  it('detects "wait, I meant"', () => {
+    const r = classifier.classify('wait, I meant to say something different');
+    expect(r.intent).toBe('clarify');
+  });
+
+  it('detects "no, that\'s not what I meant"', () => {
+    const r = classifier.classify("No, that's not what I meant");
+    expect(r.intent).toBe('clarify');
+  });
+
+  it('detects "can you reconsider"', () => {
+    const r = classifier.classify('Can you reconsider what I asked?');
+    expect(r.intent).toBe('clarify');
+  });
+
+  it('detects "instead, i want"', () => {
+    const r = classifier.classify('Instead, I want to focus on this');
+    expect(r.intent).toBe('clarify');
+  });
+
+  it('detects "you forgot to ask"', () => {
+    const r = classifier.classify('You forgot to mention the database schema');
+    expect(r.intent).toBe('clarify');
+  });
+
+  it('detects "let me clarify"', () => {
+    const r = classifier.classify('Let me clarify what I meant earlier');
+    expect(r.intent).toBe('clarify');
+  });
+});
+
 describe('general_chat fallback', () => {
   it('returns general_chat for unrecognized prompts', () => {
     // Use a prompt that doesn't trigger any pattern

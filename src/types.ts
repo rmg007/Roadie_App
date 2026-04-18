@@ -18,8 +18,12 @@ import * as vscode from 'vscode';
 // =====================================================================
 
 /**
- * The 8 intent types that the classifier can produce.
+ * The 9 intent types that the classifier can produce.
  * Each maps to a workflow or to passthrough enrichment.
+ *
+ * NEW: 'clarify' intent signals that the user is correcting/refining
+ * a PREVIOUS intent (not starting a new task). Routed back to
+ * SessionManager to resume paused workflow or ask for clarification.
  */
 export type IntentType =
   | 'bug_fix'
@@ -29,6 +33,7 @@ export type IntentType =
   | 'document'
   | 'dependency'
   | 'onboard'
+  | 'clarify'
   | 'general_chat';
 
 /**
