@@ -69,6 +69,35 @@ export class InterviewerAgent {
   ): Promise<InterviewResult> {
     this.log.info('[InterviewerAgent] Starting requirements interview');
 
+    // Use the user's prompt directly as the requirements input.
+    // Interactive turn-by-turn interviews require architectural support not yet in place
+    // (VS Code chat is turn-based; mid-step input collection is not supported).
+    const transcript: ConversationTurn[] = [{
+      question: 'What do you want to build?',
+      answer: context.prompt,
+    }];
+
+    const brief = await this.generateBrief(transcript).catch(() =>
+      this.generateDefaultBrief(transcript),
+    );
+
+    this.log.info('[InterviewerAgent] Brief generated from initial prompt');
+
+    return {
+      transcript,
+      finalConfidence: 60,
+      requirementsBrief: brief,
+      totalQuestions: 1,
+      stoppedBy: 'confidence',
+    };
+  }
+
+  private async _conduct_disabled(
+    context: WorkflowContext,
+    modelTier: ModelTier,
+  ): Promise<InterviewResult> {
+    this.log.info('[InterviewerAgent] Starting requirements interview (disabled loop)');
+
     // Initialize state
     const transcript: ConversationTurn[] = [];
     let currentConfidence = 0;
