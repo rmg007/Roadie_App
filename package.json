@@ -208,7 +208,7 @@
     "package": "vsce package --no-dependencies",
     "publish": "vsce publish --no-dependencies",
     "prepublish:test": "npm run test && npm run lint && npm run build",
-    "deploy:local": "git add . && git commit -m \"chore: sync and install\" && git push && npm run build && npm run package && code --install-extension roadie-0.11.0.vsix && Remove-Item roadie-0.11.0.vsix"
+    "deploy:local": "git add . && git commit -m \"chore: sync and install\" && git push && npm run build && npm run package && code --install-extension roadie-0.11.0.vsix && del roadie-0.11.0.vsix"
   },
   "dependencies": {
     "better-sqlite3": "^9.4.3",
