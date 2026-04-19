@@ -419,8 +419,9 @@ class RoadieMcpServer {
       try {
         switch (name) {
           case 'roadie_chat': {
+            const validated = RoadieChatInputSchema.parse(args);
             const result = await handleRoadieChat(
-              args as any,
+              validated,
               container.services.intentClassifier,
               container.services.workflowEngine,
               container.services.workflowDefinitions,
