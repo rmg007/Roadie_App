@@ -64,7 +64,8 @@ export class Context7Client {
 
       return await response.json() as DocsResult;
     } catch (error) {
-      return { content: `Error fetching documentation: ${(error as any).message}` };
+      const message = error instanceof Error ? error.message : String(error);
+      return { content: `Error fetching documentation: ${message}` };
     }
   }
 }
