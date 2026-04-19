@@ -170,7 +170,7 @@ function suggestNextAction(result: WorkflowResult, intentType: string): string |
 
   // If workflow failed, suggest clarification
   if (state === 'FAILED' || state === 'PAUSED') {
-    return `The ${intentType} workflow encountered a blockin issue. Provide more context or clarify your request.`;
+    return `The ${intentType} workflow encountered a blocking issue. Provide more context or clarify your request.`;
   }
 
   // If workflow completed, suggest follow-up actions based on intent
