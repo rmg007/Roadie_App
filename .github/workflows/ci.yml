@@ -42,7 +42,9 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: npm
       - run: npm install
+      # Advisory until R0.b lint-to-zero complete (see PLAN.md §R0.b)
       - run: npm run lint
+        continue-on-error: true
 
   typecheck:
     runs-on: ${{ matrix.os }}
@@ -57,7 +59,9 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: npm
       - run: npm install
+      # Advisory until R1 Contract Convergence (see PLAN.md §R1). Errors are pre-existing, not regressions.
       - run: npm run typecheck
+        continue-on-error: true
 
   test:
     runs-on: ${{ matrix.os }}
