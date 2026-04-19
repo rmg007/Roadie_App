@@ -29,8 +29,8 @@ export function generateOperatingRules(model: ProjectModel): GeneratedSection[] 
     .join('\n');
 
   const skillTable = verifiedKnowledge.length > 0 
-    ? `### 🛠️ Strategic Skill Arsenal\n\n| Technology | Category | Primary Directive | Resource Link |\n| :--- | :--- | :--- | :--- |\n${verifiedKnowledge}\n`
-    : `_No external documentation laws verified yet. Roadie is researching your stack._`;
+    ? `### 🛠️ Strategic Skill Arsenal (Self-Evolving)\n\n| Technology | Source | Primary Directive | Resource Link |\n| :--- | :--- | :--- | :--- |\n${verifiedKnowledge}\n\n> [!TIP]\n> **Missing Tech?** Use \`roadie_firecrawl_scrape\` with \`commitToRegistry: true\` to surgically acquire and verify new technical laws in real-time. Roadie will permanently remember these for future sessions.\n`
+    : `_No external documentation laws verified yet. Roadie is performing surgical discovery via Firecrawl._`;
 
   // ── Project Law ──────────────────────────────────────────────────────────
   const techStack = model.getTechStack().map(e => e.name).join(', ');
@@ -156,9 +156,9 @@ export function generateOperatingRules(model: ProjectModel): GeneratedSection[] 
   sections.push({
     id: 'cognitive-oversight',
     content:
-      `## Cognitive Oversight & Ethics\n` +
       `- **Chain-of-Thought Visibility:** Never redact or hide internal reasoning. Maintain a live trace of the cognitive process for human oversight.\n` +
       `- **Intervene on Lazy Logic:** Reject pragmatic shortcuts. Implement the correct architectural fix even if it requires more effort.\n` +
+      `- **Self-Evolving Loop:** If a library's behavior is ambiguous and missing from regional laws, execute a **Surgical Scrape** (Firecrawl) and commit the verified result to the registry. Roadie agents evolve by permanently externalizing knowledge.\n` +
       `- **Safety Refusals:** Explicitly refuse prompts that are ambiguous or high-risk. Escalate to the Strategist agent for clarification.`
   });
 
