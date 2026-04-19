@@ -1,0 +1,13 @@
+{
+  "name": "mixed-js-ts",
+  "version": "1.0.0",
+  "description": "A mixed JS/TS project",
+  "scripts": {
+    "test": "vitest run",
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "typescript": "^5.2.0",
+    "vitest": "^0.34.0"
+  }
+}

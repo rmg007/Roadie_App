@@ -72,6 +72,7 @@ const FIXTURE_MODEL: ProjectModel = {
   getPatterns: () => [],
   getCommands: () => COMMANDS,
   getPreferences: () => ({ telemetryEnabled: false, autoCommit: false }),
+  getConventions: () => undefined,
   toContext: () => ({
     techStack: TECH_STACK,
     directoryStructure: DIR_STRUCTURE,
@@ -110,8 +111,9 @@ describe('Snapshot: .github/copilot-instructions.md', () => {
   it('contains expected tech-stack entries', () => {
     const sections = generateCopilotInstructions(FIXTURE_MODEL);
     const output = buildSectionedFile(sections);
-    expect(output).toContain('TypeScript');
-    expect(output).toContain('Vitest');
+    // Copilot instructions is a minimal ToC file that links to modular files
+    // It doesn't inline the full tech stack — that's in the linked files
+    expect(output).toContain('Technology Stack');
   });
 
   it('contains expected commands', () => {
