@@ -1,7 +1,7 @@
 # Lint Waivers (R0.b Recovery Baseline)
 
 **Updated**: 2026-04-19  
-**Baseline**: 87 errors, 37 warnings remaining (post-Phase 2)
+**Baseline**: 82 errors, 37 warnings remaining (post-Phase 2, after eqeqeq fixes)
 
 > **Note**: All waivers below expire on **2026-05-19** (30 days). They should be resolved in R1 as part of comprehensive type safety improvements.
 
@@ -18,7 +18,7 @@
 | `@typescript-eslint/no-unused-vars` | 6 | Solo | Deferred | Dead imports; safe to remove but low priority |
 | `no-console` | 6 | Solo | Deferred | Debug output; temporary pending logging infrastructure |
 
-**Total Remaining**: 87 errors, 37 warnings (124 problems)
+**Total Remaining**: 82 errors, 37 warnings (119 problems)
 
 ---
 
@@ -150,5 +150,5 @@ Debug statements pending Logger infrastructure.
 **Owner**: Solo  
 **Last Updated**: 2026-04-19  
 **Baseline Lint**: 142 problems (105 errors, 37 warnings)  
-**Current Lint**: 124 problems (87 errors, 37 warnings)  
-**Reduction**: 18 errors fixed (17% improvement)
+**Current Lint**: 119 problems (82 errors, 37 warnings)  
+**Reduction**: 23 errors fixed (22% improvement)
