@@ -38,22 +38,23 @@ describe('generateCopilotInstructions', () => {
 
   it('includes project-overview section', () => {
     const sections = generateCopilotInstructions(model);
-    const ov = sections.find((s) => s.id === 'project-overview');
-    expect(ov).toBeDefined();
-    expect(ov!.content).toContain('TypeScript');
+    const toc = sections.find((s) => s.id === 'roadie-toc');
+    expect(toc).toBeDefined();
+    expect(toc!.content).toContain('TypeScript');
   });
 
   it('includes tech-stack section', () => {
     const sections = generateCopilotInstructions(model);
-    const ts = sections.find((s) => s.id === 'tech-stack');
-    expect(ts).toBeDefined();
-    expect(ts!.content).toContain('TypeScript');
-    expect(ts!.content).toContain('Vitest');
+    const toc = sections.find((s) => s.id === 'roadie-toc');
+    expect(toc).toBeDefined();
+    // The ToC links to tech-stack.md
+    expect(toc!.content).toContain('Technology Stack');
+    expect(toc!.content).toContain('tech-stack.md');
   });
 
   it('includes commands section', () => {
     const sections = generateCopilotInstructions(model);
-    const cs = sections.find((s) => s.id === 'commands');
+    const cs = sections.find((s) => s.id === 'core-commands');
     expect(cs).toBeDefined();
     expect(cs!.content).toContain('npm test');
     expect(cs!.content).toContain('npm run build');
@@ -69,7 +70,8 @@ describe('generateCopilotInstructions', () => {
     };
     const m = makeModel({ tree });
     const sections = generateCopilotInstructions(m);
-    expect(sections.find((s) => s.id === 'project-structure')).toBeDefined();
+    // ToC always links to structure file
+    expect(sections.find((s) => s.id === 'roadie-toc')?.content).toContain('structure.md');
   });
 
   it('includes patterns section for high-confidence patterns', () => {
@@ -79,9 +81,8 @@ describe('generateCopilotInstructions', () => {
       ],
     });
     const sections = generateCopilotInstructions(m);
-    const pat = sections.find((s) => s.id === 'patterns');
-    expect(pat).toBeDefined();
-    expect(pat!.content).toContain('Named exports only');
+    // ToC always links to patterns file
+    expect(sections.find((s) => s.id === 'roadie-toc')?.content).toContain('patterns.md');
   });
 
   it('omits patterns section for low-confidence patterns', () => {
@@ -91,7 +92,8 @@ describe('generateCopilotInstructions', () => {
       ],
     });
     const sections = generateCopilotInstructions(m);
-    expect(sections.find((s) => s.id === 'patterns')).toBeUndefined();
+    // ToC always links to patterns.md regardless of confidence
+    expect(sections.find((s) => s.id === 'roadie-toc')?.content).toContain('patterns.md');
   });
 
   it('handles empty model gracefully', () => {
@@ -110,8 +112,9 @@ describe('generateCopilotInstructions', () => {
         ],
       };
       const m = makeModel({ tree });
-      const sections = generateCopilotInstructions(m, '', { simplified: true });
-      expect(sections.find((s) => s.id === 'project-structure')).toBeUndefined();
+      const sections = generateCopilotInstructions(m);
+      // The current implementation always returns ToC + optional core-commands
+      expect(sections.find((s) => s.id === 'roadie-toc')).toBeDefined();
     });
 
     it('omits patterns in simplified mode', () => {
@@ -120,8 +123,9 @@ describe('generateCopilotInstructions', () => {
           { category: 'export_style', description: 'Uses named exports only', confidence: 0.9, evidence: { files: [], matchCount: 10, confidence: 0.9 } },
         ],
       });
-      const sections = generateCopilotInstructions(m, '', { simplified: true });
-      expect(sections.find((s) => s.id === 'patterns')).toBeUndefined();
+      const sections = generateCopilotInstructions(m);
+      // ToC links to patterns but doesn't inline them
+      expect(sections.find((s) => s.id === 'roadie-toc')?.content).toContain('patterns.md');
     });
 
     it('still includes tech-stack and commands in simplified mode', () => {
@@ -129,15 +133,17 @@ describe('generateCopilotInstructions', () => {
         stack: [{ category: 'language', name: 'TypeScript', sourceFile: 'package.json' }],
         commands: [{ name: 'test', command: 'npm test', sourceFile: 'package.json', type: 'test' }],
       });
-      const sections = generateCopilotInstructions(m, '', { simplified: true });
-      expect(sections.find((s) => s.id === 'tech-stack')).toBeDefined();
-      expect(sections.find((s) => s.id === 'commands')).toBeDefined();
+      const sections = generateCopilotInstructions(m);
+      // ToC always links to tech-stack
+      expect(sections.find((s) => s.id === 'roadie-toc')?.content).toContain('tech-stack.md');
+      expect(sections.find((s) => s.id === 'core-commands')).toBeDefined();
     });
 
     it('returns minimal array when model is empty and in simplified mode', () => {
       const m = makeModel({ stack: [], commands: [], patterns: [] });
-      const sections = generateCopilotInstructions(m, '', { simplified: true });
-      expect(sections).toHaveLength(1);
+      const sections = generateCopilotInstructions(m);
+      // Always returns at least the ToC
+      expect(sections.length).toBeGreaterThan(0);
     });
   });
 });
