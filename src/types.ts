@@ -854,3 +854,49 @@ export interface RoadieConfig {
   /** Context logging level */
   contextLensLevel: 'off' | 'summary' | 'full';
 }
+
+// =====================================================================
+// Phase 4: Autonomy Loop Types
+// =====================================================================
+
+/**
+ * Autonomy loop configuration.
+ */
+export interface AutonomyLoopConfig {
+  intervalMs?: number;
+  projectRoot: string;
+  enabled?: boolean;
+}
+
+/**
+ * Result of a complete autonomy cycle.
+ */
+export interface AutonomyCycle {
+  cycleId: string;
+  timestamp: string;
+  driftDetection: Record<string, unknown>;
+  dependencyWatch: Record<string, unknown>;
+  failureAnalysis: Record<string, unknown>;
+  decisions: AutonomyDecision[];
+  actionsTriggered: AutonomyAction[];
+}
+
+/**
+ * A decision made by the autonomy loop.
+ */
+export interface AutonomyDecision {
+  type: 'drift_remediation' | 'dependency_integration' | 'model_optimization' | 'fault_prevention' | 'none';
+  confidence: number;
+  reasoning: string;
+  requiredApproval?: boolean;
+}
+
+/**
+ * An action triggered by the autonomy loop.
+ */
+export interface AutonomyAction {
+  type: string;
+  description: string;
+  estimatedCost: number;
+  priority: 'critical' | 'high' | 'medium' | 'low';
+}
