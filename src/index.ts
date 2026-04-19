@@ -14,6 +14,7 @@ import * as dotenv from 'dotenv';
 import { createMCPContainer } from './container.js';
 import { MCP_LOGGER } from './platform-adapters.js';
 import { DeepSeekProvider } from './platform-adapters/deepseek-provider.js';
+import { handleRoadieChat, RoadieChatInputSchema } from './tools/roadie-chat-tool.js';
 
 // Load environment variables early
 dotenv.config();
@@ -265,6 +266,18 @@ class RoadieMcpServer {
     this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
       tools: [
         {
+          name: 'roadie_chat',
+          description: 'Chat-native interface for Roadie. Accepts a natural-language message, classifies intent, dispatches workflow, and returns structured results.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              message: { type: 'string', description: 'The user message to process' },
+              sessionId: { type: 'string', description: 'Optional session ID for resuming interrupted workflows' }
+            },
+            required: ['message']
+          }
+        },
+        {
           name: 'roadie_summon_agent',
           description: 'Summons a specialized Roadie subagent to perform a complex project task (research, refactor, feature, or review).',
           inputSchema: {
@@ -405,6 +418,19 @@ class RoadieMcpServer {
 
       try {
         switch (name) {
+          case 'roadie_chat': {
+            const result = await handleRoadieChat(
+              args as any,
+              container.services.intentClassifier,
+              container.services.workflowEngine,
+              container.services.workflowDefinitions,
+              MCP_LOGGER
+            );
+            return {
+              content: [{ type: 'text', text: JSON.stringify(result, null, 2) }]
+            };
+          }
+
           case 'roadie_resolve_library': {
             const results = await container.services.context7.resolveLibraryId(
               args?.libraryName as string,

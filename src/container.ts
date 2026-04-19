@@ -27,6 +27,16 @@ import { VectorStoreService } from './engine/vector-store-service';
 import { GitService } from './platform-adapters/git-service';
 import { RequirementLinter } from './analyzer/requirement-linter';
 import { SessionTracker } from './engine/session-tracker';
+import { IntentClassifier } from './classifier/intent-classifier';
+import { WorkflowEngine } from './engine/workflow-engine';
+import { StepExecutor } from './engine/step-executor';
+import { BUG_FIX_WORKFLOW } from './engine/definitions/bug-fix';
+import { FEATURE_WORKFLOW } from './engine/definitions/feature';
+import { REFACTOR_WORKFLOW } from './engine/definitions/refactor';
+import { REVIEW_WORKFLOW } from './engine/definitions/review';
+import { DOCUMENT_WORKFLOW } from './engine/definitions/document';
+import { DEPENDENCY_WORKFLOW } from './engine/definitions/dependency';
+import { ONBOARD_WORKFLOW } from './engine/definitions/onboard';
 
 // =====================================================================
 // Config
@@ -57,6 +67,9 @@ export interface ContainerServices {
   requirementLinter: RequirementLinter;
   sessionTracker: SessionTracker;
   isDryRun: boolean;
+  intentClassifier: IntentClassifier;
+  workflowEngine: WorkflowEngine;
+  workflowDefinitions: Map<string, any>;
 }
 
 // =====================================================================
@@ -157,6 +170,22 @@ export async function createMCPContainer(
 
   const fileGenerator = new FileGenerator(projectRoot, learningDb ?? undefined, fsProvider, log);
 
+  // Initialize chat-native components
+  const intentClassifier = new IntentClassifier(log);
+  const stepExecutor = new StepExecutor(projectModel, modelProvider, log);
+  const workflowEngine = new WorkflowEngine(stepExecutor, learningDb ?? undefined, log);
+
+  // Register workflow definitions
+  const workflowDefinitions = new Map([
+    ['bug_fix', BUG_FIX_WORKFLOW],
+    ['feature', FEATURE_WORKFLOW],
+    ['refactor', REFACTOR_WORKFLOW],
+    ['review', REVIEW_WORKFLOW],
+    ['document', DOCUMENT_WORKFLOW],
+    ['dependency', DEPENDENCY_WORKFLOW],
+    ['onboard', ONBOARD_WORKFLOW],
+  ]);
+
   const services: ContainerServices = {
     projectRoot,
     projectModel,
@@ -173,6 +202,9 @@ export async function createMCPContainer(
     requirementLinter: requirementLinter,
     sessionTracker: sessionTracker,
     isDryRun: isDryRun,
+    intentClassifier,
+    workflowEngine,
+    workflowDefinitions,
   };
 
   return new Container(services);
