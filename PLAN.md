@@ -1,3 +1,16 @@
+## What is Roadie?
+
+**Roadie is an MCP (Model Context Protocol) server** that runs on your machine as a plugin to Claude, Copilot, or Cursor. When you integrate Roadie into your AI client, it enables automatic intent detection, workflow dispatch, and code operations — all triggered by natural language in chat.
+
+- **Where it runs:** User's local machine (not cloud, not third-party servers)
+- **How it works:** User types a request in chat → Roadie classifies intent → executes the appropriate workflow (bug fix, feature, refactor, etc.) → reports results
+- **What it does:** Analyzes projects, generates code, runs workflows, learns from outcomes, self-heals on failure
+- **Architecture:** Standalone Node.js process communicating with the AI client via stdin/stdout (MCP protocol)
+
+This plan adds new features (v0.13.0 → v1.0.0) to make Roadie fully autonomous, chat-only, and production-ready.
+
+---
+
 # Roadie MCP — Master Plan to "Beyond Production-Ready, Fully Autonomous, Chat-Only"
 
 **Version target:** v0.12.0 → v1.0.0
