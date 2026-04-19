@@ -26,11 +26,14 @@ import { generateClaudeMd, CLAUDE_MD_PATH } from './templates/claude-md';
 import { generateCursorRules, buildCursorRulesPreamble, CURSOR_RULES_PATH } from './templates/cursor-rules';
 import { generatePathInstructions } from './templates/path-instructions';
 import { generateCursorRulesDir } from './templates/cursor-rules-dir';
-import { generateGranularAgents, type GranularAgentFile } from './templates/granular-agents';
 import { generateOperatingRules, OPERATING_RULES_PATH } from './templates/operating-rules';
-import type { LearningDatabase } from '../learning/learning-database';
+import { generateProjectModelJson, PROJECT_MODEL_JSON_PATH } from './templates/project-model-json';
+import { generateMcpConfig, MCP_CONFIG_PATH } from './templates/mcp-config';
+import { generatePromptsMd, PROMPTS_MD_PATH } from './templates/prompts-md';
+import { generateGranularAgents } from './templates/granular-agents';
 import type { FileSystemProvider } from '../providers';
-import { getLogger } from '../shell/logger';
+import type { Logger } from '../platform-adapters';
+import { CONSOLE_LOGGER } from '../platform-adapters';
 
 interface FileSpec {
   type: GeneratedFileType;
@@ -48,13 +51,14 @@ export class FileGenerator {
     private workspaceRoot: string,
     private learningDb?: LearningDatabase,
     fileSystem?: FileSystemProvider,
+    private log: Logger = CONSOLE_LOGGER,
   ) {
     this.fileSystem = fileSystem ?? null;
     this.fileSpecs = [
       {
         type:     'copilot_instructions',
         path:     COPILOT_INSTRUCTIONS_PATH,
-        generate: (model, conv) => generateCopilotInstructions(model, conv),
+        generate: (model) => generateCopilotInstructions(model),
       },
       {
         type:     'agents_md',
@@ -64,18 +68,28 @@ export class FileGenerator {
       {
         type:     'claude_md',
         path:     CLAUDE_MD_PATH,
-        generate: generateClaudeMd,
+        generate: (model) => generateClaudeMd(model),
       },
       {
         type:     'cursor_rules',
         path:     CURSOR_RULES_PATH,
-        generate: generateCursorRules,
+        generate: (model) => generateCursorRules(model),
         preamble: buildCursorRulesPreamble,
       },
       {
         type:     'agent_operating_rules',
         path:     OPERATING_RULES_PATH,
         generate: (model) => generateOperatingRules(model),
+      },
+      {
+        type:     'project_model_json',
+        path:     PROJECT_MODEL_JSON_PATH,
+        generate: (model) => generateProjectModelJson(model),
+      },
+      {
+        type:     'prompts_md',
+        path:     PROMPTS_MD_PATH,
+        generate: (model) => generatePromptsMd(model),
       },
     ];
   }
@@ -162,8 +176,7 @@ export class FileGenerator {
         await fs.mkdir(path.dirname(fullPath), { recursive: true });
         await fs.writeFile(fullPath, content, 'utf8');
       } catch (err: unknown) {
-        const log = getLogger();
-        log.warn(`FileGenerator: failed to write ${agent.filePath}`, err);
+        this.log.warn(`FileGenerator: failed to write ${agent.filePath}`, err);
         results.push({
           type: 'granular_agent',
           path: agent.filePath,
@@ -175,8 +188,7 @@ export class FileGenerator {
         continue;
       }
 
-      const log = getLogger();
-      log.info(`FileGenerator: wrote ${agent.filePath} (reason=${writeReason})`);
+      this.log.info(`FileGenerator: wrote ${agent.filePath} (reason=${writeReason})`);
 
       if (this.learningDb) {
         try {
@@ -244,8 +256,7 @@ export class FileGenerator {
         await fs.mkdir(path.dirname(fullPath), { recursive: true });
         await fs.writeFile(fullPath, content, 'utf8');
       } catch (err: unknown) {
-        const log = getLogger();
-        log.warn(`FileGenerator: failed to write ${file.filePath}`, err);
+        this.log.warn(`FileGenerator: failed to write ${file.filePath}`, err);
         results.push({
           type: 'path_instructions',
           path: file.filePath,
@@ -257,8 +268,7 @@ export class FileGenerator {
         continue;
       }
 
-      const log = getLogger();
-      log.info(`FileGenerator: wrote ${file.filePath} (reason=${writeReason})`);
+      this.log.info(`FileGenerator: wrote ${file.filePath} (reason=${writeReason})`);
 
       if (this.learningDb) {
         try {
@@ -326,8 +336,7 @@ export class FileGenerator {
         await fs.mkdir(path.dirname(fullPath), { recursive: true });
         await fs.writeFile(fullPath, content, 'utf8');
       } catch (err: unknown) {
-        const log = getLogger();
-        log.warn(`FileGenerator: failed to write ${file.filePath}`, err);
+        this.log.warn(`FileGenerator: failed to write ${file.filePath}`, err);
         results.push({
           type: 'cursor_rules_dir' as GeneratedFileType,
           path: file.filePath,
@@ -339,8 +348,7 @@ export class FileGenerator {
         continue;
       }
 
-      const log = getLogger();
-      log.info(`FileGenerator: wrote ${file.filePath} (reason=${writeReason})`);
+      this.log.info(`FileGenerator: wrote ${file.filePath} (reason=${writeReason})`);
 
       if (this.learningDb) {
         try {
@@ -367,7 +375,7 @@ export class FileGenerator {
   async generate(fileType: GeneratedFileType, model: ProjectModel): Promise<GeneratedFile> {
     const spec = this.fileSpecs.find((s) => s.type === fileType);
     if (!spec) {
-      getLogger().warn(`FileGenerator: unknown file type "${fileType}" — skipping`);
+      this.log.warn(`FileGenerator: unknown file type "${fileType}" — skipping`);
       return {
         type:        fileType,
         path:        '',
@@ -382,11 +390,10 @@ export class FileGenerator {
   }
 
   private async generateFile(spec: FileSpec, model: ProjectModel): Promise<GeneratedFile> {
-    const log = getLogger();
-    log.debug(`FileGenerator: generating ${spec.type} → ${spec.path}`);
+    this.log.debug(`FileGenerator: generating ${spec.type} → ${spec.path}`);
 
     // 1. Generate sections from template
-    const sections = spec.generate(model, this.conventions);
+    const sections = spec.generate(model);
     const preamble = spec.preamble ? spec.preamble() : '';
     const content  = preamble + buildSectionedFile(sections);
     const newHash  = hashContent(content);
@@ -402,7 +409,7 @@ export class FileGenerator {
 
     // 3. Hash-compare — skip write if identical
     if (existingContent !== null && hashContent(existingContent) === newHash) {
-      log.debug(
+      this.log.debug(
         `FileGenerator: ${spec.type} unchanged (hash=${newHash.slice(0, 8)}…) — skipped. ` +
         `Hash inputs: generated content. ` +
         `Note: version-only changes in package.json do not affect generated content.`,
@@ -419,7 +426,7 @@ export class FileGenerator {
 
     // 4. Skip write if file is open in editor (deferred write)
     if (this.isFileOpenInEditor(fullPath)) {
-      log.debug(`FileGenerator: ${spec.type} is open in editor — deferring write`);
+      this.log.debug(`FileGenerator: ${spec.type} is open in editor — deferring write`);
       return {
         type:        spec.type,
         path:        spec.path,
@@ -433,12 +440,11 @@ export class FileGenerator {
     // 5. Determine write reason before writing
     const writeReason: WriteReason = existingContent === null ? 'new' : 'updated';
 
-    // 6. Write file
     try {
       await fs.mkdir(path.dirname(fullPath), { recursive: true });
       await fs.writeFile(fullPath, content, 'utf8');
     } catch (err: unknown) {
-      log.warn(`FileGenerator: write failed for ${spec.type} -> ${spec.path}`, err);
+      this.log.warn(`FileGenerator: write failed for ${spec.type} -> ${spec.path}`, err);
       return {
         type:        spec.type,
         path:        spec.path,
@@ -450,7 +456,7 @@ export class FileGenerator {
     }
 
     const kb = (Buffer.byteLength(content, 'utf8') / 1024).toFixed(1);
-    log.info(
+    this.log.info(
       `FileGenerator: wrote ${spec.path} (${kb} KB, reason=${writeReason}, ` +
       `hash=${newHash.slice(0, 8)}…)`,
     );
@@ -459,9 +465,9 @@ export class FileGenerator {
     if (this.learningDb) {
       try {
         this.learningDb.recordSnapshot(spec.path, content, 'roadie');
-        log.debug(`FileGenerator: snapshot recorded for ${spec.path}`);
+        this.log.debug(`FileGenerator: snapshot recorded for ${spec.path}`);
       } catch (err) {
-        log.warn(`FileGenerator: failed to record snapshot for ${spec.path}`, err);
+        this.log.warn(`FileGenerator: failed to record snapshot for ${spec.path}`, err);
       }
     }
 
@@ -479,15 +485,14 @@ export class FileGenerator {
    * Ensure .github/.roadie/.gitignore exists with database exclusion.
    */
   private async ensureGitignore(): Promise<void> {
-    const log = getLogger();
     const gitignorePath = path.join(this.workspaceRoot, '.github', '.roadie', '.gitignore');
     try {
       await fs.access(gitignorePath);
-      log.debug('FileGenerator: .github/.roadie/.gitignore already exists');
+      this.log.debug('FileGenerator: .github/.roadie/.gitignore already exists');
     } catch {
       await fs.mkdir(path.dirname(gitignorePath), { recursive: true });
       await fs.writeFile(gitignorePath, 'project-model.db\n*.db-journal\n', 'utf8');
-      log.info('FileGenerator: created .github/.roadie/.gitignore');
+      this.log.info('FileGenerator: created .github/.roadie/.gitignore');
     }
   }
 }

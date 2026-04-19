@@ -20,15 +20,17 @@ import { scanDependencies } from './dependency-scanner';
 import { scanDirectories } from './directory-scanner';
 import type { InMemoryProjectModel } from '../model/project-model';
 import { ProjectConventionsExtractor } from './project-conventions-extractor';
-import { getLogger } from '../shell/logger';
 import type { TechStackEntry, DirectoryNode, DetectedPattern, EntityWriter } from '../types';
 import type { LearningDatabase } from '../learning/learning-database';
+import type { Logger } from '../platform-adapters';
+import { CONSOLE_LOGGER } from '../platform-adapters';
 
 export class ProjectAnalyzer {
   constructor(
     private model: InMemoryProjectModel,
     private entityWriter?: EntityWriter,
     private learningDb?: LearningDatabase,
+    private log: Logger = CONSOLE_LOGGER,
   ) {}
 
   private buildPatternId(pattern: DetectedPattern): string {
@@ -41,43 +43,44 @@ export class ProjectAnalyzer {
    * Phase 1.5: Also populates detected_patterns and codebase_entities.
    */
   async analyze(workspaceRoot: string): Promise<void> {
-    const log = getLogger();
-    log.info(`ProjectAnalyzer: starting analysis of ${workspaceRoot}`);
+    this.log.info(`ProjectAnalyzer: starting analysis of ${workspaceRoot}`);
 
     // 1. Scan dependencies (package.json, lock files)
-    log.debug('ProjectAnalyzer: scanning dependencies…');
-    const { techStack, commands } = await scanDependencies(workspaceRoot);
+    this.log.debug(`ProjectAnalyzer: scanning dependencies…`);
+    const { techStack, commands } = await scanDependencies(workspaceRoot, this.log);
     this.model.setTechStack(techStack);
     this.model.setCommands(commands);
-    log.info(
+    this.log.info(
       `ProjectAnalyzer: dependency scan complete — ` +
       `${techStack.length} tech entries, ${commands.length} commands`,
     );
 
     // 2. Scan directory structure
-    log.debug('ProjectAnalyzer: scanning directories…');
+    this.log.debug('ProjectAnalyzer: scanning directories…');
     const directoryTree = await scanDirectories(workspaceRoot);
     this.model.setDirectoryTree(directoryTree);
     const dirCount = countNodes(directoryTree);
-    log.info(`ProjectAnalyzer: directory scan complete — ${dirCount} entries`);
+    this.log.info(`ProjectAnalyzer: directory scan complete — ${dirCount} entries`);
 
     // 2.5. Parse Project Conventions (CLAUDE.md)
-    log.debug('ProjectAnalyzer: parsing project conventions…');
+    this.log.debug('ProjectAnalyzer: parsing project conventions…');
     const conventionsExtractor = new ProjectConventionsExtractor();
     const conventions = await conventionsExtractor.extract(workspaceRoot);
     if (conventions) {
       this.model.setConventions(conventions);
-      log.info(
+      this.log.info(
         `ProjectAnalyzer: convention parsing complete — ` +
         `${conventions.techStack?.length ?? 0} tech, ${conventions.codingStyle?.length ?? 0} styles`,
       );
     } else {
-      log.info('ProjectAnalyzer: no project conventions found (CLAUDE.md missing)');
+      this.log.info('ProjectAnalyzer: no project conventions found (CLAUDE.md missing)');
     }
 
     // 3. Derive detected patterns from tech stack + directory structure
-    log.debug('ProjectAnalyzer: deriving patterns…');
+    this.log.debug('ProjectAnalyzer: deriving patterns…');
     const patterns = derivePatterns(techStack, directoryTree);
+
+    // ... (rest of logic using this.log instead of log)
 
     // Apply observation-count confidence boost from LearningDatabase
     if (this.learningDb) {
@@ -107,24 +110,24 @@ export class ProjectAnalyzer {
     }
 
     this.model.setPatterns(patterns);
-    log.info(`ProjectAnalyzer: pattern derivation complete — ${patterns.length} patterns`);
+    this.log.info(`ProjectAnalyzer: pattern derivation complete — ${patterns.length} patterns`);
 
     // 4. Extract code entities into codebase dictionary (when entity writer provided)
     if (this.entityWriter) {
-      log.debug('ProjectAnalyzer: extracting code entities…');
+      this.log.debug('ProjectAnalyzer: extracting code entities…');
       const entityCount = await this.extractEntities(workspaceRoot);
-      log.info(`ProjectAnalyzer: entity extraction complete — ${entityCount} files processed`);
+      this.log.info(`ProjectAnalyzer: entity extraction complete — ${entityCount} files processed`);
     }
 
     // 5. Flush to SQLite (no-op when database is null)
     this.model.flush();
-    log.info('ProjectAnalyzer: analysis complete');
+    this.log.info('ProjectAnalyzer: analysis complete');
   }
 
   /** Scan TypeScript/JavaScript source files and record code entities. */
   private async extractEntities(workspaceRoot: string): Promise<number> {
     if (!this.entityWriter) return 0;
-    const log = getLogger();
+    // use this.log
 
     const sourceFiles = await fg(['**/*.{ts,tsx,js,jsx}'], {
       cwd: workspaceRoot,
@@ -150,19 +153,19 @@ export class ProjectAnalyzer {
         processed++;
       } catch (err) {
         skipped++;
-        log.debug(`ProjectAnalyzer: entity extraction skipped ${path.basename(filePath)}: ${String(err)}`);
+        this.log.debug(`ProjectAnalyzer: entity extraction skipped ${path.basename(filePath)}: ${String(err)}`);
       }
     }
 
     if (skipped > 0) {
       const ratio = skipped / sourceFiles.length;
       if (ratio >= 0.1) {
-        log.warn(
+        this.log.warn(
           `ProjectAnalyzer: entity extraction failed for ${skipped}/${sourceFiles.length} files ` +
           `(>=10%). The project dictionary may be incomplete.`,
         );
       } else {
-        log.info(`ProjectAnalyzer: entity extraction skipped ${skipped}/${sourceFiles.length} files.`);
+        this.log.info(`ProjectAnalyzer: entity extraction skipped ${skipped}/${sourceFiles.length} files.`);
       }
     }
 
@@ -252,6 +255,27 @@ function derivePatterns(
       description: `Source code organised under ${path.basename(sourceDir.path)}/`,
       evidence: { files: [sourceDir.path], matchCount: 1, confidence: 0.9 },
       confidence: 0.9,
+    });
+  }
+
+  // Agent Discovery
+  const agentsDir = children.find((d) => path.basename(d.path).toLowerCase() === 'agents' && d.type === 'directory');
+  if (agentsDir) {
+    patterns.push({
+      category: 'agent_lifecycle',
+      description: 'Project contains local AI agents in agents/',
+      evidence: { files: [agentsDir.path], matchCount: 1, confidence: 1.0 },
+      confidence: 1.0,
+    });
+  }
+
+  const mcpConfig = children.find((d) => path.basename(d.path).toLowerCase() === 'mcp.json');
+  if (mcpConfig) {
+    patterns.push({
+      category: 'agent_lifecycle',
+      description: 'Project uses mcp.json for agent registration',
+      evidence: { files: [mcpConfig.path], matchCount: 1, confidence: 1.0 },
+      confidence: 1.0,
     });
   }
 

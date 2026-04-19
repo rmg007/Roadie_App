@@ -11,8 +11,9 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { getLogger } from '../shell/logger';
 import type { TechStackEntry, ProjectCommand } from '../types';
+import type { Logger } from '../platform-adapters';
+import { STUB_LOGGER } from '../platform-adapters';
 
 /** Detect package manager from lock file presence. */
 async function detectPackageManager(root: string): Promise<string> {
@@ -47,7 +48,10 @@ export interface DependencyScanResult {
   commands: ProjectCommand[];
 }
 
-export async function scanDependencies(workspaceRoot: string): Promise<DependencyScanResult> {
+export async function scanDependencies(
+  workspaceRoot: string,
+  log: Logger = STUB_LOGGER,
+): Promise<DependencyScanResult> {
   const entries: TechStackEntry[] = [];
   const commands: ProjectCommand[] = [];
   const pkgPath = path.join(workspaceRoot, 'package.json');
@@ -61,7 +65,7 @@ export async function scanDependencies(workspaceRoot: string): Promise<Dependenc
   try {
     pkg = JSON.parse(raw) as Record<string, unknown>;
   } catch (err: unknown) {
-    getLogger().warn(
+    log.warn(
       `dependency-scanner: malformed package.json at ${pkgPath} — skipping dependency scan`,
       err,
     );

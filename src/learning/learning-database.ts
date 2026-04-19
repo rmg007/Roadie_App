@@ -18,13 +18,14 @@
  * @depended-on-by edit-tracker, section-manager, file-watcher-manager
  */
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite');
-type SqliteDb = InstanceType<typeof DatabaseSync>;
+import Database from 'better-sqlite3';
+type SqliteDb = Database.Database;
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as nodePath from 'node:path';
 import { RoadieError } from '../shell/errors';
+import type { Logger } from '../platform-adapters';
+import { STUB_LOGGER } from '../platform-adapters';
 
 // ---- Public types ----
 
@@ -177,22 +178,17 @@ function sha256(content: string): string {
 
 export class LearningDatabase {
   private db: SqliteDb | null = null;
+  private globalDb: SqliteDb | null = null;
   private config: LearningDatabaseConfig = {};
   /** Filesystem path of the underlying db file, used for backup operations. */
   private dbPath: string | null = null;
+  private logger: Logger = STUB_LOGGER;
 
   // ---- B8: logger accessor (lazy to avoid circular dep) ----
   private log(level: 'info' | 'warn' | 'error', msg: string, err?: unknown): void {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { getLogger } = require('../shell/logger') as typeof import('../shell/logger');
-      const logger = getLogger();
-      if (level === 'info') logger.info(msg);
-      else if (level === 'warn') logger.warn(msg, err);
-      else logger.error(msg, err);
-    } catch {
-      // logger not yet initialised — silently ignore
-    }
+    if (level === 'info') this.logger.info(msg);
+    else if (level === 'warn') this.logger.warn(msg, err);
+    else this.logger.error(msg, err);
   }
 
   // ---- B9: workspace trust gate ----
@@ -214,14 +210,13 @@ export class LearningDatabase {
    * Called after every DatabaseSync open.
    */
   private applyPragmas(db: SqliteDb): void {
-    db.exec('PRAGMA foreign_keys = ON');
-    db.exec('PRAGMA busy_timeout = 5000');
-    db.exec('PRAGMA temp_store = MEMORY');
-    db.exec('PRAGMA synchronous = NORMAL');
+    db.pragma('foreign_keys = ON');
+    db.pragma('busy_timeout = 5000');
+    db.pragma('temp_store = MEMORY');
+    db.pragma('synchronous = NORMAL');
 
     // WAL mode: capture return value and warn if it differs
-    const walRow = db.prepare('PRAGMA journal_mode = WAL').get() as { journal_mode: string } | undefined;
-    const journalMode = walRow?.journal_mode ?? '';
+    const journalMode = db.pragma('journal_mode = WAL', { simple: true });
     if (journalMode !== 'wal') {
       this.log('warn', `[LearningDatabase] Expected WAL journal mode, got: '${journalMode}'`);
     }
@@ -278,22 +273,30 @@ export class LearningDatabase {
    * @param config - LearningDatabase configuration options.
    * @param dbPath - Filesystem path of the database file (used for backups/recovery).
    */
-  initialize(db: SqliteDb, config?: LearningDatabaseConfig, dbPath?: string): void {
+  initialize(db: SqliteDb, config?: LearningDatabaseConfig, dbPath?: string, logger?: Logger, globalDb?: SqliteDb): void {
     if (this.db) {
       this.close();
     }
     this.db = db;
+    this.globalDb = globalDb ?? null;
     this.config = config ?? {};
     this.dbPath = dbPath ?? null;
+    this.logger = logger ?? STUB_LOGGER;
 
     // B1: apply pragmas
     this.applyPragmas(db);
+    if (this.globalDb) {
+      this.applyPragmas(this.globalDb);
+    }
 
     // B6: integrity check — recover from corruption before touching schema
     this.checkIntegrity(db);
 
     // Apply schema
     this.db.exec(LEARNING_SCHEMA);
+    if (this.globalDb) {
+      this.globalDb.exec(LEARNING_SCHEMA);
+    }
 
     // B2: schema version check and migration
     this.runMigrations();
@@ -307,8 +310,7 @@ export class LearningDatabase {
     const db = this.db;
     if (!db) return;
 
-    const versionRow = db.prepare('PRAGMA user_version').get() as { user_version: number } | undefined;
-    const currentVersion = versionRow?.user_version ?? 0;
+    const currentVersion = db.pragma('user_version', { simple: true }) as number;
 
     if (currentVersion < SCHEMA_VERSION) {
       this.log('info', `[LearningDatabase] Migrating schema from v${currentVersion} to v${SCHEMA_VERSION}`);
@@ -321,7 +323,7 @@ export class LearningDatabase {
       // v0 → v1: ensure learning_schema_version table exists (already in LEARNING_SCHEMA)
       // No ALTER TABLE needed for v1 since the schema is created fresh if missing
 
-      db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+      db.pragma(`user_version = ${SCHEMA_VERSION}`);
       this.log('info', `[LearningDatabase] Schema migrated to v${SCHEMA_VERSION}`);
     }
 
@@ -446,21 +448,27 @@ export class LearningDatabase {
     // B9: skip writes when workspace is not trusted
     if (!this.isTrusted) return;
     const db = this.db;
-    this.safeExec(() =>
-      db.prepare(
-        `INSERT INTO workflow_history (workflow_type, prompt, status, steps_completed, steps_total, duration_ms, model_tiers_used, error_summary)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run(
-        entry.workflowType,
-        entry.prompt,
-        entry.status,
-        entry.stepsCompleted,
-        entry.stepsTotal,
-        entry.durationMs ?? null,
-        entry.modelTiersUsed ?? null,
-        entry.errorSummary ?? null,
-      ),
-    );
+    const globalDb = this.globalDb;
+    
+    const stmt = `INSERT INTO workflow_history (workflow_type, prompt, status, steps_completed, steps_total, duration_ms, model_tiers_used, error_summary)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+    const params = [
+      entry.workflowType,
+      entry.prompt,
+      entry.status,
+      entry.stepsCompleted,
+      entry.stepsTotal,
+      entry.durationMs ?? null,
+      entry.modelTiersUsed ?? null,
+      entry.errorSummary ?? null,
+    ];
+
+    this.safeExec(() => {
+      db.prepare(stmt).run(...params);
+      if (globalDb) {
+        globalDb.prepare(stmt).run(...params);
+      }
+    });
   }
 
   getWorkflowHistory(limit = 100): WorkflowHistoryEntry[] {

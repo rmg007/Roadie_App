@@ -1,18 +1,11 @@
 {
   "name": "roadie",
-  "displayName": "Roadie v0.11.0 — AI Workflow Engine for Copilot",
-  "description": "The Configuration-First AI Workflow Engine. Orchestrate project context for Copilot, Claude, and Cursor.",
+  "displayName": "Roadie MCP Server",
+  "description": "Roadie: The Plug and Forget autonomous AI project engine (Standalone MCP Server).",
   "version": "0.11.0",
-  "publisher": "roadie",
   "engines": {
-    "vscode": "^1.93.0",
     "node": ">=22.0.0"
   },
-  "categories": [
-    "AI",
-    "Code Quality",
-    "Productivity"
-  ],
   "keywords": [
     "copilot",
     "ai",
@@ -20,183 +13,9 @@
     "automation",
     "code review"
   ],
-  "activationEvents": [
-    "onChat:roadie",
-    "onCommand:roadie.init",
-    "onCommand:roadie.rescan",
-    "onCommand:roadie.reset",
-    "workspaceContains:.github/.roadie/project-model.db"
-  ],
-  "main": "./out/extension.js",
-  "contributes": {
-    "chatParticipants": [
-      {
-        "id": "roadie",
-        "name": "Roadie",
-        "description": "The invisible AI workflow engine. Chat naturally—Roadie handles the rest.",
-        "isSticky": true,
-        "slashCommands": [
-          {
-            "name": "workflow:fix",
-            "description": "Run the bug-fix workflow directly"
-          },
-          {
-            "name": "workflow:document",
-            "description": "Run the document workflow directly"
-          },
-          {
-            "name": "workflow:review",
-            "description": "Run the code-review workflow directly"
-          },
-          {
-            "name": "workflow:refactor",
-            "description": "Run the refactor workflow directly"
-          },
-          {
-            "name": "workflow:onboard",
-            "description": "Run the onboard workflow directly"
-          },
-          {
-            "name": "workflow:dependency",
-            "description": "Run the dependency workflow directly"
-          }
-        ]
-      }
-    ],
-    "commands": [
-      {
-        "command": "roadie.init",
-        "title": "Roadie: Initialize",
-        "description": "Manually initialize Roadie in the workspace"
-      },
-      {
-        "command": "roadie.rescan",
-        "title": "Roadie: Rescan Project",
-        "description": "Force a full project rescan"
-      },
-      {
-        "command": "roadie.reset",
-        "title": "Roadie: Reset",
-        "description": "Delete local database and reset Roadie"
-      },
-      {
-        "command": "roadie.stats",
-        "title": "Roadie: Show Stats",
-        "description": "Show workflow history statistics from the learning database"
-      },
-      {
-        "command": "roadie.enableWorkflowHistory",
-        "title": "Roadie: Enable Workflow History",
-        "description": "Start recording every @roadie run to the local learning database"
-      },
-      {
-        "command": "roadie.disableWorkflowHistory",
-        "title": "Roadie: Disable Workflow History",
-        "description": "Stop recording @roadie runs to the local learning database"
-      },
-      {
-        "command": "roadie.getScanSummary",
-        "title": "Roadie: Get Scan Summary",
-        "description": "Show the current project scan summary in the Output channel"
-      },
-      {
-        "command": "roadie.runWorkflow",
-        "title": "Roadie: Run Workflow",
-        "description": "Select and launch a Roadie workflow via chat"
-      },
-      {
-        "command": "roadie.doctor",
-        "title": "Roadie: Doctor",
-        "description": "Run Roadie diagnostics and report status"
-      },
-      {
-        "command": "roadie.showLastContext",
-        "title": "Roadie: Show Last Context",
-        "description": "Focus the Roadie Output channel and show the last LLM context snapshot"
-      },
-      {
-        "command": "roadie.showMyStats",
-        "title": "Roadie: Show My Stats",
-        "description": "Open a Markdown document with per-intent accuracy, cancellation rates, top patterns, and most-edited files"
-      },
-      {
-        "command": "roadie._openChat",
-        "title": "Roadie: Open Chat (internal)",
-        "enablement": "false"
-      }
-    ],
-    "configuration": {
-      "title": "Roadie",
-      "properties": {
-        "roadie.telemetry": {
-          "type": "boolean",
-          "default": false,
-          "description": "Enable anonymous, aggregate telemetry (workflow types, model tiers, success rates). Never sends code, file names, or project details."
-        },
-        "roadie.editTracking": {
-          "type": "boolean",
-          "default": false,
-          "description": "Track edits to Roadie-generated files for learning preferences. Phase 1.5 only."
-        },
-        "roadie.workflowHistory": {
-          "type": "boolean",
-          "default": false,
-          "description": "Persist workflow outcomes (success/failure, escalation patterns). Phase 1.5 only."
-        },
-        "roadie.modelPreference": {
-          "type": "string",
-          "enum": [
-            "economy",
-            "balanced",
-            "quality"
-          ],
-          "default": "balanced",
-          "enumDescriptions": [
-            "Use Tier 0 only (cheapest, lower quality)",
-            "Tier 0 → escalate to Tier 1 on failure (default)",
-            "Start at Tier 1 (most expensive, highest quality)"
-          ],
-          "description": "Model tier preference for workflows. Does not affect escalation logic."
-        },
-        "roadie.autoCommit": {
-          "type": "boolean",
-          "default": false,
-          "description": "Automatically stage and commit Roadie-generated .github/ files. Phase 1.5 only."
-        },
-        "roadie.testCommand": {
-          "type": "string",
-          "default": "",
-          "description": "Custom test command override. If empty, Roadie auto-detects from package.json scripts (e.g., 'npm test', 'pnpm test')."
-        },
-        "roadie.testTimeout": {
-          "type": "number",
-          "default": 300,
-          "minimum": 10,
-          "maximum": 3600,
-          "description": "Maximum seconds to wait for test suite execution before timeout."
-        },
-        "roadie.contextLensLevel": {
-          "type": "string",
-          "enum": [
-            "off",
-            "summary",
-            "full"
-          ],
-          "default": "summary",
-          "enumDescriptions": [
-            "Suppress all [CONTEXT] log lines in the Output channel",
-            "Log only the [CONTEXT] header (tokens, chars) — no body",
-            "Log the full context body (previous behavior)"
-          ],
-          "description": "Controls how much context Roadie logs to the Output channel on each LLM call."
-        }
-      }
-    }
-  },
+  "main": "./out/index.js",
   "scripts": {
-    "sync:displayNameVersion": "node scripts/sync-display-name-version.js",
-    "vscode:prepublish": "npm run sync:displayNameVersion && npm run build",
-    "build": "tsup src/extension.ts --outDir out --format cjs --external vscode",
+    "build": "tsup src/index.ts --outDir out --clean",
     "build:watch": "npm run build -- --watch",
     "lint": "eslint src --ext ts",
     "lint:fix": "npm run lint -- --fix",
@@ -204,13 +23,10 @@
     "test": "vitest run",
     "test:watch": "vitest watch",
     "test:coverage": "vitest run --coverage",
-    "test:scenarios": "vitest run test/harness/scenario.test.ts",
-    "package": "vsce package --no-dependencies",
-    "publish": "vsce publish --no-dependencies",
-    "prepublish:test": "npm run test && npm run lint && npm run build",
-    "deploy:local": "git add . && git commit -m \"chore: sync and install\" && git push && npm run build && npm run package && code --install-extension roadie-0.11.0.vsix && del roadie-0.11.0.vsix"
+    "start": "node out/index.js"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "better-sqlite3": "^9.4.3",
     "fast-glob": "^3.3.0",
     "zod": "^3.22.4"
@@ -218,12 +34,8 @@
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.0",
     "@types/node": "^20.0.0",
-    "@types/vscode": "^1.84.0",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
-    "@vscode/test-cli": "^0.0.4",
-    "@vscode/test-electron": "^2.3.0",
-    "@vscode/vsce": "^3.8.1",
     "ajv": "^8.18.0",
     "ajv-formats": "^3.0.1",
     "eslint": "^8.50.0",
@@ -244,9 +56,8 @@
   "bugs": {
     "url": "https://github.com/rmg007/Roadie_App/issues"
   },
-  "icon": "images/icon.png",
-  "galleryBanner": {
-    "color": "#1e1e2e",
-    "theme": "dark"
+  "bin": {
+    "roadie-mcp": "./out/index.js",
+    "roadie": "./out/index.js"
   }
 }

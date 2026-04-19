@@ -15,7 +15,8 @@ import {
   NEGATIVE_SIGNALS,
   CONFIDENCE_THRESHOLDS,
 } from './intent-patterns';
-import { getLogger } from '../shell/logger';
+import type { Logger } from '../platform-adapters';
+import { STUB_LOGGER } from '../platform-adapters';
 import { LLMClassificationResponseSchema } from '../schemas';
 import type { WorkflowStats } from '../learning/learning-database';
 
@@ -29,6 +30,7 @@ import type { WorkflowStats } from '../learning/learning-database';
  * 4. If parseClassification returns null, fall back to general_chat
  */
 export class IntentClassifier {
+  constructor(private log: Logger = STUB_LOGGER) {}
   /**
    * Local classification — instant, zero cost.
    * Runs INTENT_PATTERNS against the prompt, computes weighted scores,
@@ -83,12 +85,12 @@ export class IntentClassifier {
       return a[1].firstMatchIdx - b[1].firstMatchIdx; // earlier mention wins
     });
 
-    const log = getLogger();
+    // use this.log
     if (sorted.length > 0) {
       const topCandidates = sorted.slice(0, 3).map(([intent, data]) => 
         `${intent}=${data.score.toFixed(2)} [${data.signals.join(',')}]`
       );
-      log.debug(`Intent candidates: ${topCandidates.join(', ')}`);
+      this.log.debug(`Intent candidates: ${topCandidates.join(', ')}`);
     }
     if (sorted.length === 0) {
       return {

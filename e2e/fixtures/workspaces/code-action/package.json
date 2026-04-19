@@ -1,6 +1,0 @@
-{
-  "name": "roadie-e2e-code-action",
-  "version": "0.0.0",
-  "private": true,
-  "description": "Minimal TypeScript workspace used by the Roadie code-action E2E suite."
-}

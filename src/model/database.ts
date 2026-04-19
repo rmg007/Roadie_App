@@ -14,10 +14,8 @@ import { mkdirSync, unlinkSync, existsSync } from 'node:fs';
 import * as path from 'node:path';
 import type { TechStackEntry, DirectoryNode, DetectedPattern, ProjectCommand } from '../types';
 
-// node:sqlite is a built-in Node.js 22.5+ module — no native binary required.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite');
-type SqliteDb = InstanceType<typeof DatabaseSync>;
+import Database from 'better-sqlite3';
+type SqliteDb = Database.Database;
 
 const CURRENT_SCHEMA_VERSION = 2;
 
@@ -88,18 +86,18 @@ export class RoadieDatabase {
   private openDb(dbPath: string): SqliteDb {
     let db: SqliteDb | undefined;
     try {
-      db = new DatabaseSync(dbPath);
-      db.exec('PRAGMA journal_mode = WAL');
-      db.exec('PRAGMA foreign_keys = ON');
+      db = new Database(dbPath);
+      db.pragma('journal_mode = WAL');
+      db.pragma('foreign_keys = ON');
     } catch {
       // File is not a SQLite database (garbage bytes, wrong header, etc.) — delete and recreate.
       try { db?.close(); } catch { /* ignore */ }
       if (dbPath !== ':memory:') {
         this.deleteDbFiles(dbPath);
       }
-      db = new DatabaseSync(dbPath);
-      db.exec('PRAGMA journal_mode = WAL');
-      db.exec('PRAGMA foreign_keys = ON');
+      db = new Database(dbPath);
+      db.pragma('journal_mode = WAL');
+      db.pragma('foreign_keys = ON');
     }
 
     // Also verify integrity for files that open but are internally corrupt.
@@ -109,17 +107,17 @@ export class RoadieDatabase {
         if (result?.integrity_check !== 'ok') {
           db.close();
           this.deleteDbFiles(dbPath);
-          db = new DatabaseSync(dbPath);
-          db.exec('PRAGMA journal_mode = WAL');
-          db.exec('PRAGMA foreign_keys = ON');
+          db = new Database(dbPath);
+          db.pragma('journal_mode = WAL');
+          db.pragma('foreign_keys = ON');
         }
       } catch {
         // integrity_check itself failed — start fresh
-        try { db.close(); } catch { /* ignore */ }
+        try { db?.close(); } catch { /* ignore */ }
         this.deleteDbFiles(dbPath);
-        db = new DatabaseSync(dbPath);
-        db.exec('PRAGMA journal_mode = WAL');
-        db.exec('PRAGMA foreign_keys = ON');
+        db = new Database(dbPath);
+        db.pragma('journal_mode = WAL');
+        db.pragma('foreign_keys = ON');
       }
     }
 

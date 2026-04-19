@@ -19,6 +19,8 @@ import type { ProjectModel } from './types';
 import { InMemoryProjectModel } from './model/project-model';
 import { ProjectAnalyzer } from './analyzer/project-analyzer';
 import { FileGenerator } from './generator/file-generator';
+import type { Logger } from './platform-adapters';
+import { STUB_LOGGER } from './platform-adapters';
 
 // =====================================================================
 // Config
@@ -27,6 +29,7 @@ import { FileGenerator } from './generator/file-generator';
 export interface ContainerConfig {
   projectRoot: string;
   dbPath?: string;
+  globalDbPath?: string;
 }
 
 // =====================================================================
@@ -76,53 +79,71 @@ export class Container {
 }
 
 // =====================================================================
-// createContainer — factory for VS Code extension mode
+// createMCPContainer — factory for MCP server mode
+// =====================================================================
+
+import { RoadieDatabase } from './model/database';
+import { LearningDatabase } from './learning/learning-database';
+import { NodeFileSystemProvider, NodeConfigProvider } from './shell/node-providers';
+
+// =====================================================================
+// createMCPContainer — factory for MCP server mode
 // =====================================================================
 
 /**
- * Create a container wired for extension mode (VS Code providers).
+ * Create a container wired for MCP server mode (Node.js providers).
  */
-export async function createContainer(
+export async function createMCPContainer(
   config: ContainerConfig,
+  log: Logger = STUB_LOGGER,
+  modelProvider?: ModelProvider, // Optional, can be injected by MCP server
 ): Promise<Container> {
   const projectRoot = config.projectRoot;
   const dbPath = config.dbPath ?? path.join(projectRoot, '.github', '.roadie', 'project-model.db');
 
   let roadieDb = null;
   let learningDb = null;
+  let globalRoadieDb = null;
 
-  // Attempt SQLite initialization (fault-tolerant)
+  // Attempt SQLite initialization (fault-tolerant & autonomous learning enabled)
   try {
-    const { RoadieDatabase } = await import('./model/database.js');
-    const { LearningDatabase } = await import('./learning/learning-database.js');
-
     roadieDb = new RoadieDatabase(dbPath);
+    if (config.globalDbPath) {
+      globalRoadieDb = new RoadieDatabase(config.globalDbPath);
+    }
+
     learningDb = new LearningDatabase();
-    learningDb.initialize(roadieDb.getRawDb(), { workflowHistory: false });
-  } catch {
+    // Enable workflowHistory and editTracking for 'learn and grow' capability
+    learningDb.initialize(
+      roadieDb.getRawDb(), 
+      { workflowHistory: true }, 
+      dbPath, 
+      log, 
+      globalRoadieDb?.getRawDb() ?? undefined
+    );
+    log.info('Learning engine initialized and autonomous logging active (Syncing with Global Brain).');
+  } catch (err) {
+    log.error('Learning engine failed to initialize.', err);
     roadieDb = null;
     learningDb = null;
   }
 
   const projectModel = new InMemoryProjectModel(roadieDb);
-  const projectAnalyzer = new ProjectAnalyzer(projectModel);
+  const projectAnalyzer = new ProjectAnalyzer(projectModel, undefined, learningDb ?? undefined, log);
 
-  const { VSCodeModelProvider, VSCodeFileSystemProvider, VSCodeConfigProvider } =
-    await import('./shell/vscode-providers.js');
-  const modelProvider: ModelProvider = new VSCodeModelProvider();
-  const fileSystemProvider: FileSystemProvider = new VSCodeFileSystemProvider([]);
-  const configProvider: ConfigProvider = new VSCodeConfigProvider();
+  const fsProvider: FileSystemProvider = new NodeFileSystemProvider();
+  const cfgProvider: ConfigProvider = new NodeConfigProvider();
 
-  const fileGenerator = new FileGenerator(projectRoot, learningDb ?? undefined, fileSystemProvider);
+  const fileGenerator = new FileGenerator(projectRoot, learningDb ?? undefined, fsProvider, log);
 
   const services: ContainerServices = {
     projectRoot,
     projectModel,
     projectAnalyzer,
     fileGenerator,
-    modelProvider,
-    fileSystemProvider,
-    configProvider,
+    modelProvider: modelProvider!, // Should be provided if model calls are needed
+    fileSystemProvider: fsProvider,
+    configProvider: cfgProvider,
   };
 
   return new Container(services);

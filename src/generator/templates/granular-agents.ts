@@ -7,6 +7,7 @@
 import type { ProjectModel } from '../../types';
 import type { GeneratedSection } from '../section-manager';
 
+import * as path from 'node:path';
 import { renderConventionsString } from './template-utils';
 
 export interface GranularAgentFile {
@@ -22,56 +23,78 @@ export function generateGranularAgents(model: ProjectModel): GranularAgentFile[]
   const convString = renderConventionsString(conventions);
   const agents = [
     {
-      id: 'diagnostician',
-      name: 'Diagnostician',
-      description: 'Specialist in root cause analysis and technical discovery.',
+      id: 'strategist',
+      name: 'Strategist',
+      description: 'Orchestration, Product Strategy, and Systems Architecture.',
       strategy: [
-        'Perform multi-file searches to trace error propagation.',
-        'Analyze logs and test outputs to identify the precise failure point.',
-        'Map dependencies to determine side effects of potential changes.'
+        'Translate high-level requirements into structured PRDs.',
+        'Design the structural bridge between backend logic and UI state.',
+        'Define edge cases, user personas, and strict acceptance criteria.',
+        'Monitor token constraints and manage state routing across the pipeline.'
       ]
     },
     {
-      id: 'fixer',
-      name: 'Fixer',
-      description: 'Focused implementer for bug fixes and incremental logic updates.',
+      id: 'builder',
+      name: 'Builder',
+      description: 'Core Application Development (Backend, Frontend, and Database).',
       strategy: [
-        'Apply minimal, non-breaking changes to resolve the identified issue.',
-        'Maintain existing code style and naming conventions strictly.',
-        'Run targeted tests immediately after every edit.'
+        'Write reactive Flutter widgets and manage complex Dart state logic.',
+        'Develop C# business logic, data access layers, and functional endpoints.',
+        'Optimize SQLite schemas and author lightweight data migrations.',
+        'Ensure the application functions as a zero-install, portable executable.'
       ]
     },
     {
-      id: 'planner',
-      name: 'Planner',
-      description: 'Architectural specialist for new features and large-scale refactors.',
+      id: 'critic',
+      name: 'Critic',
+      description: 'Quality Assurance, Validation, and Security Auditing.',
       strategy: [
-        'Draft a comprehensive implementation plan before making any code changes.',
-        'Identify all necessary service, model, and UI additions.',
-        'Ensure new work follows the project\'s established architectural patterns.'
+        'Scan for architectural anti-patterns and code-style violations.',
+        'Audit local data encryption and validate secure network requests.',
+        'Author unit tests and integration scripts for all new logic.',
+        'Simulate end-user flows to validate against original acceptance criteria.'
       ]
     },
     {
-      id: 'reviewer',
-      name: 'Reviewer',
-      description: 'Quality assurance specialist focused on security, performance, and standards.',
+      id: 'delivery',
+      name: 'Delivery',
+      description: 'Deployment, Release Management, and Technical Writing.',
       strategy: [
-        'Scan for security vulnerabilities (injection, overflow, leaks).',
-        'Analyze performance implications of new logic (O(n), DB pressure).',
-        'Enforce compliance with AGENT_OPERATING_RULES.md.'
-      ]
-    },
-    {
-      id: 'documentarian',
-      name: 'Documentarian',
-      description: 'Specialist in technical writing and API documentation.',
-      strategy: [
-        'Generate JSDoc/TSDoc for all new public interfaces.',
-        'Update project READMEs and high-level architectural docs.',
-        'Ensure comments mirror the actual implementation reality.'
+        'Automate the build pipeline and manage asset bundling.',
+        'Generate semantic versioning and compile official changelogs.',
+        'Synthesize codebase details into maintainable developer documentation.',
+        'Configure external parameters and package the final portable executable.'
       ]
     }
   ];
+
+  // --- Domain-Specific Agent Extraction ---
+  const structure = model.getDirectoryTree();
+  if (structure && structure.children) {
+    // Look for significant folders: src/*, lib/*, packages/*
+    const appDir = structure.children.find(c => ['src', 'lib', 'packages'].includes(path.basename(c.path)) && c.type === 'directory');
+    if (appDir && appDir.children) {
+      for (const module of appDir.children) {
+        if (module.type === 'directory') {
+          const moduleName = path.basename(module.path);
+          // Skip common non-module folders
+          if (['__tests__', '__snapshots__', 'node_modules', 'dist', 'out'].includes(moduleName)) continue;
+
+          const capitalized = moduleName.charAt(0).toUpperCase() + moduleName.slice(1);
+          agents.push({
+            id: `${moduleName}-specialist`,
+            name: `${capitalized} Specialist`,
+            description: `Domain expert for the ${moduleName} subsystem.`,
+            strategy: [
+              `Focus edits and research within the ${module.path} directory.`,
+              `Ensure changes respect the internal encapsulation of the ${moduleName} module.`,
+              `Verify integration points with other subsystems when modifying public exports.`
+            ]
+          });
+        }
+      }
+    }
+  }
 
   return agents.map(agent => {
     const preamble = 

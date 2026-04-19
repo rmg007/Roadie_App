@@ -9,8 +9,6 @@
 - **tsup** 8.0.0 (build_tool)
 
 ## Commands
-- **sync:displayNameVersion**: `npm run sync:displayNameVersion`
-- **vscode:prepublish**: `npm run vscode:prepublish`
 - **build**: `npm run build`
 - **build:watch**: `npm run build:watch`
 - **lint**: `npm run lint`
@@ -19,10 +17,7 @@
 - **test**: `npm run test`
 - **test:watch**: `npm run test:watch`
 - **test:coverage**: `npm run test:coverage`
-- **test:scenarios**: `npm run test:scenarios`
-- **package**: `npm run package`
-- **publish**: `npm run publish`
-- **prepublish:test**: `npm run prepublish:test`
+- **start**: `npm run start`
 
 ## Code Conventions
 - TypeScript project (v5.2.0)
@@ -38,29 +33,9 @@
 <!-- roadie:start:repo-map -->
 ## Repository Map
 
-- **docs/**
-- **e2e/**
-- **chaos/**
-- **fixtures/**
-- **workspaces/**
-- **code-action/**
 - **src/** (source)
-- **persistence/**
-- **ts-calculator/**
-- **helpers/**
-- **suites/**
-- **evals/**
-- **classifier/**
-- **images/**
-- **scripts/**
-- **chaos/**
-- **src/** (source)
-- **__integration__/** (source)
-- **__perf__/** (source)
 - **analyzer/** (source)
-- **api/** (source)
 - **classifier/** (source)
-- **detector/** (source)
 - **dictionary/** (source)
 - **engine/** (source)
 - **definitions/** (source)
@@ -71,39 +46,6 @@
 - **__tests__/** (test)
 - **model/** (source)
 - **shell/** (source)
-- **__contract__/** (source)
-- **__tests__/** (test)
-- **spawner/** (source)
-- **tracking/** (source)
-- **watcher/** (source)
-- **__tests__/** (test)
-- **test/** (test)
-- **fixtures/** (test)
-- **intent-classification/** (test)
-- **mixed-js-ts/** (test)
-- **src/** (source)
-- **nested-monorepo/** (test)
-- **packages/** (test)
-- **core/** (test)
-- **src/** (source)
-- **ui/** (test)
-- **src/** (source)
-- **utils/** (test)
-- **src/** (source)
-- **node-js-nextjs/** (test)
-- **__tests__/** (test)
-- **src/** (source)
-- **ts-calculator/** (test)
-- **src/** (source)
-- **operations/** (source)
-- **test/** (test)
-- **harness/** (test)
-- **scenarios/** (test)
-- **assertions/** (test)
-- **mocks/** (test)
-- **tests/** (test)
-- **fixtures/** (test)
-- **db-corpus/** (test)
 <!-- roadie:end:repo-map -->
 
 <!-- roadie:start:forbidden -->

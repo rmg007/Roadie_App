@@ -31,7 +31,8 @@ import { InterviewerAgent } from '../spawner/interviewer-agent';
 import { DatabaseAgent } from '../spawner/database-agent';
 import { BackendAgent } from '../spawner/backend-agent';
 import { FrontendAgent } from '../spawner/frontend-agent';
-import { getLogger } from '../shell/logger';
+import type { Logger } from '../platform-adapters';
+import { STUB_LOGGER } from '../platform-adapters';
 import type { LearningDatabase } from '../learning/learning-database';
 
 // H4: Definition registry for snapshot deserialization
@@ -59,10 +60,12 @@ export class WorkflowEngine {
   private learningDb?: LearningDatabase;
   // H9: Track state per workflow execution (not instance-level)
   private executionState: Map<string, WorkflowState> = new Map();
+  private log: Logger;
 
-  constructor(stepExecutor: StepExecutor, learningDb?: LearningDatabase) {
+  constructor(stepExecutor: StepExecutor, learningDb?: LearningDatabase, log: Logger = STUB_LOGGER) {
     this.stepExecutor = stepExecutor;
     this.learningDb = learningDb;
+    this.log = log;
   }
 
   /** Get current workflow state for a specific workflow (H9: Engine State Isolation).
@@ -92,7 +95,7 @@ export class WorkflowEngine {
     definition: WorkflowDefinition,
     context: WorkflowContext,
   ): Promise<WorkflowResult> {
-    const log = getLogger();
+    // use this.log
     if (!definition.steps || definition.steps.length === 0) {
       throw new Error(`Workflow '${definition.id}' has no steps defined.`);
     }
@@ -102,7 +105,7 @@ export class WorkflowEngine {
     let state = WorkflowState.PENDING;
     this.executionState.set(definition.id, state);
 
-    this.transition(definition.id, state, WorkflowState.RUNNING, log);
+    this.transition(definition.id, state, WorkflowState.RUNNING);
     state = WorkflowState.RUNNING;
 
     const stepResults: StepResult[] = [];
@@ -115,18 +118,18 @@ export class WorkflowEngine {
 
       // Check cancellation at step boundary
       if (context.cancellation.isCancelled) {
-        this.transition(definition.id, state, WorkflowState.CANCELLED, log);
+        this.transition(definition.id, state, WorkflowState.CANCELLED);
         state = WorkflowState.CANCELLED;
-        log.info(`[${definition.id}] Cancelled before step ${i + 1}/${totalSteps}: "${step.name}"`);
+        this.log.info(`[${definition.id}] Cancelled before step ${i + 1}/${totalSteps}: "${step.name}"`);
         break;
       }
 
-      log.info(`[${definition.id}] Step ${i + 1}/${totalSteps}: "${step.name}" — starting`);
+      this.log.info(`[${definition.id}] Step ${i + 1}/${totalSteps}: "${step.name}" — starting`);
 
       // Pre-execution approval gate: pause BEFORE running the step body
       if (step.requiresApproval === true) {
         const sessionId = `${definition.id}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-        this.transition(definition.id, state, WorkflowState.WAITING_FOR_APPROVAL, log);
+        this.transition(definition.id, state, WorkflowState.WAITING_FOR_APPROVAL);
         state = WorkflowState.WAITING_FOR_APPROVAL;
 
         this.pausedSessions.set(sessionId, {
@@ -157,10 +160,10 @@ export class WorkflowEngine {
             threadId,
           };
           await this.learningDb.saveWorkflowSnapshot(snapshot);
-          log.debug(`Workflow snapshot saved for approval: ${definition.id} at step ${i + 1}`);
+          this.log.debug(`Workflow snapshot saved for approval: ${definition.id} at step ${i + 1}`);
         }
 
-        log.info(
+        this.log.info(
           `[${definition.id}] Step ${i + 1}/${totalSteps} paused — ` +
           `requires approval. Session ID: ${sessionId}`,
         );
@@ -195,8 +198,8 @@ export class WorkflowEngine {
       } else if (step.agentRole === 'interviewer') {
         result = await this.executeInterviewerAgent(step, context);
       } else if (step.type === 'parallel' && step.branches && step.branches.length > 0) {
-        this.transition(definition.id, state, WorkflowState.WAITING_PARALLEL, log);
-        log.info(`[${definition.id}] Parallel branches: ${step.branches.length}`);
+        this.transition(definition.id, state, WorkflowState.WAITING_PARALLEL);
+        this.log.info(`[${definition.id}] Parallel branches: ${step.branches.length}`);
         result = await this.executeParallelBranches(step, context, tiersUsed);
       } else {
         result = await this.stepExecutor.executeStep(step, context);
@@ -215,9 +218,9 @@ export class WorkflowEngine {
 
       // Handle step failure
       if (result.status === 'failed') {
-        this.transition(definition.id, state, WorkflowState.PAUSED, log);
+        this.transition(definition.id, state, WorkflowState.PAUSED);
         state = WorkflowState.PAUSED;
-        log.warn(
+        this.log.warn(
           `[${definition.id}] Step ${i + 1}/${totalSteps}: "${step.name}" — ` +
           `FAILED after ${result.attempts} attempt(s), ${stepMs}ms` +
           (result.error ? ` — ${result.error}` : ''),
@@ -225,7 +228,7 @@ export class WorkflowEngine {
         break;
       }
 
-      log.info(
+      this.log.info(
         `[${definition.id}] Step ${i + 1}/${totalSteps}: "${step.name}" — ` +
         `done (${result.status}, ${result.attempts} attempt(s), ` +
         `model: ${result.modelUsed || 'n/a'}, ${stepMs}ms)`,
@@ -237,13 +240,13 @@ export class WorkflowEngine {
 
     // Final state
     if (state === WorkflowState.RUNNING) {
-      this.transition(definition.id, state, WorkflowState.COMPLETED, log);
+      this.transition(definition.id, state, WorkflowState.COMPLETED);
       state = WorkflowState.COMPLETED;
     }
 
     const totalMs = Date.now() - startTime;
     const succeeded = stepResults.filter((r) => r.status === 'success').length;
-    log.info(
+    this.log.info(
       `[${definition.id}] Final state: ${state} — ` +
       `${succeeded}/${stepResults.length} steps, ${totalMs}ms`,
     );
@@ -264,7 +267,7 @@ export class WorkflowEngine {
         return await definition.onComplete(stepResults);
       } catch (err: unknown) {
         const error = err instanceof Error ? err.message : String(err);
-        getLogger().warn(`Workflow onComplete hook failed: ${error}`, err);
+        this.log.warn(`Workflow onComplete hook failed: ${error}`, err);
         return workflowResult;
       }
     }
@@ -278,10 +281,10 @@ export class WorkflowEngine {
     context: WorkflowContext,
     tiersUsed: Set<ModelTier>,
   ): Promise<StepResult> {
-    const log = getLogger();
+    // use this.log
     const branches = step.branches!;
 
-    log.debug(`[parallel] Spawning ${branches.length} branches: [${branches.map((b) => b.id).join(', ')}]`);
+    this.log.debug(`[parallel] Spawning ${branches.length} branches: [${branches.map((b) => b.id).join(', ')}]`);
 
     const results = await Promise.allSettled(
       branches.map((branch) => {
@@ -308,14 +311,14 @@ export class WorkflowEngine {
         if (r.value.modelUsed) tiersUsed.add(branch.modelTier);
         if (r.value.status === 'failed') {
           anyFailed = true;
-          log.warn(`[parallel] Branch "${branch.id}" failed: ${r.value.error ?? '(no detail)'}`);
+          this.log.warn(`[parallel] Branch "${branch.id}" failed: ${r.value.error ?? '(no detail)'}`);
         } else {
-          log.debug(`[parallel] Branch "${branch.id}" succeeded`);
+          this.log.debug(`[parallel] Branch "${branch.id}" succeeded`);
         }
       } else {
         anyFailed = true;
         const errMsg = r.reason instanceof Error ? r.reason.message : String(r.reason);
-        log.warn(`[parallel] Branch "${branch.id}" rejected: ${errMsg}`);
+        this.log.warn(`[parallel] Branch "${branch.id}" rejected: ${errMsg}`);
         branchResults.push({
           stepId:     branch.id,
           status:     'failed',
@@ -329,7 +332,7 @@ export class WorkflowEngine {
     }
 
     const passed = branchResults.filter((r) => r.status === 'success').length;
-    log.info(`[parallel] ${passed}/${branches.length} branches succeeded`);
+    this.log.info(`[parallel] ${passed}/${branches.length} branches succeeded`);
 
     // Aggregate into a single StepResult for the parent parallel step
     return {
@@ -354,10 +357,10 @@ export class WorkflowEngine {
     step: WorkflowStep,
     context: WorkflowContext,
   ): Promise<StepResult> {
-    const log = getLogger();
+    // use this.log
     const agentRole = step.agentRole as string;
 
-    log.debug(`[layer-agent] Executing ${agentRole} agent for step "${step.id}"`);
+    this.log.debug(`[layer-agent] Executing ${agentRole} agent for step "${step.id}"`);
 
     try {
       if (agentRole === 'database') {
@@ -433,7 +436,7 @@ export class WorkflowEngine {
       }
     } catch (err: unknown) {
       const error = err instanceof Error ? err.message : String(err);
-      log.error(`[layer-agent] ${agentRole} agent failed: ${error}`);
+      this.log.error(`[layer-agent] ${agentRole} agent failed: ${error}`);
       return {
         stepId: step.id,
         status: 'failed',
@@ -454,10 +457,10 @@ export class WorkflowEngine {
     step: any,
     context: WorkflowContext,
   ): Promise<StepResult> {
-    const log = getLogger();
+    // use this.log
     const config = step as QuestionStepConfig & { id: string; name: string };
 
-    log.info(`[question] Step "${config.id}": prompting for "${config.responseField}"`);
+    this.log.info(`[question] Step "${config.id}": prompting for "${config.responseField}"`);
 
     // For now, return a placeholder result indicating the question was asked
     // In production, this would integrate with the chat UI to capture user input
@@ -482,10 +485,10 @@ export class WorkflowEngine {
     step: WorkflowStep,
     context: WorkflowContext,
   ): Promise<StepResult> {
-    const log = getLogger();
+    // use this.log
     const modelProvider = (context.projectModel as any)?.modelProvider;
     if (!modelProvider) {
-      log.warn('[interview] ModelProvider not available — falling back to stepExecutor');
+      this.log.warn('[interview] ModelProvider not available — falling back to stepExecutor');
       return this.stepExecutor.executeStep(step, context);
     }
     const interviewer = new InterviewerAgent(modelProvider, context.progress);
@@ -496,7 +499,7 @@ export class WorkflowEngine {
     context.requirementsBrief = result.requirementsBrief;
     context.interviewConfidence = result.finalConfidence;
 
-    log.info(
+    this.log.info(
       `[${context.intent.type}] Interview complete: ${result.totalQuestions} questions, ` +
       `${result.finalConfidence}% confidence, stopped by: ${result.stoppedBy}`,
     );
@@ -544,12 +547,12 @@ export class WorkflowEngine {
     sessionId: string,
     userApproval: boolean,
   ): Promise<WorkflowResult> {
-    const log = getLogger();
+    // use this.log
     const session = this.pausedSessions.get(sessionId);
 
     if (!session) {
       const error = `Session not found: ${sessionId}`;
-      log.error(error);
+      this.log.error(error);
       throw new Error(error);
     }
 
@@ -562,7 +565,7 @@ export class WorkflowEngine {
       modelTiersUsed,
     } = session;
 
-    log.info(`[${workflowId}] Resuming from session ${sessionId}, approval: ${userApproval}`);
+    this.log.info(`[${workflowId}] Resuming from session ${sessionId}, approval: ${userApproval}`);
 
     // Clean up the paused session
     this.pausedSessions.delete(sessionId);
@@ -572,10 +575,10 @@ export class WorkflowEngine {
 
     // If user rejected, cancel workflow
     if (!userApproval) {
-      this.transition(workflowId, state, WorkflowState.CANCELLED, log);
+      this.transition(workflowId, state, WorkflowState.CANCELLED);
       state = WorkflowState.CANCELLED;
       this.executionState.set(workflowId, state);
-      log.info(`[${workflowId}] Workflow cancelled by user at step ${currentStepIndex + 1}`);
+      this.log.info(`[${workflowId}] Workflow cancelled by user at step ${currentStepIndex + 1}`);
 
       return {
         workflowId,
@@ -588,7 +591,7 @@ export class WorkflowEngine {
     }
 
     // User approved, continue from next step
-    this.transition(workflowId, state, WorkflowState.RUNNING, log);
+    this.transition(workflowId, state, WorkflowState.RUNNING);
     state = WorkflowState.RUNNING;
     const totalSteps = definition.steps.length;
     const tiersUsed = new Set<ModelTier>(modelTiersUsed);
@@ -600,22 +603,22 @@ export class WorkflowEngine {
 
       // Check cancellation at step boundary
       if (context.cancellation.isCancelled) {
-        this.transition(workflowId, state, WorkflowState.CANCELLED, log);
+        this.transition(workflowId, state, WorkflowState.CANCELLED);
         state = WorkflowState.CANCELLED;
-        log.info(
+        this.log.info(
           `[${workflowId}] Cancelled during resume at step ${i + 1}/${totalSteps}: "${step.name}"`,
         );
         break;
       }
 
-      log.info(
+      this.log.info(
         `[${workflowId}] Step ${i + 1}/${totalSteps}: "${step.name}" — starting (resumed)`,
       );
 
       // Pre-execution approval gate
       if (step.requiresApproval === true) {
         const newSessionId = `${workflowId}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-        this.transition(workflowId, state, WorkflowState.WAITING_FOR_APPROVAL, log);
+        this.transition(workflowId, state, WorkflowState.WAITING_FOR_APPROVAL);
         state = WorkflowState.WAITING_FOR_APPROVAL;
 
         this.pausedSessions.set(newSessionId, {
@@ -629,7 +632,7 @@ export class WorkflowEngine {
           timestamp: new Date(),
         });
 
-        log.info(
+        this.log.info(
           `[${workflowId}] Step ${i + 1}/${totalSteps} paused — ` +
           `requires approval. Session ID: ${newSessionId}`,
         );
@@ -664,9 +667,9 @@ export class WorkflowEngine {
       } else if (step.agentRole === 'interviewer') {
         result = await this.executeInterviewerAgent(step, context);
       } else if (step.type === 'parallel' && step.branches && step.branches.length > 0) {
-        this.transition(workflowId, state, WorkflowState.WAITING_PARALLEL, log);
+        this.transition(workflowId, state, WorkflowState.WAITING_PARALLEL);
         state = WorkflowState.WAITING_PARALLEL;
-        log.info(`[${workflowId}] Parallel branches: ${step.branches.length}`);
+        this.log.info(`[${workflowId}] Parallel branches: ${step.branches.length}`);
         result = await this.executeParallelBranches(step, context, tiersUsed);
       } else {
         result = await this.stepExecutor.executeStep(step, context);
@@ -685,9 +688,9 @@ export class WorkflowEngine {
 
       // Handle step failure
       if (result.status === 'failed') {
-        this.transition(workflowId, state, WorkflowState.PAUSED, log);
+        this.transition(workflowId, state, WorkflowState.PAUSED);
         state = WorkflowState.PAUSED;
-        log.warn(
+        this.log.warn(
           `[${workflowId}] Step ${i + 1}/${totalSteps}: "${step.name}" — ` +
           `FAILED after ${result.attempts} attempt(s), ${stepMs}ms` +
           (result.error ? ` — ${result.error}` : ''),
@@ -695,7 +698,7 @@ export class WorkflowEngine {
         break;
       }
 
-      log.info(
+      this.log.info(
         `[${workflowId}] Step ${i + 1}/${totalSteps}: "${step.name}" — ` +
         `done (${result.status}, ${result.attempts} attempt(s), ` +
         `model: ${result.modelUsed || 'n/a'}, ${stepMs}ms)`,
@@ -707,13 +710,13 @@ export class WorkflowEngine {
 
     // Final state
     if (state === WorkflowState.RUNNING) {
-      this.transition(workflowId, state, WorkflowState.COMPLETED, log);
+      this.transition(workflowId, state, WorkflowState.COMPLETED);
       state = WorkflowState.COMPLETED;
     }
 
     const totalMs = Date.now() - resumeStartTime;
     const succeeded = stepResults.filter((r) => r.status === 'success').length;
-    log.info(
+    this.log.info(
       `[${workflowId}] Final state (resumed): ${state} — ` +
       `${succeeded}/${stepResults.length} steps, ${totalMs}ms`,
     );
@@ -734,7 +737,7 @@ export class WorkflowEngine {
         return await definition.onComplete(stepResults);
       } catch (err: unknown) {
         const error = err instanceof Error ? err.message : String(err);
-        getLogger().warn(`Workflow onComplete hook failed: ${error}`, err);
+        this.log.warn(`Workflow onComplete hook failed: ${error}`, err);
         return workflowResult;
       }
     }
@@ -801,7 +804,7 @@ export class WorkflowEngine {
     progress: any, // ProgressReporter type
     projectModel?: ProjectModel,
   ): Promise<WorkflowResult> {
-    const log = getLogger();
+    // use this.log
 
     if (!this.learningDb) {
       throw new Error('Learning database not configured for snapshot resumption');
@@ -832,7 +835,7 @@ export class WorkflowEngine {
       throw new Error(`Workflow definition not found for ID: ${definitionId}`);
     }
 
-    log.info(`[${workflowId}] Resuming from snapshot ${snapshotId} at step ${currentStepIndex + 1}`);
+    this.log.info(`[${workflowId}] Resuming from snapshot ${snapshotId} at step ${currentStepIndex + 1}`);
 
     // Reconstruct context with fresh progress/cancellation and proper projectModel (H3)
     const context = this.deserializeContext(serialized, progress, projectModel);
@@ -855,18 +858,18 @@ export class WorkflowEngine {
 
       // Check cancellation at step boundary
       if (context.cancellation.isCancelled) {
-        this.transition(workflowId, state, WorkflowState.CANCELLED, log);
+        this.transition(workflowId, state, WorkflowState.CANCELLED);
         state = WorkflowState.CANCELLED;
-        log.info(`[${workflowId}] Cancelled during snapshot resumption at step ${i + 1}/${totalSteps}`);
+        this.log.info(`[${workflowId}] Cancelled during snapshot resumption at step ${i + 1}/${totalSteps}`);
         break;
       }
 
-      log.info(`[${workflowId}] Step ${i + 1}/${totalSteps}: "${step.name}" — starting (snapshot resume)`);
+      this.log.info(`[${workflowId}] Step ${i + 1}/${totalSteps}: "${step.name}" — starting (snapshot resume)`);
 
       // Pre-execution approval gate
       if (step.requiresApproval === true) {
         const newSessionId = `${workflowId}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-        this.transition(workflowId, state, WorkflowState.WAITING_FOR_APPROVAL, log);
+        this.transition(workflowId, state, WorkflowState.WAITING_FOR_APPROVAL);
         state = WorkflowState.WAITING_FOR_APPROVAL;
         this.pausedSessions.set(newSessionId, {
           sessionId: newSessionId,
@@ -879,7 +882,7 @@ export class WorkflowEngine {
           timestamp: new Date(),
         });
 
-        log.info(`[${workflowId}] Approval required at step ${i + 1}. Session: ${newSessionId}`);
+        this.log.info(`[${workflowId}] Approval required at step ${i + 1}. Session: ${newSessionId}`);
         context.progress.report(
           `**Proceed with "${step.name}"?** Reply \`yes\` to continue or \`no\` to abort. (Session: ${newSessionId})`,
         );
@@ -908,7 +911,7 @@ export class WorkflowEngine {
       } else if (step.agentRole === 'interviewer') {
         result = await this.executeInterviewerAgent(step, context);
       } else if (step.type === 'parallel' && step.branches && step.branches.length > 0) {
-        this.transition(workflowId, state, WorkflowState.WAITING_PARALLEL, log);
+        this.transition(workflowId, state, WorkflowState.WAITING_PARALLEL);
         state = WorkflowState.WAITING_PARALLEL;
         result = await this.executeParallelBranches(step, context, tiersUsed);
       } else {
@@ -926,15 +929,15 @@ export class WorkflowEngine {
 
       // Handle step failure
       if (result.status === 'failed') {
-        this.transition(workflowId, state, WorkflowState.PAUSED, log);
+        this.transition(workflowId, state, WorkflowState.PAUSED);
         state = WorkflowState.PAUSED;
-        log.warn(
+        this.log.warn(
           `[${workflowId}] Step ${i + 1}/${totalSteps}: "${step.name}" FAILED — ${result.error ?? 'unknown'}`,
         );
         break;
       }
 
-      log.info(`[${workflowId}] Step ${i + 1}/${totalSteps}: "${step.name}" done (${stepMs}ms)`);
+      this.log.info(`[${workflowId}] Step ${i + 1}/${totalSteps}: "${step.name}" done (${stepMs}ms)`);
 
       // H5: Idempotency — skip steps already completed
       const currentCompletedIds = new Set(completedStepIds || []);
@@ -958,7 +961,7 @@ export class WorkflowEngine {
           threadId: (snapshot as any).threadId || 'unknown',
         };
         await this.learningDb.saveWorkflowSnapshot(intermediateSnapshot);
-        log.debug(`Workflow snapshot saved: ${workflowId} at step ${i + 1}`);
+        this.log.debug(`Workflow snapshot saved: ${workflowId} at step ${i + 1}`);
       }
 
       // Check approval requirement (now handled by pre-execution gate above)
@@ -968,13 +971,13 @@ export class WorkflowEngine {
 
     // Final completion
     if (state === WorkflowState.RUNNING) {
-      this.transition(workflowId, state, WorkflowState.COMPLETED, log);
+      this.transition(workflowId, state, WorkflowState.COMPLETED);
       state = WorkflowState.COMPLETED;
     }
 
     const totalMs = Date.now() - resumeStartTime;
     const succeeded = stepResults.filter((r) => r.status === 'success').length;
-    log.info(`[${workflowId}] Final state (snapshot resume): ${state} — ${succeeded}/${stepResults.length} steps`);
+    this.log.info(`[${workflowId}] Final state (snapshot resume): ${state} — ${succeeded}/${stepResults.length} steps`);
 
     this.executionState.set(workflowId, state);
     return {
@@ -991,10 +994,9 @@ export class WorkflowEngine {
     workflowId: string,
     from: WorkflowState,
     to: WorkflowState,
-    log: ReturnType<typeof getLogger>,
   ): void {
     const state = this.executionState.get(workflowId) ?? 'UNKNOWN';
-    log.debug(`[${workflowId}] ${state} → ${to}`);
+    this.log.debug(`[${workflowId}] ${state} → ${to}`);
     // H9: Update execution state map instead of instance field
     this.executionState.set(workflowId, to);
   }

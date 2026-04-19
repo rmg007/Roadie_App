@@ -11,8 +11,6 @@ Custom notes added outside markers are preserved across regenerations.
 <!-- roadie:start:commands -->
 ## Project Commands
 
-- **sync:displayNameVersion**: `npm run sync:displayNameVersion`
-- **vscode:prepublish**: `npm run vscode:prepublish`
 - **build**: `npm run build`
 - **build:watch**: `npm run build:watch`
 - **lint**: `npm run lint`
@@ -21,10 +19,7 @@ Custom notes added outside markers are preserved across regenerations.
 - **test**: `npm run test`
 - **test:watch**: `npm run test:watch`
 - **test:coverage**: `npm run test:coverage`
-- **test:scenarios**: `npm run test:scenarios`
-- **package**: `npm run package`
-- **publish**: `npm run publish`
-- **prepublish:test**: `npm run prepublish:test`
+- **start**: `npm run start`
 <!-- roadie:end:commands -->
 
 <!-- roadie:start:agent-roles -->
@@ -56,12 +51,21 @@ Custom notes added outside markers are preserved across regenerations.
 <!-- roadie:start:directory-structure -->
 ## Directory Structure
 
-- **Source:** roadie-App, src, src, __integration__, __perf__, analyzer, api, classifier, detector, dictionary, engine, definitions, generator, __snapshots__, templates, learning, model, shell, __contract__, spawner, tracking, watcher, src, src, src, src, src, src, operations
-- **Tests:** __tests__, __tests__, __tests__, test, fixtures, intent-classification, mixed-js-ts, nested-monorepo, packages, core, ui, utils, node-js-nextjs, __tests__, ts-calculator, test, harness, scenarios, assertions, mocks, tests, fixtures, db-corpus
+- **Source:** roadie-App, src, analyzer, classifier, dictionary, engine, definitions, generator, __snapshots__, templates, learning, model, shell
+- **Tests:** __tests__
 <!-- roadie:end:directory-structure -->
 
 <!-- roadie:start:coding-standards -->
 ## Coding Standards
+
+### Tech Stack
+- **npm** (package_manager)
+- **TypeScript** 5.2.0 (language)
+- **Node.js** (runtime)
+- **Vitest** 0.34.0 (test_tool)
+- **tsup** 8.0.0 (build_tool)
+
+### Detected Patterns
 
 **language**
 - TypeScript project (v5.2.0)

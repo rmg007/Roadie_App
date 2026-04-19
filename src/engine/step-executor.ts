@@ -12,7 +12,8 @@
  */
 
 import type { WorkflowStep, WorkflowContext, StepResult, ModelTier } from '../types';
-import { getLogger } from '../shell/logger';
+import type { Logger } from '../platform-adapters';
+import { STUB_LOGGER } from '../platform-adapters';
 
 /**
  * Callback invoked by StepExecutor for each attempt.
@@ -50,7 +51,7 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, stepId: string): 
 }
 
 export class StepExecutor {
-  constructor(private handler: StepHandlerFn) {}
+  constructor(private handler: StepHandlerFn, private log: Logger = STUB_LOGGER) {}
 
   /**
    * Execute a workflow step with retry/escalation logic.
@@ -62,7 +63,7 @@ export class StepExecutor {
    *   After maxRetries+1 total attempts: return failed
    */
   async executeStep(step: WorkflowStep, context: WorkflowContext): Promise<StepResult> {
-    const log = getLogger();
+    // use this.log
     const maxAttempts = Math.max(1, (step.maxRetries ?? 0) + 1);
     const timeoutMs = Math.max(1000, step.timeoutMs ?? 30_000);
     let currentTier = step.modelTier;
@@ -71,7 +72,7 @@ export class StepExecutor {
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       // Check cancellation before each attempt
       if (context.cancellation.isCancelled) {
-        log.info(`[${step.id}] Cancelled before attempt ${attempt}`);
+        this.log.info(`[${step.id}] Cancelled before attempt ${attempt}`);
         return {
           stepId:     step.id,
           status:     'cancelled',
@@ -94,9 +95,9 @@ export class StepExecutor {
       }
 
       if (currentTier !== prevTier) {
-        log.warn(`[${step.id}] Attempt ${attempt}: escalating tier ${prevTier} → ${currentTier}`);
+        this.log.warn(`[${step.id}] Attempt ${attempt}: escalating tier ${prevTier} → ${currentTier}`);
       } else {
-        log.debug(`[${step.id}] Attempt ${attempt}/${maxAttempts} (tier: ${currentTier})`);
+        this.log.debug(`[${step.id}] Attempt ${attempt}/${maxAttempts} (tier: ${currentTier})`);
       }
 
       try {
@@ -112,7 +113,7 @@ export class StepExecutor {
 
         if (result.status === 'success') {
           if (attempt > 1) {
-            log.info(`[${step.id}] Succeeded on attempt ${attempt}/${maxAttempts}`);
+            this.log.info(`[${step.id}] Succeeded on attempt ${attempt}/${maxAttempts}`);
           }
           return { ...result, attempts: attempt };
         }
@@ -122,7 +123,7 @@ export class StepExecutor {
         if (previousError && previousError.length > 2_000) {
           previousError = previousError.slice(0, 2_000);
         }
-        log.warn(
+        this.log.warn(
           `[${step.id}] Attempt ${attempt}/${maxAttempts} failed: ` +
           `${previousError?.slice(0, 120) ?? '(no detail)'}`,
         );
@@ -131,16 +132,16 @@ export class StepExecutor {
         previousError = err instanceof Error ? err.message : String(err);
         const isTimeout = previousError.includes('timed out');
         if (isTimeout) {
-          log.warn(`[${step.id}] Attempt ${attempt}/${maxAttempts} timed out (${step.timeoutMs}ms)`);
+          this.log.warn(`[${step.id}] Attempt ${attempt}/${maxAttempts} timed out (${step.timeoutMs}ms)`);
         } else {
-          log.error(`[${step.id}] Attempt ${attempt}/${maxAttempts} threw`, err);
+          this.log.error(`[${step.id}] Attempt ${attempt}/${maxAttempts} threw`, err);
         }
       }
     }
 
     // All attempts exhausted
     const errMsg = `Step '${step.id}' failed after ${maxAttempts} attempts. Last error: ${previousError}`;
-    log.error(`[${step.id}] All ${maxAttempts} attempts exhausted — step failed`);
+    this.log.error(`[${step.id}] All ${maxAttempts} attempts exhausted — step failed`);
 
     return {
       stepId:     step.id,

@@ -361,19 +361,16 @@ export interface ToolCallResult {
  * Provides typed access to all project information.
  */
 export interface ProjectModel {
-  /** Tech stack of the project (languages, frameworks, versions) */
+  /** Serialized context string for LLM prompts. */
   getTechStack(): TechStackEntry[];
-  /** Directory structure and roles (source, test, config) */
   getDirectoryStructure(): DirectoryNode;
-  /** Detected coding patterns (export style, test conventions, etc.) */
+  getDirectoryTree(): DirectoryNode | undefined;
   getPatterns(): DetectedPattern[];
-  /** Developer preferences from configuration */
   getPreferences(): DeveloperPreferences;
-  /** Build, test, dev, and lint commands */
   getCommands(): ProjectCommand[];
-  /** Returns the detected/parsed project conventions (tech, naming, quality, forbidden). */
   getConventions(): ProjectConventions | undefined;
-  /** Serialized context string for LLM prompts.
+  getOverview(): string;
+  toContext(options?: {
    *  Accepts optional parameters for token budgeting and scope filtering.
    *  @param options.maxTokens - Token budget for the serialized output
    *  @param options.scope - Filter to specific context categories

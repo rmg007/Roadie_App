@@ -11,7 +11,8 @@
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite');
 type SqliteDb = InstanceType<typeof DatabaseSync>;
-import { getLogger } from '../shell/logger';
+import type { Logger } from '../platform-adapters';
+import { STUB_LOGGER } from '../platform-adapters';
 import type {
   CodeEntity,
   EntityWriter,
@@ -186,9 +187,11 @@ function extractEntities(content: string): ExtractedEntity[] {
 
 export class EntityWriterImpl implements EntityWriter {
   private db: SqliteDb;
+  private log: Logger;
 
-  constructor(db: SqliteDb) {
+  constructor(db: SqliteDb, log: Logger = STUB_LOGGER) {
     this.db = db;
+    this.log = log;
     this.ensureSchema();
   }
 
@@ -231,7 +234,7 @@ export class EntityWriterImpl implements EntityWriter {
       }
     } catch (err) {
       // Log but don't throw - never crash a workflow
-      getLogger().error(`[EntityWriter] Error recording entities for ${filePath}:`, err);
+      this.log.error(`[EntityWriter] Error recording entities for ${filePath}:`, err);
     }
   }
 
@@ -239,7 +242,7 @@ export class EntityWriterImpl implements EntityWriter {
     try {
       this.db.prepare('DELETE FROM codebase_entities WHERE file_path = ?').run(filePath);
     } catch (err) {
-      getLogger().error(`[EntityWriter] Error invalidating file ${filePath}:`, err);
+      this.log.error(`[EntityWriter] Error invalidating file ${filePath}:`, err);
     }
   }
 }

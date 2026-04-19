@@ -12,7 +12,8 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { hashContent, mergeSections, type GeneratedSection } from './section-manager.js';
-import { getLogger } from '../shell/logger.js';
+import type { Logger } from '../platform-adapters';
+import { STUB_LOGGER } from '../platform-adapters';
 
 // Re-export for convenience
 export { hashContent, GeneratedSection };
@@ -91,6 +92,7 @@ const MARKERS: Record<FileType, MarkerPatterns> = {
 /* ------------------------------------------------------------------ */
 
 export class SectionManagerService {
+  constructor(private log: Logger = STUB_LOGGER) {}
   private locks: Map<string, Promise<void>> = new Map();
 
   /* ---- public helpers ---- */
@@ -146,7 +148,7 @@ export class SectionManagerService {
 
       if (endLine === -1) {
         // Malformed — no closing marker. Skip this start marker.
-        getLogger().warn(`Unclosed section marker: ${id}`);
+        this.log.warn(`Unclosed section marker: ${id}`);
         i++;
         continue;
       }

@@ -36,12 +36,58 @@ export function generateOperatingRules(model: ProjectModel): GeneratedSection[] 
       `- **Testing:** Every source change requires a corresponding test update. Do not skip validation steps.`
   });
 
+  // ── Framework-Specific Adaptive Rules ───────────────────────────────────────
+  const frameworkRules: string[] = [];
+  const stack = model.getTechStack();
+
+  if (stack.some(e => ['react', 'next.js', 'remix'].includes(e.name.toLowerCase()))) {
+    frameworkRules.push(
+      `### UI & Hydration Rules (React)\n` +
+      `- Avoid 'use client' unless client-side state or effect hooks are required.\n` +
+      `- Ensure all interactive elements have unique IDs for E2E testing.\n` +
+      `- Maintain strict prop-type or TypeScript interface definitions for every component.`
+    );
+  }
+
+  if (stack.some(e => ['tsup', 'vite', 'webpack'].includes(e.name.toLowerCase()))) {
+    frameworkRules.push(
+      `### Build Integrity (Bundlers)\n` +
+      `- Run the production build or dev server to verify bundle integrity after changing imports.\n` +
+      `- Ensure 'out' or 'dist' folders are synchronized with source changes immediately.`
+    );
+  }
+
+  if (stack.some(e => ['.net', 'c#', 'winforms'].includes(e.name.toLowerCase()))) {
+    frameworkRules.push(
+      `### Binary Safety (.NET)\n` +
+      `- Always stop the running application process before building (prevents MSB3026 locked-binary errors).\n` +
+      `- Keep designer files (*.Designer.cs) synchronized with code-behind member names.`
+    );
+  }
+
+  if (frameworkRules.length > 0) {
+    sections.push({
+      id: 'framework-rules',
+      content: `## Framework Safety Rules\n\n${frameworkRules.join('\n\n')}`
+    });
+  }
+
+  // ── Git & Execution Safety ──────────────────────────────────────────────────
+  sections.push({
+    id: 'execution-safety',
+    content: 
+      `## Execution & Git Safety\n` +
+      `- **Git Porcelain Rule:** When checking repository status on large repos, always use \`git status --porcelain -uno\` to avoid IDE/Tool hangups.\n` +
+      `- **Surgical Edits:** Prefer small, targeted changes over broad architectural rewrites unless explicitly directed.\n` +
+      `- **Read-Before-Edit:** Always read the full content of a file and its relevant neighbors before proposing any modification.`
+  });
+
   // ── Validation Rules ──────────────────────────────────────────────────────
   sections.push({
     id: 'validation-rules',
     content: 
       `## Validation Requirements\n` +
-      `Before declaring any task "Done":\n` +
+      `Before declaring any task \"Done\":\n` +
       `- [ ] Verify build status (zero errors).\n` +
       `- [ ] Run relevant tests and confirm pass status.\n` +
       `- [ ] Verify that no secrets or PII were introduced into source code.\n` +

@@ -59,11 +59,10 @@ export function generateAgentDefinitions(model: ProjectModel, learningDb?: Learn
 
   // ── Agent roles ────────────────────────────────────────────────────────────
   const roles = [
-    { role: 'Diagnostician', scope: 'Bug location and root cause analysis' },
-    { role: 'Fixer',         scope: 'Code fixes, minimal changes, pattern-following' },
-    { role: 'Planner',       scope: 'Feature planning, architecture decisions' },
-    { role: 'Reviewer',      scope: 'Security, performance, quality, test coverage, standards' },
-    { role: 'Documentarian', scope: 'Documentation generation from source code' },
+    { role: 'Strategist', scope: 'Orchestration, planning, and systems architecture' },
+    { role: 'Builder',    scope: 'Core development (Backend, Frontend, DB)' },
+    { role: 'Critic',     scope: 'Quality, security, testing, and review' },
+    { role: 'Delivery',   scope: 'Release, deployment, and documentation' },
   ];
   const table = [
     '| Role | Scope | Name in Dropdown |',

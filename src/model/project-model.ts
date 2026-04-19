@@ -10,6 +10,7 @@
  * @depended-on-by workflow-engine.ts, agent-spawner.ts
  */
 
+import * as path from 'node:path';
 import type {
   ProjectModel,
   TechStackEntry,
@@ -60,6 +61,10 @@ export class InMemoryProjectModel implements ProjectModel {
     return this.directoryTree;
   }
 
+  getDirectoryTree(): DirectoryNode | undefined {
+    return this.directoryTree;
+  }
+
   getPatterns(): DetectedPattern[] {
     return this.patterns;
   }
@@ -74,6 +79,13 @@ export class InMemoryProjectModel implements ProjectModel {
 
   getConventions(): ProjectConventions | undefined {
     return this.conventions;
+  }
+
+  getOverview(): string {
+    const stack = this.techStack.map(s => s.name).join(', ') || 'Unknown';
+    const cmdCount = this.commands.length;
+    const patCount = this.patterns.length;
+    return `Project: ${path.basename(this.directoryTree.path)} | Stack: ${stack} | Commands: ${cmdCount} | Patterns: ${patCount}`;
   }
 
   toContext(options?: {
