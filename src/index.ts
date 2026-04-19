@@ -109,6 +109,7 @@ class RoadieMcpServer {
               description: 'The specific problem to address',
               required: false,
             }
+          ]
         },
         {
           name: 'roadie_onboard_tech',

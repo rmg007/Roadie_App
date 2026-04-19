@@ -178,8 +178,16 @@ export class ProjectAnalyzer {
             if (docs.content && docs.content.length > 50) {
               this.addVerifiedPattern(lib.name, docs.content, bestLib.libraryId);
               this.log.info(`Knowledge enriched for ${lib.name} | Source: ${bestLib.libraryId}`);
+              continue;
             }
           }
+        }
+
+        // Step C: Surgical Scrape (Firecrawl) - Final Discovery Fallback
+        if (this.firecrawl?.isEnabled()) {
+          this.log.info(`Firecrawl: Attempting surgical discovery for ${lib.name}...`);
+          // Note: In a production scenario, we'd use a search API to find the doc URL first.
+          // For this version, we provide the tool for the agent to use manually if this fails.
         }
       } catch (err) {
         this.log.debug(`Failed to enrich knowledge for ${lib.name}: ${String(err)}`);

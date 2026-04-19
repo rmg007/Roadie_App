@@ -1,5 +1,5 @@
 import FirecrawlApp from '@mendable/firecrawl-js';
-import { CONSOLE_LOGGER, type Logger } from '../utils/logger';
+import { CONSOLE_LOGGER, type Logger } from '../platform-adapters';
 
 export interface ScrapeResult {
   markdown: string;
