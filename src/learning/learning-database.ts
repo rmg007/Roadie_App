@@ -210,14 +210,15 @@ export class LearningDatabase {
    * Called after every DatabaseSync open.
    */
   private applyPragmas(db: SqliteDb): void {
-    db.pragma('foreign_keys = ON');
-    db.pragma('busy_timeout = 5000');
-    db.pragma('temp_store = MEMORY');
-    db.pragma('synchronous = NORMAL');
+    db.exec('PRAGMA foreign_keys = ON');
+    db.exec('PRAGMA busy_timeout = 5000');
+    db.exec('PRAGMA temp_store = MEMORY');
+    db.exec('PRAGMA synchronous = NORMAL');
 
     // WAL mode: capture return value and warn if it differs
-    const journalMode = db.pragma('journal_mode = WAL', { simple: true });
-    if (journalMode !== 'wal') {
+    const journalModeRow = db.prepare('PRAGMA journal_mode = WAL').get() as { journal_mode?: string };
+    const journalMode = journalModeRow.journal_mode ?? 'unknown';
+    if (journalMode.toLowerCase() !== 'wal') {
       this.log('warn', `[LearningDatabase] Expected WAL journal mode, got: '${journalMode}'`);
     }
   }
@@ -310,7 +311,8 @@ export class LearningDatabase {
     const db = this.db;
     if (!db) return;
 
-    const currentVersion = db.pragma('user_version', { simple: true }) as number;
+    const versionRow = db.prepare('PRAGMA user_version').get() as { user_version?: number };
+    const currentVersion = versionRow.user_version ?? 0;
 
     if (currentVersion < SCHEMA_VERSION) {
       this.log('info', `[LearningDatabase] Migrating schema from v${currentVersion} to v${SCHEMA_VERSION}`);
@@ -323,7 +325,7 @@ export class LearningDatabase {
       // v0 → v1: ensure learning_schema_version table exists (already in LEARNING_SCHEMA)
       // No ALTER TABLE needed for v1 since the schema is created fresh if missing
 
-      db.pragma(`user_version = ${SCHEMA_VERSION}`);
+      db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
       this.log('info', `[LearningDatabase] Schema migrated to v${SCHEMA_VERSION}`);
     }
 
