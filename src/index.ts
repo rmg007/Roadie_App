@@ -630,7 +630,7 @@ class RoadieMcpServer {
             const { content } = request.params.arguments as { content: string };
             const result = await container.services!.requirementLinter.lint(content);
             
-            let advice = result.passed 
+            const advice = result.passed 
               ? "✅ **Quality Pass**: Your requirements are specific and measurable. Roadie can proceed with high confidence."
               : "⚠️ **Quality Warning**: Vague language detected. Roadie recommends refining these targets to avoid misalignment.";
 
