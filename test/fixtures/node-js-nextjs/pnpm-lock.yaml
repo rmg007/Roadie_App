@@ -1,0 +1,23 @@
+lockfileVersion: 5.4
+
+specifiers:
+  '@prisma/client': ^5.0.0
+  eslint: ^8.0.0
+  next: ^14.0.0
+  react: ^18.0.0
+  react-dom: ^18.0.0
+  typescript: 5.2.0
+  vitest: ^0.34.0
+  tsup: ^8.0.0
+
+dependencies:
+  '@prisma/client': 5.0.0
+  next: 14.0.0
+  react: 18.0.0
+  react-dom: 18.0.0
+
+devDependencies:
+  eslint: 8.0.0
+  typescript: 5.2.0
+  vitest: 0.34.0
+  tsup: 8.0.0

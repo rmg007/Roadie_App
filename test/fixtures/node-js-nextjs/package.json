@@ -1,0 +1,23 @@
+{
+  "name": "node-js-nextjs",
+  "version": "1.0.0",
+  "description": "A Next.js project with Prisma and pnpm",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "test": "vitest run",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "next": "^14.0.0",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "@prisma/client": "^5.0.0"
+  },
+  "devDependencies": {
+    "typescript": "5.2.0",
+    "vitest": "^0.34.0",
+    "tsup": "^8.0.0",
+    "eslint": "^8.0.0"
+  }
+}
