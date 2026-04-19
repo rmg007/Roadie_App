@@ -59,10 +59,11 @@ export function generateAgentDefinitions(model: ProjectModel, learningDb?: Learn
 
   // ── Agent roles ────────────────────────────────────────────────────────────
   const roles = [
-    { role: 'Strategist', scope: 'Orchestration, planning, and systems architecture' },
-    { role: 'Builder',    scope: 'Core development (Backend, Frontend, DB)' },
-    { role: 'Critic',     scope: 'Quality, security, testing, and review' },
-    { role: 'Delivery',   scope: 'Release, deployment, and documentation' },
+    { role: 'Strategist', scope: 'Orchestration, planning (Goal-Backward), and architecture' },
+    { role: 'Builder',    scope: 'Core development (Interface-First), Backend, Frontend, DB' },
+    { role: 'Critic',     scope: 'Quality auditing, security, and scientific code review' },
+    { role: 'Delivery',   scope: 'Deployment, docs, and release integrity' },
+    { role: 'Debugger',   scope: 'Scientific Debugging (Falsifiable Hypotheses)' },
   ];
   const table = [
     '| Role | Scope | Name in Dropdown |',
@@ -85,13 +86,42 @@ export function generateAgentDefinitions(model: ProjectModel, learningDb?: Learn
     { name: 'Onboard',    trigger: '@roadie how does/where do I start ...', steps: 4 },
   ];
   const wfTable = [
-    '| Workflow | Trigger | Steps |',
-    '|----------|---------|-------|',
-    ...workflows.map((w) => `| ${w.name} | \`${w.trigger}\` | ${w.steps} |`),
+    '| Workflow | Trigger | Steps | Methodology |',
+    '|----------|---------|-------|-------------|',
+    ...workflows.map((w) => `| ${w.name} | \`${w.trigger}\` | ${w.steps} | **EPIC** |`),
   ];
   sections.push({
     id: 'workflows',
     content: `## Available Workflows\n\n${wfTable.join('\n')}`,
+  });
+
+  // ── Core Principles (2026 Edition) ──────────────────────────────────────────
+  sections.push({
+    id: 'core-principles',
+    content:
+      `## Core Engineering Principles (Level 4 Extreme Rigor)\n\n` +
+      `- **Goal-Backward Planning (Exit-Condition First):** Every task must define an **Observable Truth** before any code is written. Verbs like "improve" or "fix" are forbidden; use "Ensure X returns Y when Z".\n` +
+      `- **Adversarial Red-Teaming:** Before implementing any plan, you MUST list 3 failure modes ("Why this won't work") and their associated mitigations.\n` +
+      `- **Metacognitive Steering:** Every 3 turns, perform a self-audit: "Am I caught in a sunk-cost loop? Is there a simpler 'Wave 0' approach I missed?"\n` +
+      `- **Interface-First (Wave 0):** Define types and exports before implementation logic.\n` +
+      `- **WISC Token Hygiene (Contextual Bankruptcy):** Clean context at 80% saturation. Apply **Write-Isolate-Select-Compress** to all prompts.\n` +
+      `  | Phase | Action |\n` +
+      `  |-------|--------|\n` +
+      `  | **Write** | Externalize memory via progress/decision logs. |\n` +
+      `  | **Isolate** | Use auxiliary agents for research; return compressed summaries. |\n` +
+      `  | **Select** | Load only exact files needed. Use \`.roadieignore\`. |\n` +
+      `  | **Compress** | Hard-reset context at saturation limits. |\n` +
+      `- **Adaptive Processing:** Economy (Low) → Standard (Med) → Quality (High) → **Max Analytics (Extreme Rigor)**.`
+  });
+
+  // ── Interaction Patterns ───────────────────────────────────────────────────
+  sections.push({
+    id: 'interaction-patterns',
+    content:
+      `## Agent Interaction Patterns\n\n` +
+      `- **Writer-Reviewer:** Implementing agents are paired with an isolated Reviewer agent that audits changes for security and performance in real-time.\n` +
+      `- **Competing Hypotheses:** For complex systemic bugs, multiple agents are spawned on separate worktrees testing different solutions simultaneously.\n` +
+      `- **Structural Checkpoints:** All technical tasks must commit failing tests (TDD) before implementation code is authorized.`,
   });
 
   // ── Directory structure ────────────────────────────────────────────────────

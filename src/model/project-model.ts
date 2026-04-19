@@ -119,7 +119,19 @@ export class InMemoryProjectModel implements ProjectModel {
     if (scope === 'full' || scope === 'patterns') {
       parts.push('\n## Detected Patterns');
       for (const p of this.patterns) {
-        parts.push(`- ${p.category}: ${p.description} (confidence: ${p.confidence.toFixed(2)})`);
+        if (p.category !== 'verified_knowledge') {
+          parts.push(`- ${p.category}: ${p.description} (confidence: ${p.confidence.toFixed(2)})`);
+        }
+      }
+    }
+
+    if (scope === 'full') {
+      const knowledge = this.patterns.filter(p => p.category === 'verified_knowledge');
+      if (knowledge.length > 0) {
+        parts.push('\n## Verified External Knowledge');
+        for (const k of knowledge) {
+          parts.push(k.description);
+        }
       }
     }
 
@@ -246,8 +258,8 @@ function priorityTrim(parts: string[], maxTokens: number): string {
   // Extract named sections from parts array
   const sections = splitIntoSections(parts.join('\n'));
 
-  // Priority order (highest first): commands > patterns > structure > stack
-  const PRIORITY: string[] = ['## Commands', '## Detected Patterns', '## Directory Structure', '## Tech Stack'];
+  // Priority order (highest first): knowledge > commands > patterns > structure > stack
+  const PRIORITY: string[] = ['## Verified External Knowledge', '## Commands', '## Detected Patterns', '## Directory Structure', '## Tech Stack'];
 
   // Build the output by adding sections from highest to lowest priority
   const selected: string[] = [];

@@ -31,6 +31,8 @@ import { generateProjectModelJson, PROJECT_MODEL_JSON_PATH } from './templates/p
 import { generateMcpConfig, MCP_CONFIG_PATH } from './templates/mcp-config';
 import { generatePromptsMd, PROMPTS_MD_PATH } from './templates/prompts-md';
 import { generateGranularAgents } from './templates/granular-agents';
+import { FrontendDesignSkill } from './templates/frontend-design';
+import { EngineeringRigorSkill } from './templates/engineering-rigor';
 import type { FileSystemProvider } from '../providers';
 import type { Logger } from '../platform-adapters';
 import { CONSOLE_LOGGER } from '../platform-adapters';
@@ -127,6 +129,82 @@ export class FileGenerator {
     const cursorDirResults = await this.generateCursorRulesDirFiles(model);
     results.push(...cursorDirResults);
 
+    // Skill library: multi-file output
+    const skillResults = await this.generateSkillFiles(model);
+    results.push(...skillResults);
+
+    return results;
+  }
+
+  private async generateSkillFiles(model: ProjectModel): Promise<GeneratedFile[]> {
+    const skills = [
+      FrontendDesignSkill(model),
+      EngineeringRigorSkill(model),
+    ];
+    const results: GeneratedFile[] = [];
+
+    for (const skill of skills) {
+      const content = skill.content;
+      const fullPath = path.join(this.workspaceRoot, skill.path);
+      const newHash  = hashContent(content);
+
+      let existingContent: string | null = null;
+      try {
+        existingContent = await fs.readFile(fullPath, 'utf8');
+      } catch { /* new file */ }
+
+      if (existingContent !== null && hashContent(existingContent) === newHash) {
+        results.push({
+          type: 'skill' as any,
+          path: skill.path,
+          content: existingContent,
+          contentHash: `sha256:${newHash}`,
+          written: false,
+          writeReason: 'unchanged',
+        });
+        continue;
+      }
+
+      if (this.isFileOpenInEditor(fullPath)) {
+        results.push({
+          type: 'skill' as any,
+          path: skill.path,
+          content,
+          contentHash: `sha256:${newHash}`,
+          written: false,
+          writeReason: 'deferred',
+        });
+        continue;
+      }
+
+      const writeReason: WriteReason = existingContent === null ? 'new' : 'updated';
+      try {
+        await fs.mkdir(path.dirname(fullPath), { recursive: true });
+        await fs.writeFile(fullPath, content, 'utf8');
+      } catch (err: unknown) {
+        this.log.warn(`FileGenerator: failed to write skill ${skill.path}`, err);
+        results.push({
+          type: 'skill' as any,
+          path: skill.path,
+          content,
+          contentHash: `sha256:${newHash}`,
+          written: false,
+          writeReason: 'error' as WriteReason,
+        });
+        continue;
+      }
+
+      this.log.info(`FileGenerator: wrote skill ${skill.path} (reason=${writeReason})`);
+      results.push({
+        type: 'skill' as any,
+        path: skill.path,
+        content,
+        contentHash: `sha256:${newHash}`,
+        written: true,
+        writeReason,
+      });
+    }
+
     return results;
   }
 
@@ -213,7 +291,7 @@ export class FileGenerator {
    * Generate per-directory .github/instructions/ files.
    */
   private async generatePathInstructionFiles(model: ProjectModel): Promise<GeneratedFile[]> {
-    const files = generatePathInstructions(model, this.conventions);
+    const files = generatePathInstructions(model, { simplified: false });
     const results: GeneratedFile[] = [];
 
     for (const file of files) {
@@ -293,7 +371,7 @@ export class FileGenerator {
    * Generate per-directory .cursor/rules/ MDC files.
    */
   private async generateCursorRulesDirFiles(model: ProjectModel): Promise<GeneratedFile[]> {
-    const files = generateCursorRulesDir(model, this.conventions);
+    const files = generateCursorRulesDir(model, { simplified: false });
     const results: GeneratedFile[] = [];
 
     for (const file of files) {

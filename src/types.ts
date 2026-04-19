@@ -164,6 +164,8 @@ export interface WorkflowContext {
   progress: ProgressReporter;
   /** Handle for cancelling the workflow */
   cancellation: CancellationHandle;
+  /** If true, bypasses all human-in-the-loop approval gates (Turbo Mode) */
+  isAutonomous: boolean;
   /** Results from previous step (if any) */
   previousStepResults?: StepResult[];
   /** Full transcript from interviewer agent (if conducted) */
@@ -186,8 +188,9 @@ export interface WorkflowContext {
 export interface StepResult {
   /** Step ID */
   stepId: string;
-  /** Success, failure, skipped, or cancelled */
-  status: 'success' | 'failed' | 'skipped' | 'cancelled';
+  /** Success, failure, skipped, or cancelled. 
+   * Mapping: 'success' -> 'ok', 'failed' -> 'error'. */
+  status: 'success' | 'failed' | 'skipped' | 'cancelled' | 'ok' | 'error';
   /** Text output from the subagent */
   output: string;
   /** Results from any tools the subagent invoked */

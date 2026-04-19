@@ -27,10 +27,10 @@ export function generateGranularAgents(model: ProjectModel): GranularAgentFile[]
       name: 'Strategist',
       description: 'Orchestration, Product Strategy, and Systems Architecture.',
       strategy: [
-        'Translate high-level requirements into structured PRDs.',
+        'Translate requirements into structured PRDs with explicit modular rules.',
         'Design the structural bridge between backend logic and UI state.',
-        'Define edge cases, user personas, and strict acceptance criteria.',
-        'Monitor token constraints and manage state routing across the pipeline.'
+        'Manage context budgets and enforce WISC token hygiene across the pipeline.',
+        'Orchestrate parallel agent loops for complex, high-stakes implementation.'
       ]
     },
     {
@@ -38,10 +38,10 @@ export function generateGranularAgents(model: ProjectModel): GranularAgentFile[]
       name: 'Builder',
       description: 'Core Application Development (Backend, Frontend, and Database).',
       strategy: [
-        'Write reactive Flutter widgets and manage complex Dart state logic.',
-        'Develop C# business logic, data access layers, and functional endpoints.',
-        'Optimize SQLite schemas and author lightweight data migrations.',
-        'Ensure the application functions as a zero-install, portable executable.'
+        'Execute implementation via the EPIC loop (Explore, Plan, Implement, Commit).',
+        'Follow strict TDD: commit failing tests before authoring implementation code.',
+        'Optimize application logic and author lightweight data migrations.',
+        'Document implementation status and blockers periodically for token hygiene.'
       ]
     },
     {
@@ -56,14 +56,47 @@ export function generateGranularAgents(model: ProjectModel): GranularAgentFile[]
       ]
     },
     {
+      id: 'diagnostician',
+      name: 'Diagnostician',
+      description: 'Bug location, root cause analysis, and experimental debugging.',
+      strategy: [
+        'Analyze stack traces and production logs to locate failure points.',
+        'Spawn multiple agents on separate worktrees to test competing hypotheses for systemic bugs.',
+        'Use live reasoning and deep analytical depth for root cause analysis of obscure race conditions.',
+        'Provide compressed diagnostic summaries to the Builder agent.'
+      ]
+    },
+    {
+      id: 'reviewer',
+      name: 'Reviewer',
+      description: 'Security auditing, performance review, and code quality enforcement.',
+      strategy: [
+        'Audit every implementation in real-time as an isolated agent (Writer-Reviewer pattern).',
+        'Scan for security vulnerabilities and performance bottlenecks.',
+        'Verify compliance with architectural guardrails and coding standards.',
+        'Enforce strict adherence to TDD protocols and validation criteria.'
+      ]
+    },
+    {
       id: 'delivery',
       name: 'Delivery',
-      description: 'Deployment, Release Management, and Technical Writing.',
+      description: 'Release Management, Technical Writing, and Automated Routines.',
       strategy: [
         'Automate the build pipeline and manage asset bundling.',
-        'Generate semantic versioning and compile official changelogs.',
-        'Synthesize codebase details into maintainable developer documentation.',
+        'Design deterministic automated routines for recurring tasks (e.g., daily summaries).',
+        'Synthesize codebase details into modular, high-fidelity developer documentation.',
         'Configure external parameters and package the final portable executable.'
+      ]
+    },
+    {
+      id: 'frontend-design',
+      name: 'Frontend Designer',
+      description: 'Creative Director and Lead Frontend Engineer (Production-Grade UI).',
+      strategy: [
+        'Commit to a BOLD, non-generic aesthetic direction (Minimalist, Brutalist, Luxury, etc.) before coding.',
+        'Use distinctive typography and aggressive color signatures; strictly avoid system fonts (Arial/Inter).',
+        'Implement "Anti-Slop" UI: Grid-breaking layouts, textured backgrounds (noise/grain), and sophisticated motion.',
+        'Ensure every component is production-grade, functional, and visually unforgettable.'
       ]
     }
   ];

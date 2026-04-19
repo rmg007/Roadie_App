@@ -119,6 +119,10 @@ export const WorkflowStepSchema = z.object({
   retries: z.number().int().min(0).max(3).default(0),
   timeoutMs: z.number().int().positive().max(300_000).optional(),
   dependsOn: z.array(z.string()).default([]), // step IDs that must succeed first
+  readOnly: z.boolean().default(false), // if true, forbids filesystem writes
+  tdd: z.boolean().default(false), // if true, triggers the TDD enforcement cycle
+  safetyAudit: z.boolean().default(false), // if true, logs granular inputs/outputs for audit
+  sandboxLevel: z.enum(['none', 'minimal', 'strict']).default('none'), // restrict tool/network access
 });
 
 export const WorkflowDefinitionSchema = z.object({

@@ -19,8 +19,9 @@ import type { ProjectModel } from './types';
 import { InMemoryProjectModel } from './model/project-model';
 import { ProjectAnalyzer } from './analyzer/project-analyzer';
 import { FileGenerator } from './generator/file-generator';
-import type { Logger } from './platform-adapters';
-import { STUB_LOGGER } from './platform-adapters';
+import { Logger, STUB_LOGGER } from './platform-adapters';
+import { Context7Client } from './context7-client';
+import { SkillRegistryService } from './engine/skill-registry-service';
 
 // =====================================================================
 // Config
@@ -44,6 +45,8 @@ export interface ContainerServices {
   modelProvider: ModelProvider;
   fileSystemProvider: FileSystemProvider;
   configProvider: ConfigProvider;
+  context7: Context7Client;
+  skillRegistry: SkillRegistryService;
 }
 
 // =====================================================================
@@ -128,11 +131,13 @@ export async function createMCPContainer(
     learningDb = null;
   }
 
-  const projectModel = new InMemoryProjectModel(roadieDb);
-  const projectAnalyzer = new ProjectAnalyzer(projectModel, undefined, learningDb ?? undefined, log);
-
   const fsProvider: FileSystemProvider = new NodeFileSystemProvider();
   const cfgProvider: ConfigProvider = new NodeConfigProvider();
+  const skillRegistry = new SkillRegistryService(projectRoot);
+
+  const c7Client = new Context7Client();
+  const projectModel = new InMemoryProjectModel(roadieDb);
+  const projectAnalyzer = new ProjectAnalyzer(projectModel, undefined, learningDb ?? undefined, log, c7Client, skillRegistry);
 
   const fileGenerator = new FileGenerator(projectRoot, learningDb ?? undefined, fsProvider, log);
 
@@ -144,6 +149,8 @@ export async function createMCPContainer(
     modelProvider: modelProvider!, // Should be provided if model calls are needed
     fileSystemProvider: fsProvider,
     configProvider: cfgProvider,
+    context7: c7Client,
+    skillRegistry: skillRegistry,
   };
 
   return new Container(services);

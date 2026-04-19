@@ -96,6 +96,8 @@ export function generatePathInstructions(model: ProjectModel, options?: { simpli
       contentLines.push('When working in this directory:');
       contentLines.push('- Follow existing code patterns and conventions.');
       contentLines.push('- Maintain type safety and avoid `any`.');
+      contentLines.push('- **Apply WISC:** Write progress logs, Isolate complex logic, Select only needed files, Compress context window.');
+      contentLines.push('- **Effort Level:** For refactoring or complex changes, default to **High** effort level.');
     }
 
     // Relevant patterns — omitted in simplified mode

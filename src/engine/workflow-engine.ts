@@ -126,8 +126,19 @@ export class WorkflowEngine {
 
       this.log.info(`[${definition.id}] Step ${i + 1}/${totalSteps}: "${step.name}" — starting`);
 
+      // 1. Token Hygiene Check (WISC Framework)
+      // If estimated context > 80% of model limit, trigger Isolate/Compress advice
+      const contextSaturation = this.estimateContextSaturation(context);
+      if (contextSaturation > 0.8) {
+        this.log.warn(`[${definition.id}] Context saturation high (${(contextSaturation * 100).toFixed(0)}%). Applying WISC: Isolate & Compress.`);
+        context.progress.report('⚠️ Context saturation high. Pruning unrelated files to maintain reasoning quality.');
+        await this.performWISCCompression(context);
+      }
+
       // Pre-execution approval gate: pause BEFORE running the step body
-      if (step.requiresApproval === true) {
+      if (step.requiresApproval === true && !context.isAutonomous) {
+
+
         const sessionId = `${definition.id}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
         this.transition(definition.id, state, WorkflowState.WAITING_FOR_APPROVAL);
         state = WorkflowState.WAITING_FOR_APPROVAL;
@@ -216,16 +227,26 @@ export class WorkflowEngine {
       // Thread results to next step
       context.previousStepResults = [...stepResults];
 
-      // Handle step failure
+      // Handle step failure (Self-Healing Escalation)
       if (result.status === 'failed') {
-        this.transition(definition.id, state, WorkflowState.PAUSED);
-        state = WorkflowState.PAUSED;
-        this.log.warn(
-          `[${definition.id}] Step ${i + 1}/${totalSteps}: "${step.name}" — ` +
-          `FAILED after ${result.attempts} attempt(s), ${stepMs}ms` +
-          (result.error ? ` — ${result.error}` : ''),
-        );
-        break;
+        if (result.attempts >= (step.maxRetries ?? 0) && step.agentRole !== 'strategist') {
+          this.log.info(`[${definition.id}] Step failed after max retries. Escalating to Strategist for Self-Healing/Plan Refinement.`);
+          context.progress.report('🔄 Step failed consistently. Escalating to Strategist to refine the plan...');
+          await this.escalateToStrategist(step, context, result.error);
+          // Retry the step ONE last time with the refined plan
+          result = await this.stepExecutor.executeStep(step, context);
+        }
+
+        if (result.status === 'failed') {
+          this.transition(definition.id, state, WorkflowState.PAUSED);
+          state = WorkflowState.PAUSED;
+          this.log.warn(
+            `[${definition.id}] Step ${i + 1}/${totalSteps}: "${step.name}" — ` +
+            `FAILED after ${result.attempts} attempt(s), ${stepMs}ms` +
+            (result.error ? ` — ${result.error}` : ''),
+          );
+          break;
+        }
       }
 
       this.log.info(
@@ -988,6 +1009,49 @@ export class WorkflowEngine {
       modelTiersUsed: [...tiersUsed],
       summary: `Snapshot resumed: ${succeeded}/${totalSteps} steps completed.`,
     };
+  }
+
+  /** Estimate context saturation relative to model's typical context window. */
+  private estimateContextSaturation(context: WorkflowContext): number {
+    // Phase 1: Simple estimation based on previous results and project model size
+    const contextStr = JSON.stringify(this.serializeContext(context));
+    const tokenEstimate = contextStr.length / 4; // Rough tokens
+    const modelLimit = 200_000; // Typical 2026 model standard
+    return tokenEstimate / modelLimit;
+  }
+
+  /** Apply WISC: Compress/Prune context to stay within token hygiene limits. */
+  private async performWISCCompression(context: WorkflowContext): Promise<void> {
+    // Prune old step outputs or large file dumps from context
+    if (context.previousStepResults && context.previousStepResults.length > 5) {
+      context.previousStepResults = context.previousStepResults.slice(-3);
+    }
+  }
+
+  /** Self-Healing: Call a Strategist agent to explain the failure and refine the plan. */
+  private async escalateToStrategist(step: WorkflowStep, context: WorkflowContext, error?: string): Promise<void> {
+    const strategistStep: WorkflowStep = {
+      id: `healing-${step.id}`,
+      name: `Self-Healing for ${step.name}`,
+      type: 'sequential',
+      agentRole: 'strategist' as any,
+      modelTier: 'premium',
+      toolScope: 'research',
+      contextScope: 'full',
+      promptTemplate: `<role>You are a Principal Strategist.</role>\n<task>\nAnalyze why the previous step failed and refine the plan.\n</task>\n<context>\nFailed Step: {failed_step}\nError: {error}\n</context>`,
+    };
+
+    // Use a simplified handler for the strategist recovery
+    const healingResult = await this.stepExecutor.executeStep(strategistStep, {
+      ...context,
+      failed_step: step.name,
+      error,
+    } as any);
+
+    if (healingResult.status === 'success') {
+      context.refinedPlan = healingResult.output;
+      context.progress.report('✅ Strategist refined the plan. Retrying step...');
+    }
   }
 
   private transition(

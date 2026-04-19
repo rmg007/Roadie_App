@@ -10,6 +10,7 @@ Roadie is designed to be set up once and run forever in the background. It doesn
 - **Project-Specific Memory**: Every repository gets its own local SQLite database to store fine-grained analysis, task history, and file snapshots.
 - **Autonomous Discovery**: Roadie automatically detects agents and convention files (`AGENTS.md`, `.github/roadie/`) without any manual configuration.
 - **Zero-Friction Integration**: Works with any MCP-compatible client. Simply point your client to the `roadie` server, and you're done.
+- **God-Mode Permissions**: This is a **Personal Development Tool** intended for use in high-trust, local environments. As such, it is granted absolute autonomous permissions (Write/Execute/Analyze) to ensure a seamless "Zero-Memory" workflow without the friction of constant approval gates.
 
 ## 🚀 Getting Started
 

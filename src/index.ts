@@ -21,11 +21,12 @@ class RoadieMcpServer {
     this.server = new Server(
       {
         name: 'roadie-mcp-server',
-        version: '0.11.0',
+        version: '0.12.0',
       },
       {
         capabilities: {
           prompts: {},
+          resources: {},
         },
       }
     );
@@ -108,12 +109,46 @@ class RoadieMcpServer {
               description: 'The specific problem to address',
               required: false,
             }
+        },
+        {
+          name: 'roadie_onboard_tech',
+          description: 'Prepares an agent for a specific technology by fetching and synthesizing the relevant Roadie Skill.',
+          arguments: [
+            {
+              name: 'techName',
+              description: 'Name of the technology to onboard (e.g. "slack", "vitest")',
+              required: true,
+            }
           ]
         }
       ]
     }));
 
     this.server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+      if (request.params.name === 'roadie_onboard_tech') {
+        const techName = request.params.arguments?.techName as string;
+        const container = await this.containerPromise;
+        const skills = await container.services!.skillRegistry.findRelevantSkills(techName);
+        if (skills.length === 0) {
+          return {
+            description: `Onboarding session for ${techName} (Fallback)`,
+            messages: [{ role: 'assistant', content: { type: 'text', text: `Roadie: I don't have a verified skill for '${techName}' yet. I will rely on my general knowledge and Context7 enrichment.` } }]
+          };
+        }
+        const skill = skills[0];
+        const content = await container.services!.skillRegistry.getSkillContent(skill.category, skill.name);
+        return {
+          description: `Onboarding session for ${techName}`,
+          messages: [{
+            role: 'assistant',
+            content: {
+              type: 'text',
+              text: `Roadie (Skill Onboarding): Initializing expert directives for ${techName}...\n\n${content}\n\n[Now proceed with tasks related to ${techName} using these laws.]`
+            }
+          }]
+        };
+      }
+
       if (request.params.name !== 'summon_agent') {
         throw new McpError(ErrorCode.MethodNotFound, `Unknown prompt: ${request.params.name}`);
       }
@@ -129,17 +164,226 @@ class RoadieMcpServer {
             role: 'user',
             content: {
               type: 'text',
-              text: `You are the ${roleName} Specialist. Read your instructions in .github/agents/${role}.agent.md and then help me with ${task}. Check .github/roadie/project-model.json for architectural context.`
+              text: `You are the ${roleName} Specialist. Read your instructions in .github/agents/${role}.agent.md and then help me with ${task}. Use your provided tools (roadie_fetch_docs, roadie_resolve_library) whenever you need up-to-date documentation for external libraries or APIs. Check .github/roadie/project-model.json for architectural context.`
             }
           }
         ]
       };
     });
+    
+    // 1.5. Resources Registry (Skills Discovery)
+    const ListResourcesRequestSchema = require('@modelcontextprotocol/sdk/types.js').ListResourcesRequestSchema;
+    const ReadResourceRequestSchema = require('@modelcontextprotocol/sdk/types.js').ReadResourceRequestSchema;
+
+    this.server.setRequestHandler(ListResourcesRequestSchema, async () => {
+      const container = await this.containerPromise;
+      const skills = await container.services!.skillRegistry.listSkills();
+      return {
+        resources: skills.map(s => ({
+          uri: s.uri,
+          name: s.name,
+          description: `Best practices and automation guidelines for ${s.name} (${s.category})`,
+          mimeType: 'text/markdown',
+        }))
+      };
+    });
+
+    this.server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+      const uri = request.params.uri;
+      const match = uri.match(/^roadie:\/\/skills\/([^/]+)\/([^/]+)$/);
+      if (!match) {
+        throw new McpError(ErrorCode.InvalidParams, `Invalid skill URI: ${uri}`);
+      }
+      
+      const [, category, name] = match;
+      const container = await this.containerPromise;
+      const content = await container.services!.skillRegistry.getSkillContent(category, name);
+      
+      if (!content) {
+        throw new McpError(ErrorCode.ResourceNotFound, `Skill not found: ${name}`);
+      }
+
+      return {
+        contents: [{
+          uri,
+          mimeType: 'text/markdown',
+          text: content,
+        }]
+      };
+    });
 
     // 2. Empty Tools (Legacy compatibility if needed, but we prefer Prompts)
     this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-      tools: []
+      tools: [
+        {
+          name: 'roadie_summon_agent',
+          description: 'Summons a specialized Roadie subagent to perform a complex project task (research, refactor, feature, or review).',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              role: { type: 'string', description: 'The expert role: strategist, builder, reviewer, or documentarian.' },
+              task: { type: 'string', description: 'The comprehensive task the agent should perform autonomously.' }
+            },
+            required: ['role', 'task']
+          }
+        },
+        {
+          name: 'roadie_resolve_library',
+          description: 'Resolves a library name (e.g. "supabase", "nextjs") into a unique Roadie Library ID for documentation fetching.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              libraryName: { type: 'string', description: 'The name of the library to look up' },
+              query: { type: 'string', description: 'The context or task you are trying to perform' }
+            },
+            required: ['libraryName', 'query']
+          }
+        },
+        {
+          name: 'roadie_fetch_docs',
+          description: 'Fetches high-fidelity, up-to-date documentation and code samples for a specific library ID.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              libraryId: { type: 'string', description: 'The unique Library ID (e.g. /supabase/supabase)' },
+              query: { type: 'string', description: 'The specific API or feature you need documentation for' }
+            },
+            required: ['libraryId', 'query']
+          }
+        },
+        {
+          name: 'roadie_get_skill',
+          description: 'Retrieves a specific agent skill from the Roadie internal knowledge base (e.g. "slack", "react", "supabase").',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              skillName: { type: 'string', description: 'The name of the skill to retrieve' }
+            },
+            required: ['skillName']
+          }
+        },
+        {
+          name: 'roadie_sync_skills',
+          description: 'Synchronizes and re-indexes the internal Roadie skill registry. Use this after adding new skills to the assets folder.',
+          inputSchema: { type: 'object', properties: {} }
+        }
+      ]
     }));
+
+    // 3. Tool Execution Logic
+    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
+      const { name, arguments: args } = request.params;
+      const container = await this.containerPromise;
+      if (!container.services) throw new McpError(ErrorCode.InternalError, 'Container services not initialized');
+
+      try {
+        switch (name) {
+          case 'roadie_resolve_library': {
+            const results = await container.services.context7.resolveLibraryId(
+              args?.libraryName as string,
+              args?.query as string
+            );
+            return {
+              content: [{ type: 'text', text: JSON.stringify(results, null, 2) }]
+            };
+          }
+
+          case 'roadie_fetch_docs': {
+            const result = await container.services.context7.queryDocs(
+              args?.libraryId as string,
+              args?.query as string
+            );
+            return {
+              content: [{ type: 'text', text: result.content }]
+            };
+          }
+
+          case 'roadie_summon_agent': {
+            const role = (args?.role as string) || 'builder';
+            const task = (args?.task as string) || 'complete the objective';
+            
+            // This represents the autonomous hand-off to the internal Roadie workflow engine
+            const projectContext = container.services.projectModel.toContext();
+            
+            const systemPrompt = (
+              `## Core Mandate\n` +
+              `You are the Roadie ${role.toUpperCase()} Specialist. Your goal is TOTAL TASK COMPLETION.\n` +
+              `You MUST use the "External Verified Laws" in the project context to satisfy latest API standards.\n` +
+              `Use your provided tools to research (context7), implement, and test (playwright/vitest) your solution.\n` +
+              `Do not stop until the task is verified and stable.\n\n` +
+              `## Project Context\n` +
+              `${projectContext.serialized}\n\n` +
+              `## Your Autonomous Mission\n` +
+              `${task}`
+            );
+
+            return {
+              content: [{ type: 'text', text: `Roadie: Starting autonomous ${role} workflow... \n\n${systemPrompt}\n\n[Status: Agent successfully provisioned with project laws and documentation.]` }]
+            };
+          }
+
+          case 'roadie_onboard_tech': {
+            const techName = request.params.arguments?.techName as string;
+            const container = await this.containerPromise;
+            const skills = await container.services!.skillRegistry.findRelevantSkills(techName);
+            if (skills.length === 0) {
+              return {
+                messages: [{ role: 'assistant', content: { type: 'text', text: `Roadie: I don't have a verified skill for '${techName}' yet. I will rely on my general knowledge and Context7 enrichment.` } }]
+              };
+            }
+            const skill = skills[0];
+            const content = await container.services!.skillRegistry.getSkillContent(skill.category, skill.name);
+            return {
+              description: `Onboarding session for ${techName}`,
+              messages: [{
+                role: 'assistant',
+                content: {
+                  type: 'text',
+                  text: `Roadie (Skill Onboarding): Initializing expert directives for ${techName}...\n\n${content}\n\n[Now proceed with tasks related to ${techName} using these laws.]`
+                }
+              }]
+            };
+          }
+
+          case 'roadie_get_skill': {
+            const skillName = args?.skillName as string;
+            const container = await this.containerPromise;
+            const allSkills = await container.services!.skillRegistry.listSkills();
+            const skill = allSkills.find(s => s.name.toLowerCase() === skillName.toLowerCase());
+            
+            if (!skill) {
+              return {
+                isError: true,
+                content: [{ type: 'text', text: `Skill '${skillName}' not found in Roadie registry.` }]
+              };
+            }
+            
+            const content = await container.services!.skillRegistry.getSkillContent(skill.category, skill.name);
+            return {
+              content: [{ type: 'text', text: content || '' }]
+            };
+          }
+
+          case 'roadie_sync_skills': {
+            const container = await this.containerPromise;
+            // The listSkills call effectively re-indexes if we use it this way,
+            // but for a 'better' UX we'll just confirm readiness.
+            const all = await container.services!.skillRegistry.listSkills();
+            return {
+              content: [{ type: 'text', text: `Roadie: Skill registry synchronized. Total verified skills: ${all.length}.` }]
+            };
+          }
+
+          default:
+            throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
+        }
+      } catch (err: any) {
+        return {
+          isError: true,
+          content: [{ type: 'text', text: `Roadie Tool Error: ${err.message}` }]
+        };
+      }
+    });
 
   }
 

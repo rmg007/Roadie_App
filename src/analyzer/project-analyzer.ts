@@ -24,6 +24,7 @@ import type { TechStackEntry, DirectoryNode, DetectedPattern, EntityWriter } fro
 import type { LearningDatabase } from '../learning/learning-database';
 import type { Logger } from '../platform-adapters';
 import { CONSOLE_LOGGER } from '../platform-adapters';
+import type { Context7Client } from '../context7-client';
 
 export class ProjectAnalyzer {
   constructor(
@@ -31,6 +32,8 @@ export class ProjectAnalyzer {
     private entityWriter?: EntityWriter,
     private learningDb?: LearningDatabase,
     private log: Logger = CONSOLE_LOGGER,
+    private context7?: Context7Client,
+    private skillRegistry?: SkillRegistryService,
   ) {}
 
   private buildPatternId(pattern: DetectedPattern): string {
@@ -119,9 +122,83 @@ export class ProjectAnalyzer {
       this.log.info(`ProjectAnalyzer: entity extraction complete — ${entityCount} files processed`);
     }
 
-    // 5. Flush to SQLite (no-op when database is null)
+    // 5. Autonomous Knowledge Enrichment (Local + External)
+    this.log.debug('ProjectAnalyzer: enriching with regional and global knowledge…');
+    await this.enrichWithKnowledge(techStack);
+
+    // 6. Flush to SQLite (no-op when database is null)
     this.model.flush();
     this.log.info('ProjectAnalyzer: analysis complete');
+  }
+
+  /**
+   * Proactively fetches documentation for significant libraries in the tech stack.
+   */
+  private async enrichWithKnowledge(techStack: TechStackEntry[]): Promise<void> {
+    const seenSkills = new Set<string>();
+
+    for (const lib of techStack) {
+      try {
+        // Skip common generic labels
+        if (['language', 'package_manager', 'runtime'].includes(lib.category) && !['typescript', 'node.js', 'go', 'rust'].includes(lib.name.toLowerCase())) {
+          continue;
+        }
+
+        this.log.debug(`Enriching knowledge for ${lib.name}…`);
+        
+        // Step A: Check local SkillRegistry (Exhaustive Search)
+        const localSkills = await this.skillRegistry?.findRelevantSkills(lib.name) || [];
+        if (localSkills.length > 0) {
+          const skill = localSkills[0];
+          const skillKey = `${skill.category}/${skill.name}`;
+          if (seenSkills.has(skillKey)) continue;
+
+          const content = await this.skillRegistry?.getSkillContent(skill.category, skill.name);
+          if (content) {
+            this.log.info(`Injecting local skill: ${skill.name} (${skill.category})`);
+            this.addVerifiedPattern(lib.name, content, `roadie://skills/${skillKey}`);
+            seenSkills.add(skillKey);
+            continue; 
+          }
+        }
+
+        // Step B: External Knowledge Fallback (Context7)
+        if (this.context7) {
+          const libraries = await this.context7.resolveLibraryId(lib.name, 'Find best docs for current project usage');
+          if (libraries.length > 0) {
+            const bestLib = libraries[0];
+            const docs = await this.context7.queryDocs(
+              bestLib.libraryId, 
+              'Provide a high-level summary of architecture, core API syntax, and major breaking changes.'
+            );
+
+            if (docs.content && docs.content.length > 50) {
+              this.addVerifiedPattern(lib.name, docs.content, bestLib.libraryId);
+              this.log.info(`Knowledge enriched for ${lib.name} | Source: ${bestLib.libraryId}`);
+            }
+          }
+        }
+      } catch (err) {
+        this.log.debug(`Failed to enrich knowledge for ${lib.name}: ${String(err)}`);
+      }
+    }
+  }
+
+  /** Helper to add a verified knowledge pattern to the model. */
+  private addVerifiedPattern(libName: string, content: string, source: string): void {
+    const knowledgePattern: DetectedPattern = {
+      category: 'verified_knowledge',
+      description: `Verified ${libName} Guidelines: ${content.substring(0, 300)}...`,
+      evidence: {
+        files: [source],
+        matchCount: 1,
+        confidence: 1.0,
+      },
+      confidence: 1.0,
+    };
+
+    const currentPatterns = this.model.getPatterns();
+    this.model.setPatterns([...currentPatterns, knowledgePattern]);
   }
 
   /** Scan TypeScript/JavaScript source files and record code entities. */
@@ -129,12 +206,24 @@ export class ProjectAnalyzer {
     if (!this.entityWriter) return 0;
     // use this.log
 
+    const ignoreFile = path.join(workspaceRoot, '.roadieignore');
+    let customIgnores: string[] = [];
+    try {
+      const gitIgnore = await readFile(ignoreFile, 'utf8');
+      customIgnores = gitIgnore.split('\n').filter(line => line.trim() && !line.startsWith('#'));
+    } catch {
+      // .roadieignore not found, use defaults
+    }
+
+    const defaultIgnores = [
+      '**/node_modules/**', '**/dist/**', '**/build/**',
+      '**/coverage/**', '**/*.d.ts', '**/.next/**',
+      '**/.git/**', '**/package-lock.json', '**/pnpm-lock.yaml'
+    ];
+
     const sourceFiles = await fg(['**/*.{ts,tsx,js,jsx}'], {
       cwd: workspaceRoot,
-      ignore: [
-        '**/node_modules/**', '**/dist/**', '**/build/**',
-        '**/coverage/**', '**/*.d.ts', '**/.next/**',
-      ],
+      ignore: [...defaultIgnores, ...customIgnores],
       absolute: true,
     });
 
