@@ -60,17 +60,17 @@ export function generateOperatingRules(model: ProjectModel): GeneratedSection[] 
       `- **Context Budgeting (Contextual Bankruptcy):** Tasks must consume <30% of context. Hard-reset/Summarize at 80% saturation to maintain high-fidelity reasoning. Use \`roadie_context_audit\` to monitor your current "reasoning quality" and identify bloat.\n` +
       `- **Plans ARE Prompts:** Every plan must be a stateless, self-contained instruction set.\n\n` +
       `## Scientific Debugging & Investigation\n` +
-      `- **Falsifiable Hypotheses:** Every bug investigation must state a hypothesis in the form: \"X causes Y because Z\". You must define a test that could prove this hypothesis WRONG.\n` +
-      `- **Reasoning Checkpoint:** Before any code is modified for a fix, you MUST write a \"Reasoning Block\" (YAML format) to a scratch file or the implementation log:\n` +
+      `- **Falsifiable Hypotheses:** Every bug investigation must state a hypothesis in the form: "X causes Y because Z". You must define a test that could prove this hypothesis WRONG.\n` +
+      `- **Reasoning Checkpoint:** Before any code is modified for a fix, you MUST write a "Reasoning Block" (YAML format) to a scratch file or the implementation log:\n` +
       `  \`\`\`yaml\n` +
       `  reasoning_checkpoint:\n` +
-      `    hypothesis: \"[X causes Y because Z]\"\n` +
+      `    hypothesis: "[X causes Y because Z]"\n` +
       `    confirming_evidence:\n` +
-      `      - \"[Direct observation 1]\"\n` +
-      `    falsification_test: \"[What would prove this hypothesis wrong]\"\n` +
-      `    fix_rationale: \"[Why this fix addresses root cause, not symptom]\"\n` +
+      `      - "[Direct observation 1]"\n` +
+      `    falsification_test: "[What would prove this hypothesis wrong]"\n` +
+      `    fix_rationale: "[Why this fix addresses root cause, not symptom]"\n` +
       `  \`\`\`\n` +
-      `- **Differential Analysis:** For regressions, explicitly compare \"Good vs. Bad\" states (Git history, environment diffs, input variations).\n\n` +
+      `- **Differential Analysis:** For regressions, explicitly compare "Good vs. Bad" states (Git history, environment diffs, input variations).\n\n` +
       `## Interface-First Engineering\n` +
       `- **Wave 0 Contracts:** For multi-file features, create or update type definitions, interfaces, and public exports BEFORE writing any implementation logic. This prevents "scavenger hunt" behavior in parallel agents.\n\n` +
       `## 📑 External Verified Laws\n` +
@@ -150,7 +150,7 @@ export function generateOperatingRules(model: ProjectModel): GeneratedSection[] 
     id: 'validation-rules',
     content: 
       `## Validation Requirements\n` +
-      `Before declaring any task \"Done\":\n` +
+      `Before declaring any task "Done":\n` +
       `- [ ] Verify build status (zero errors).\n` +
       `- [ ] Run relevant tests and confirm pass status.\n` +
       `- [ ] Verify that no secrets or PII were introduced into source code.\n` +
