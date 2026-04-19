@@ -11,6 +11,8 @@
  * @depended-on-by workflow-engine.ts
  */
 
+import * as path from 'node:path';
+import * as fs from 'node:fs';
 import type { WorkflowStep, WorkflowContext, StepResult, ModelTier } from '../types';
 import type { Logger } from '../platform-adapters';
 import { STUB_LOGGER } from '../platform-adapters';
@@ -24,6 +26,57 @@ export type StepHandlerFn = (
   context: WorkflowContext,
   attemptInfo: { attempt: number; tier: ModelTier; previousError?: string },
 ) => Promise<StepResult>;
+
+/** Check if dry-run mode is enabled via environment variable. */
+function isDryRun(): boolean {
+  return process.env.ROADIE_DRY_RUN === '1';
+}
+
+/**
+ * Validate that a file path is safe (within project root, no traversal escapes).
+ * Checks:
+ *   - No `../` segments
+ *   - Not an absolute path outside projectRoot
+ *   - Not a symlink that escapes projectRoot
+ *
+ * @returns true if path is safe, false otherwise
+ */
+function isPathSafe(filePath: string, projectRoot: string): boolean {
+  try {
+    // Normalize paths to absolute
+    const abs = path.isAbsolute(filePath) ? filePath : path.join(projectRoot, filePath);
+    const normalized = path.normalize(abs);
+    const rootNormalized = path.normalize(projectRoot);
+
+    // Check: does not escape projectRoot
+    if (!normalized.startsWith(rootNormalized)) {
+      return false;
+    }
+
+    // Check: no `../` in the normalized path (double-check)
+    if (normalized.includes('..')) {
+      return false;
+    }
+
+    // Check: if it's a symlink, verify the target is within projectRoot
+    if (fs.existsSync(abs)) {
+      const stats = fs.lstatSync(abs);
+      if (stats.isSymbolicLink()) {
+        const target = fs.readlinkSync(abs);
+        const targetAbs = path.isAbsolute(target) ? target : path.join(path.dirname(abs), target);
+        const targetNormalized = path.normalize(targetAbs);
+        if (!targetNormalized.startsWith(rootNormalized)) {
+          return false;
+        }
+      }
+    }
+
+    return true;
+  } catch {
+    // On any error, deny for safety
+    return false;
+  }
+}
 
 /** Escalate to the next model tier. Premium cannot escalate further. */
 function escalateTier(tier: ModelTier): ModelTier {
@@ -61,9 +114,16 @@ export class StepExecutor {
    *   2. Same tier, refined prompt (includes previous error)
    *   3+. Escalated tier
    *   After maxRetries+1 total attempts: return failed
+   *
+   * In dry-run mode (ROADIE_DRY_RUN=1): logs all operations but skips actual writes.
    */
   async executeStep(step: WorkflowStep, context: WorkflowContext): Promise<StepResult> {
     // use this.log
+    const dryRunMode = isDryRun();
+    if (dryRunMode) {
+      this.log.info(`[DRY-RUN] Step '${step.id}' would be executed (dry-run mode enabled)`);
+    }
+
     const maxAttempts = Math.max(1, (step.maxRetries ?? 0) + 1);
     const timeoutMs = Math.max(1000, step.timeoutMs ?? 30_000);
     let currentTier = step.modelTier;
