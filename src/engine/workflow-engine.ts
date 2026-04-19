@@ -12,6 +12,7 @@
  * @depended-on-by shell/chat-participant.ts (workflow dispatch)
  */
 
+import { execSync } from 'node:child_process';
 import type {
   WorkflowDefinition,
   WorkflowContext,
@@ -52,6 +53,35 @@ function getWorkflowDefinitionById(id: string): WorkflowDefinition | null {
   return WORKFLOW_DEFINITION_REGISTRY[id] || null;
 }
 
+/**
+ * Create a git checkpoint before executing a workflow.
+ * Returns the commit SHA if successful, null if git is unavailable or an error occurs.
+ */
+function createGitCheckpoint(workflowId: string, log: Logger): string | null {
+  try {
+    // Check if we're in a git repo
+    execSync('git rev-parse --git-dir', { encoding: 'utf-8', stdio: 'pipe' });
+
+    const message = `Roadie checkpoint before ${workflowId}`;
+    const sha = execSync(`git commit --allow-empty -m "${message}"`, {
+      encoding: 'utf-8',
+      stdio: 'pipe',
+    })
+      .trim()
+      .match(/\[[\w\s]*\s([a-f0-9]+)\]/)?.[1];
+
+    if (sha) {
+      log.debug(`[GIT] Checkpoint created: ${sha.substring(0, 7)} — ${message}`);
+      return sha;
+    }
+    return null;
+  } catch {
+    // Not a git repo or git command failed — silently skip checkpointing
+    log.debug('[GIT] Checkpoint skipped (not a git repo or git unavailable)');
+    return null;
+  }
+}
+
 export class WorkflowEngine {
   private stepExecutor: StepExecutor;
   /** Session storage for paused workflows keyed by sessionId */
@@ -90,6 +120,8 @@ export class WorkflowEngine {
    * State transitions:
    *   PENDING -> RUNNING -> [RETRYING | WAITING_PARALLEL]
    *   -> COMPLETED | PAUSED | FAILED | CANCELLED
+   *
+   * Creates a git checkpoint before execution for rollback capability on failure.
    */
   async execute(
     definition: WorkflowDefinition,
@@ -104,6 +136,9 @@ export class WorkflowEngine {
     // H9: Use local state variable for this execution
     let state = WorkflowState.PENDING;
     this.executionState.set(definition.id, state);
+
+    // Phase 3: Create git checkpoint for rollback capability
+    const checkpointSha = createGitCheckpoint(definition.id, this.log);
 
     this.transition(definition.id, state, WorkflowState.RUNNING);
     state = WorkflowState.RUNNING;
@@ -281,6 +316,16 @@ export class WorkflowEngine {
       modelTiersUsed:  [...tiersUsed],
       summary:         this.buildSummary(definition, stepResults, state),
     };
+
+    // Phase 3: Add rollback info if workflow failed and checkpoint exists
+    if ((state === WorkflowState.PAUSED || state === WorkflowState.FAILED) && checkpointSha) {
+      workflowResult.rollbackAvailable = true;
+      workflowResult.rollbackSha = checkpointSha;
+      workflowResult.rollbackCommand = `git reset --hard ${checkpointSha.substring(0, 7)}`;
+      this.log.info(
+        `[${definition.id}] Workflow failed. Rollback available: ${workflowResult.rollbackCommand}`,
+      );
+    }
 
     // Call onComplete hook if defined and workflow completed
     if (state === WorkflowState.COMPLETED && definition.onComplete) {

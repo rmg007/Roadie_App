@@ -225,6 +225,12 @@ export interface WorkflowResult {
   pauseReason?: 'approval' | 'step-failure';
   /** Name of the last step that triggered the pause */
   lastStepName?: string;
+  /** Git rollback available if workflow failed (Phase 3) */
+  rollbackAvailable?: boolean;
+  /** Git commit SHA for rollback (Phase 3) */
+  rollbackSha?: string;
+  /** Rollback command to run (Phase 3) */
+  rollbackCommand?: string;
 }
 
 /**
