@@ -1,3 +1,4 @@
+/**
  * @module requirement-linter
  * @description Analyzes requirement text (PRDs, instructions) for vague, non-measurable language.
  *   Inspired by 'prd-taskmaster' quality gates.
