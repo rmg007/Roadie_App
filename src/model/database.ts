@@ -181,7 +181,7 @@ export class RoadieDatabase {
     return rows.map((r) => ({
       category: r.category,
       name: r.name,
-      ...(r.version != null ? { version: r.version } : {}),
+      ...(r.version !== null ? { version: r.version } : {}),
       sourceFile: r.source_file,
     }));
   }
@@ -229,8 +229,8 @@ export class RoadieDatabase {
     const root: DirectoryNode = {
       path: firstRow.path,
       type: firstRow.type,
-      ...(firstRow.role != null ? { role: firstRow.role } : {}),
-      ...(firstRow.language != null ? { language: firstRow.language } : {}),
+      ...(firstRow.role !== null ? { role: firstRow.role } : {}),
+      ...(firstRow.language !== null ? { language: firstRow.language } : {}),
       children: [],
     };
     // Simplified tree-build: flat list of nodes (full tree reconstruction deferred)
@@ -239,8 +239,8 @@ export class RoadieDatabase {
       root.children!.push({
         path: r.path,
         type: r.type,
-        ...(r.role != null ? { role: r.role } : {}),
-        ...(r.language != null ? { language: r.language } : {}),
+        ...(r.role !== null ? { role: r.role } : {}),
+        ...(r.language !== null ? { language: r.language } : {}),
       });
     }
     return root;
