@@ -12,9 +12,9 @@
  *   - B8: ENOSPC / EACCES caught and wrapped as RoadieError(DB_WRITE_FAILED).
  *   - B9: Workspace trust gate — writes blocked when isTrusted === false.
  *
- * @inputs node:sqlite DatabaseSync instance (shared with RoadieDatabase)
+ * @inputs better-sqlite3.Database instance (shared with RoadieDatabase)
  * @outputs CRUD methods for snapshots, workflow history, section hashes
- * @depends-on node:sqlite (built-in), node:crypto
+ * @depends-on better-sqlite3, node:crypto
  * @depended-on-by edit-tracker, section-manager, file-watcher-manager
  */
 
