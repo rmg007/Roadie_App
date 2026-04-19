@@ -31,6 +31,7 @@ Custom notes added outside markers are preserved across regenerations.
 | Fixer | Code fixes, minimal changes, pattern-following | `agent: fixer` |
 | Planner | Feature planning, architecture decisions | `agent: planner` |
 | Reviewer | Security, performance, quality, test coverage, standards | `agent: reviewer` |
+| Auditor | Context hygiene and security red-teaming | `agent: auditor` |
 | Documentarian | Documentation generation from source code | `agent: documentarian` |
 <!-- roadie:end:agent-roles -->
 
@@ -43,6 +44,7 @@ Custom notes added outside markers are preserved across regenerations.
 | Feature | `@roadie add/create/build ...` | 7 |
 | Refactor | `@roadie refactor/simplify ...` | 5 |
 | Review | `@roadie review ...` | 5 |
+| Audit | `@roadie audit ...` | 4 |
 | Document | `@roadie document/docs ...` | 4 |
 | Dependency | `@roadie upgrade/migrate ...` | 5 |
 | Onboard | `@roadie how does/where do I start ...` | 4 |
@@ -54,6 +56,29 @@ Custom notes added outside markers are preserved across regenerations.
 - **Source:** roadie-App, src, analyzer, classifier, dictionary, engine, definitions, generator, __snapshots__, templates, learning, model, shell
 - **Tests:** __tests__
 <!-- roadie:end:directory-structure -->
+
+<!-- roadie:start:intelligence -->
+## Roadie Vision Intelligence
+
+Roadie uses a **LanceDB Vector Store** to manage code context and session history semantically.
+
+| Tool | Purpose | Recommendation |
+| :--- | :--- | :--- |
+| `roadie_semantic_search` | Find code by concept or intent | Use before broad grepping in large projects |
+| `roadie_context_audit` | Check token density and session health | Run when performance degrades or context >80% |
+| `roadie_security_audit` | Adversarial code review | Mandatory step after modifying security-sensitive files |
+<!-- roadie:end:intelligence -->
+
+<!-- roadie:start:safety -->
+## Roadie Safety & Rollback
+
+Roadie automatically creates **Git Checkpoints** before every autonomous synchronization cycle.
+
+| Tool | Purpose | Recommendation |
+| :--- | :--- | :--- |
+| `roadie_rollback` | Revert project to last known good state | Use if an autonomous sync breaks the build or architectural integrity |
+| `ROADIE_DRY_RUN` | Simulate changes without writing to disk | Set this environment variable to `1` when testing new templates or risky generators |
+<!-- roadie:end:safety -->
 
 <!-- roadie:start:coding-standards -->
 ## Coding Standards

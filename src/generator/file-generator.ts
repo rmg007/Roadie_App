@@ -54,6 +54,7 @@ export class FileGenerator {
     private learningDb?: LearningDatabase,
     fileSystem?: FileSystemProvider,
     private log: Logger = CONSOLE_LOGGER,
+    private isDryRun: boolean = false,
   ) {
     this.fileSystem = fileSystem ?? null;
     this.fileSpecs = [
@@ -180,7 +181,11 @@ export class FileGenerator {
       const writeReason: WriteReason = existingContent === null ? 'new' : 'updated';
       try {
         await fs.mkdir(path.dirname(fullPath), { recursive: true });
-        await fs.writeFile(fullPath, content, 'utf8');
+        if (this.isDryRun) {
+          this.log.info(`FileGenerator: DRY RUN - would write skill ${skill.path} (reason=${writeReason})`);
+        } else {
+          await fs.writeFile(fullPath, content, 'utf8');
+        }
       } catch (err: unknown) {
         this.log.warn(`FileGenerator: failed to write skill ${skill.path}`, err);
         results.push({
@@ -252,7 +257,11 @@ export class FileGenerator {
       const writeReason: WriteReason = existingContent === null ? 'new' : 'updated';
       try {
         await fs.mkdir(path.dirname(fullPath), { recursive: true });
-        await fs.writeFile(fullPath, content, 'utf8');
+        if (this.isDryRun) {
+          this.log.info(`FileGenerator: DRY RUN - would write ${agent.filePath} (reason=${writeReason})`);
+        } else {
+          await fs.writeFile(fullPath, content, 'utf8');
+        }
       } catch (err: unknown) {
         this.log.warn(`FileGenerator: failed to write ${agent.filePath}`, err);
         results.push({
@@ -332,7 +341,11 @@ export class FileGenerator {
       const writeReason: WriteReason = existingContent === null ? 'new' : 'updated';
       try {
         await fs.mkdir(path.dirname(fullPath), { recursive: true });
-        await fs.writeFile(fullPath, content, 'utf8');
+        if (this.isDryRun) {
+          this.log.info(`FileGenerator: DRY RUN - would write ${file.filePath} (reason=${writeReason})`);
+        } else {
+          await fs.writeFile(fullPath, content, 'utf8');
+        }
       } catch (err: unknown) {
         this.log.warn(`FileGenerator: failed to write ${file.filePath}`, err);
         results.push({
@@ -412,7 +425,11 @@ export class FileGenerator {
       const writeReason: WriteReason = existingContent === null ? 'new' : 'updated';
       try {
         await fs.mkdir(path.dirname(fullPath), { recursive: true });
-        await fs.writeFile(fullPath, content, 'utf8');
+        if (this.isDryRun) {
+          this.log.info(`FileGenerator: DRY RUN - would write ${file.filePath} (reason=${writeReason})`);
+        } else {
+          await fs.writeFile(fullPath, content, 'utf8');
+        }
       } catch (err: unknown) {
         this.log.warn(`FileGenerator: failed to write ${file.filePath}`, err);
         results.push({
@@ -520,7 +537,11 @@ export class FileGenerator {
 
     try {
       await fs.mkdir(path.dirname(fullPath), { recursive: true });
-      await fs.writeFile(fullPath, content, 'utf8');
+      if (this.isDryRun) {
+        this.log.info(`FileGenerator: DRY RUN - would write ${spec.path} (reason=${writeReason})`);
+      } else {
+        await fs.writeFile(fullPath, content, 'utf8');
+      }
     } catch (err: unknown) {
       this.log.warn(`FileGenerator: write failed for ${spec.type} -> ${spec.path}`, err);
       return {

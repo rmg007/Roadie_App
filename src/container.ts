@@ -23,6 +23,10 @@ import { Logger, STUB_LOGGER } from './platform-adapters';
 import { Context7Client } from './context7-client';
 import { SkillRegistryService } from './engine/skill-registry-service';
 import { FirecrawlClient } from './platform-adapters/firecrawl-client';
+import { VectorStoreService } from './engine/vector-store-service';
+import { GitService } from './platform-adapters/git-service';
+import { RequirementLinter } from './analyzer/requirement-linter';
+import { SessionTracker } from './engine/session-tracker';
 
 // =====================================================================
 // Config
@@ -48,6 +52,11 @@ export interface ContainerServices {
   configProvider: ConfigProvider;
   context7: Context7Client;
   skillRegistry: SkillRegistryService;
+  vectorStore: VectorStoreService;
+  git: GitService;
+  requirementLinter: RequirementLinter;
+  sessionTracker: SessionTracker;
+  isDryRun: boolean;
 }
 
 // =====================================================================
@@ -136,6 +145,11 @@ export async function createMCPContainer(
   const cfgProvider: ConfigProvider = new NodeConfigProvider();
   const skillRegistry = new SkillRegistryService(projectRoot);
   const firecrawl = new FirecrawlClient();
+  const vectorStore = new VectorStoreService(projectRoot);
+  const git = new GitService(projectRoot);
+  const requirementLinter = new RequirementLinter(log);
+  const sessionTracker = new SessionTracker(projectRoot);
+  const isDryRun = process.env.ROADIE_DRY_RUN === '1' || process.env.ROADIE_DRY_RUN === 'true';
 
   const c7Client = new Context7Client();
   const projectModel = new InMemoryProjectModel(roadieDb);
@@ -154,6 +168,11 @@ export async function createMCPContainer(
     context7: c7Client,
     skillRegistry: skillRegistry,
     firecrawl: firecrawl,
+    vectorStore: vectorStore,
+    git: git,
+    requirementLinter: requirementLinter,
+    sessionTracker: sessionTracker,
+    isDryRun: isDryRun,
   };
 
   return new Container(services);

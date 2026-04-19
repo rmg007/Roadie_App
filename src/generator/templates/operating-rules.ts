@@ -52,11 +52,12 @@ export function generateOperatingRules(model: ProjectModel): GeneratedSection[] 
       `  - **Output Validation:** Never trust raw LLM strings. All structured outputs must pass Zod/Schema validation.\n` +
       `  - **Output Integrity:** Never assume hallucinations are harmless. All facts must be validated against authoritative sources (grep, LSP, MCP).\n` +
       `  - **TDD Enforcement:** Write and commit failing tests before implementation. Forbid test modification during implementation.\n` +
+      `  - **Quality Gates:** Before implementation, use \`roadie_review\` on your instructions. You MUST achieve a quality score of >80 or revise the requirements until measurable.\n` +
       `  - **Read-Only Explore:** Trace dependencies and map architecture in read-only mode before touching code.\n\n` +
       `## Spec-Driven Development (SDD) Laws (Extreme Rigor)\n` +
       `- **Goal-Backward / Exit-Condition First:** Before listing tasks, state the **Observable Truth** (e.g., "User can see X"). Identify "Artifacts" and define "Wiring". Verbs must be measurable.\n` +
       `- **Adversarial Red-Teaming:** For every plan, document 3 failure modes and their mitigations. Assume your first approach is flawed.\n` +
-      `- **Context Budgeting (Contextual Bankruptcy):** Tasks must consume <30% of context. Hard-reset/Summarize at 80% saturation to maintain high-fidelity reasoning.\n` +
+      `- **Context Budgeting (Contextual Bankruptcy):** Tasks must consume <30% of context. Hard-reset/Summarize at 80% saturation to maintain high-fidelity reasoning. Use \`roadie_context_audit\` to monitor your current "reasoning quality" and identify bloat.\n` +
       `- **Plans ARE Prompts:** Every plan must be a stateless, self-contained instruction set.\n\n` +
       `## Scientific Debugging & Investigation\n` +
       `- **Falsifiable Hypotheses:** Every bug investigation must state a hypothesis in the form: \"X causes Y because Z\". You must define a test that could prove this hypothesis WRONG.\n` +
@@ -134,10 +135,13 @@ export function generateOperatingRules(model: ProjectModel): GeneratedSection[] 
       `  2. **Plan (Goal-Backward):** Define Observable Truths → Red-Team Plan (3 Failure Modes) → Verify Context Budget.\n` +
       `  3. **Implement (Interface-First):** Wave 0: Structural Contracts → Wave 1+: Scientific TDD. Never "guess" a fix.\n` +
       `  4. **Commit:** Provide a "Surgical Summary" including verified evidence of the hypothesis test.\n` +
+      `  5. **Vision Audit:** After any complex file modification, run \`roadie_security_audit\` to verify no regressions in project safety patterns.\n` +
+      `- **Semantic Discovery:** Before broad grepping, always attempt \`roadie_semantic_search\` to find conceptually related code patterns across the entire project.\n` +
       `- **Metacognitive Pause:** If an error repeats twice, you MUST stop and re-read the environment logs from scratch. Do not retry the same hypothesis.\n` +
       `- **Git Porcelain Rule:** When checking repository status on large repos, always use \`git status --porcelain -uno\` to avoid IDE/Tool hangups.\n` +
       `- **Surgical Edits:** Prefer small, targeted changes over broad architectural rewrites unless explicitly directed.\n` +
-      `- **Read-Before-Edit:** Always read the full content of a file and its relevant neighbors before proposing any modification.`
+      `- **Read-Before-Edit:** Always read the full content of a file and its relevant neighbors before proposing any modification.\n` +
+      `- **Autonomous Continuity:** Roadie maintains session state in \`.github/.roadie/session-state.json\`. If you detect an interrupted session (status: 'in_progress'), check the \`currentPhase\` and \`filesProcessed\` list to resume accurately.`
 
   });
 
@@ -159,7 +163,8 @@ export function generateOperatingRules(model: ProjectModel): GeneratedSection[] 
       `- **Chain-of-Thought Visibility:** Never redact or hide internal reasoning. Maintain a live trace of the cognitive process for human oversight.\n` +
       `- **Intervene on Lazy Logic:** Reject pragmatic shortcuts. Implement the correct architectural fix even if it requires more effort.\n` +
       `- **Self-Evolving Loop:** If a library's behavior is ambiguous and missing from regional laws, execute a **Surgical Scrape** (Firecrawl) and commit the verified result to the registry. Roadie agents evolve by permanently externalizing knowledge.\n` +
-      `- **Safety Refusals:** Explicitly refuse prompts that are ambiguous or high-risk. Escalate to the Strategist agent for clarification.`
+      `- **Safety Refusals:** Explicitly refuse prompts that are ambiguous or high-risk. Escalate to the Strategist agent for clarification.\n` +
+      `- **Vision Oversight:** Roadie maintains an internal "Auditor" thread that monitors for lateral privilege escalation (e.g. an agent trying to access files outside the project root).`
   });
 
   sections.push({
