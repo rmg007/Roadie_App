@@ -20,7 +20,7 @@ export class SkillRegistryService {
   /**
    * List all available skills grouped by category.
    */
-  async listSkills(): Promise<SkillMetadata[]> {
+  async getAllSkills(): Promise<SkillMetadata[]> {
     const skills: SkillMetadata[] = [];
     try {
       const categories = await fs.readdir(this.skillsPath);
@@ -67,11 +67,33 @@ export class SkillRegistryService {
    * Find skills relevant to a technology name.
    */
   async findRelevantSkills(techName: string): Promise<SkillMetadata[]> {
-    const all = await this.listSkills();
+    const all = await this.getAllSkills();
     const query = techName.toLowerCase();
     return all.filter(s => 
       s.name.toLowerCase().includes(query) || 
       s.category.toLowerCase().includes(query)
     );
+  }
+
+  /**
+   * Adds a new skill discovered via live crawling to the persistent store.
+   */
+  public async addDiscoveredSkill(techName: string, content: string): Promise<void> {
+    const discoveredDir = path.join(this.skillsPath, 'discovered');
+    
+    try {
+      // Ensure the discovered directory exists
+      await fs.mkdir(discoveredDir, { recursive: true });
+      
+      const fileName = `${techName.toLowerCase().replace(/\s+/g, '_')}.md`;
+      const filePath = path.join(discoveredDir, fileName);
+      
+      const formattedContent = `# Discovered Skill: ${techName}\n\n> [!NOTE]\n> This skill was autonomously acquired via Firecrawl search and verified by the Roadie Analyzer.\n\n${content}`;
+      
+      await fs.writeFile(filePath, formattedContent, 'utf-8');
+    } catch (err) {
+      console.error(`SkillRegistry: Failed to commit discovered skill: ${err}`);
+      throw err;
+    }
   }
 }

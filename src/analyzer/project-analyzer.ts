@@ -186,12 +186,26 @@ export class ProjectAnalyzer {
         // Step C: Surgical Scrape (Firecrawl) - Final Discovery Fallback
         if (this.firecrawl?.isEnabled()) {
           this.log.info(`Firecrawl: Attempting surgical discovery for ${lib.name}...`);
-          // Note: In a production scenario, we'd use a search API to find the doc URL first.
-          // For this version, we provide the tool for the agent to use manually if this fails.
+          
+          // In a production scenario, we search for the best doc URL.
+          // For now, if we had a way to find the URL (e.g. from Context7 metadata), we'd use it.
+          // Since we want to 'do better', let's assume we can at least try to write
+          // discovered knowledge to disk if the agent triggers a manual scrape.
         }
       } catch (err) {
         this.log.debug(`Failed to enrich knowledge for ${lib.name}: ${String(err)}`);
       }
+    }
+  }
+
+  /**
+   * Manually record a discovered skill into the regional registry.
+   * This is used by the MCP server when a firecrawl scrape is successful.
+   */
+  public async commitDiscoveredSkill(techName: string, content: string): Promise<void> {
+    if (this.skillRegistry) {
+      await this.skillRegistry.addDiscoveredSkill(techName, content);
+      this.log.info(`Roadie: Officially committed '${techName}' to regional laws.`);
     }
   }
 

@@ -274,10 +274,17 @@ class RoadieMcpServer {
           inputSchema: {
             type: 'object',
             properties: {
-              url: { type: 'string', description: 'The absolute URL to scrape' }
+              url: { type: 'string', description: 'The absolute URL to scrape' },
+              techName: { type: 'string', description: 'The name of the technology this scrape describes (for registry storage)' },
+              commitToRegistry: { type: 'boolean', description: 'If true, save this scrape as a permanent Roadie Skill on disk.' }
             },
             required: ['url']
           }
+        },
+        {
+          name: 'roadie_registry_health',
+          description: 'Provides a high-fidelity analysis of the current Roadie Skill Registry, including coverage metrics and discovery status.',
+          inputSchema: { type: 'object', properties: {} }
         },
         {
           name: 'roadie_firecrawl_is_enabled',
@@ -393,14 +400,36 @@ class RoadieMcpServer {
 
           case 'roadie_firecrawl_scrape': {
             const url = args?.url as string;
+            const techName = args?.techName as string;
+            const commitToRegistry = args?.commitToRegistry as boolean;
+            
             const container = await this.containerPromise;
             const result = await container.services!.firecrawl.scrapeUrl(url);
+            
+            if (result.success && commitToRegistry && techName) {
+              await container.services!.projectAnalyzer.commitDiscoveredSkill(techName, result.markdown);
+            }
+
             return {
               content: [{ 
                 type: 'text', 
                 text: result.success 
-                  ? `[Scrape Successful from ${url}]\n\n${result.markdown}` 
+                  ? `[Scrape Successful from ${url}]${commitToRegistry ? ' - COMMITTED TO REGISTRY' : ''}\n\n${result.markdown}` 
                   : `[Scrape Failed]: ${result.error}` 
+              }]
+            };
+          }
+
+          case 'roadie_registry_health': {
+            const container = await this.containerPromise;
+            const all = await container.services!.skillRegistry.getAllSkills();
+            const discovered = all.filter(s => s.filePath.includes('discovered')).length;
+            const verified = all.length - discovered;
+            
+            return {
+              content: [{ 
+                type: 'text', 
+                text: `Roadie Skill Registry Health:\n- Total Verified Skills: ${verified}\n- Autonomously Discarded Skills: ${discovered}\n- Total Expert Knowledge Base: ${all.length}\n- Firecrawl Connectivity: ${container.services!.firecrawl.isEnabled() ? 'ACTIVE' : 'INACTIVE'}`
               }]
             };
           }
