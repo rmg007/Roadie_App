@@ -373,11 +373,11 @@ export interface ProjectModel {
   getCommands(): ProjectCommand[];
   getConventions(): ProjectConventions | undefined;
   getOverview(): string;
-  toContext(options?: {
-   *  Accepts optional parameters for token budgeting and scope filtering.
-   *  @param options.maxTokens - Token budget for the serialized output
-   *  @param options.scope - Filter to specific context categories
-   *  @param options.relevantPaths - Only include context relevant to these paths
+  /**
+   * Accepts optional parameters for token budgeting and scope filtering.
+   * @param options.maxTokens - Token budget for the serialized output
+   * @param options.scope - Filter to specific context categories
+   * @param options.relevantPaths - Only include context relevant to these paths
    */
   toContext(options?: {
     maxTokens?: number;
