@@ -66,6 +66,7 @@ class RoadieMcpServer {
 
   private async startAutonomousCycle() {
     const container = await this.containerPromise;
+    if (!container.services) throw new Error('container.services not initialized in startAutonomousCycle');
     const projectRoot = container.services.projectRoot;
 
     let isRunning = false;
