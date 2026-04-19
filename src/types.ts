@@ -10,16 +10,6 @@
  */
 
 import type { ProgressReporter, CancellationHandle } from './providers';
-// Keep vscode import for wrapper types at bottom of file
-// vscode is optional; in MCP servers it may not be available
-let vscode: any;
-try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports, global-require
-  vscode = require('vscode');
-} catch {
-  // vscode not available (unit tests, non-VSCode contexts)
-  vscode = undefined;
-}
 
 // =====================================================================
 // Intent Classification Types
@@ -638,23 +628,6 @@ export class StepExecutionError extends Error {
     super(message);
   }
 }
-
-// =====================================================================
-// VS Code API Wrappers
-// =====================================================================
-
-/**
- * Wrapper for VS Code's Language Model API.
- * Returned by vscode.lm.selectChatModels().
- * May be undefined in non-VSCode contexts.
- */
-export type LanguageModelChat = vscode?.LanguageModelChat | any;
-
-/**
- * Wrapper for VS Code's chat response stream.
- * May be undefined in non-VSCode contexts.
- */
-export type ChatResponseStream = vscode?.ChatResponseStream | any;
 
 // =====================================================================
 // Codebase Dictionary Types
