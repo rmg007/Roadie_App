@@ -266,6 +266,22 @@ class RoadieMcpServer {
           name: 'roadie_sync_skills',
           description: 'Synchronizes and re-indexes the internal Roadie skill registry. Use this after adding new skills to the assets folder.',
           inputSchema: { type: 'object', properties: {} }
+        },
+        {
+          name: 'roadie_firecrawl_scrape',
+          description: 'Scrapes a URL into clean, LLM-ready markdown using Firecrawl. Use this for deep research into external documentation.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              url: { type: 'string', description: 'The absolute URL to scrape' }
+            },
+            required: ['url']
+          }
+        },
+        {
+          name: 'roadie_firecrawl_is_enabled',
+          description: 'Checks if the Firecrawl scraping service is enabled (requires FIRECRAWL_API_KEY).',
+          inputSchema: { type: 'object', properties: {} }
         }
       ]
     }));
@@ -371,6 +387,28 @@ class RoadieMcpServer {
             const all = await container.services!.skillRegistry.listSkills();
             return {
               content: [{ type: 'text', text: `Roadie: Skill registry synchronized. Total verified skills: ${all.length}.` }]
+            };
+          }
+
+          case 'roadie_firecrawl_scrape': {
+            const url = args?.url as string;
+            const container = await this.containerPromise;
+            const result = await container.services!.firecrawl.scrapeUrl(url);
+            return {
+              content: [{ 
+                type: 'text', 
+                text: result.success 
+                  ? `[Scrape Successful from ${url}]\n\n${result.markdown}` 
+                  : `[Scrape Failed]: ${result.error}` 
+              }]
+            };
+          }
+
+          case 'roadie_firecrawl_is_enabled': {
+            const container = await this.containerPromise;
+            const enabled = container.services!.firecrawl.isEnabled();
+            return {
+              content: [{ type: 'text', text: enabled ? 'Firecrawl is ENABLED and ready for scraping.' : 'Firecrawl is DISABLED. Please set FIRECRAWL_API_KEY in your environment.' }]
             };
           }
 

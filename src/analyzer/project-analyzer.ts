@@ -25,6 +25,8 @@ import type { LearningDatabase } from '../learning/learning-database';
 import type { Logger } from '../platform-adapters';
 import { CONSOLE_LOGGER } from '../platform-adapters';
 import type { Context7Client } from '../context7-client';
+import { SkillRegistryService } from '../engine/skill-registry-service';
+import { FirecrawlClient } from '../platform-adapters/firecrawl-client';
 
 export class ProjectAnalyzer {
   constructor(
@@ -34,6 +36,7 @@ export class ProjectAnalyzer {
     private log: Logger = CONSOLE_LOGGER,
     private context7?: Context7Client,
     private skillRegistry?: SkillRegistryService,
+    private firecrawl?: FirecrawlClient,
   ) {}
 
   private buildPatternId(pattern: DetectedPattern): string {

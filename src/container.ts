@@ -22,6 +22,7 @@ import { FileGenerator } from './generator/file-generator';
 import { Logger, STUB_LOGGER } from './platform-adapters';
 import { Context7Client } from './context7-client';
 import { SkillRegistryService } from './engine/skill-registry-service';
+import { FirecrawlClient } from './platform-adapters/firecrawl-client';
 
 // =====================================================================
 // Config
@@ -134,10 +135,11 @@ export async function createMCPContainer(
   const fsProvider: FileSystemProvider = new NodeFileSystemProvider();
   const cfgProvider: ConfigProvider = new NodeConfigProvider();
   const skillRegistry = new SkillRegistryService(projectRoot);
+  const firecrawl = new FirecrawlClient();
 
   const c7Client = new Context7Client();
   const projectModel = new InMemoryProjectModel(roadieDb);
-  const projectAnalyzer = new ProjectAnalyzer(projectModel, undefined, learningDb ?? undefined, log, c7Client, skillRegistry);
+  const projectAnalyzer = new ProjectAnalyzer(projectModel, undefined, learningDb ?? undefined, log, c7Client, skillRegistry, firecrawl);
 
   const fileGenerator = new FileGenerator(projectRoot, learningDb ?? undefined, fsProvider, log);
 
@@ -151,6 +153,7 @@ export async function createMCPContainer(
     configProvider: cfgProvider,
     context7: c7Client,
     skillRegistry: skillRegistry,
+    firecrawl: firecrawl,
   };
 
   return new Container(services);
