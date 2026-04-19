@@ -39,7 +39,7 @@ const STEP_3_TDD_REPRODUCTION: WorkflowStep = {
   id: 'write-reproduction-test',
   name: 'Committing reproduction test (TDD)',
   type: 'sequential',
-  agentRole: 'tester' as any,
+  agentRole: 'test_reviewer',
   modelTier: 'standard',
   toolScope: 'implementation',
   contextScope: 'patterns',
