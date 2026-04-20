@@ -19,21 +19,40 @@ import { z } from 'zod';
 const RoadieConfigSchema = z.object({
   dryRun: z.boolean().optional().default(false),
   maxRetries: z.number().int().min(0).optional().default(2),
+  safeMode: z.boolean().optional().default(false),
+  autoApprove: z.array(z.string()).optional().default(['generate', 'analyze', 'document']),
+  requireApproval: z.array(z.string()).optional().default(['force-push', 'schema-migrate', 'mass-delete']),
+  telemetry: z.object({
+    enabled: z.boolean().optional().default(false),
+  }).optional().default({}),
   models: z
     .object({
+      primary: z.string().optional().default('opus-4-7'),
+      fallback: z.array(z.string()).optional().default(['sonnet-4-6', 'haiku-4-5']),
       defaultTier: z.enum(['free', 'standard', 'premium']).optional().default('standard'),
       timeoutMs: z.number().int().min(1000).optional().default(30000),
     })
     .optional()
     .default({}),
+  context7: z.object({
+    enabled: z.boolean().optional().default(true),
+    timeoutMs: z.number().int().min(100).optional().default(5000),
+  }).optional().default({}),
   logging: z
     .object({
       level: z.enum(['debug', 'info', 'warn', 'error']).optional().default('info'),
+      format: z.enum(['json', 'text']).optional().default('json'),
+      rotate: z.object({
+        maxBytes: z.number().int().optional().default(10 * 1024 * 1024),
+        maxFiles: z.number().int().optional().default(5),
+      }).optional().default({}),
       fileMaxSizeMb: z.number().int().min(1).optional().default(10),
       fileMaxCount: z.number().int().min(1).optional().default(10),
     })
     .optional()
     .default({}),
+  syncIntervalMs: z.number().int().optional().default(1_800_000),
+  heartbeatIntervalMs: z.number().int().optional().default(14_400_000),
 }).strict();
 
 export type RoadieConfig = z.infer<typeof RoadieConfigSchema>;
@@ -77,6 +96,9 @@ function loadConfig(): RoadieConfig {
   if (process.env.ROADIE_DRY_RUN === '1') {
     config.dryRun = true;
   }
+  if (process.env.ROADIE_SAFE_MODE === '1') {
+    config.safeMode = true;
+  }
   if (process.env.ROADIE_MAX_RETRIES) {
     config.maxRetries = parseInt(process.env.ROADIE_MAX_RETRIES, 10);
   }
@@ -91,6 +113,10 @@ function loadConfig(): RoadieConfig {
   if (process.env.ROADIE_TIMEOUT_MS) {
     if (!config.models) config.models = {};
     config.models.timeoutMs = parseInt(process.env.ROADIE_TIMEOUT_MS, 10);
+  }
+  if (process.env.ROADIE_TELEMETRY === '1') {
+    if (!config.telemetry) config.telemetry = {};
+    config.telemetry.enabled = true;
   }
 
   // Validate and apply defaults
@@ -108,6 +134,25 @@ export function getConfig(): RoadieConfig {
     globalConfig = loadConfig();
   }
   return globalConfig;
+}
+
+/**
+ * Check if a workflow step type requires user approval.
+ * Consults the `requireApproval` list from config.
+ */
+export function requiresApproval(operationType: string): boolean {
+  const cfg = getConfig();
+  const required = cfg.requireApproval ?? [];
+  return required.includes(operationType);
+}
+
+/**
+ * Check if a workflow step type is auto-approved.
+ */
+export function isAutoApproved(operationType: string): boolean {
+  const cfg = getConfig();
+  const auto = cfg.autoApprove ?? [];
+  return auto.includes(operationType);
 }
 
 /**

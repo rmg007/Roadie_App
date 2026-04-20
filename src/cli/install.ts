@@ -57,6 +57,51 @@ function detectHost(): { host: string; configPath: string } | null {
 }
 
 /**
+ * The system-prompt snippet that tells the host-AI to always forward messages to roadie_chat.
+ * A SHA-256 hash comment at the top makes it detectable to avoid double-installation.
+ */
+const SYSTEM_PROMPT_SNIPPET_HASH = 'roadie-system-prompt-v1';
+const SYSTEM_PROMPT_SNIPPET = `
+# Roadie AI Routing (auto-installed by \`npx roadie install\`)
+# ${SYSTEM_PROMPT_SNIPPET_HASH}
+For EVERY user request — bug fixes, features, refactors, reviews, documentation updates, or dependency management —
+call the \`roadie_chat\` tool with the user's exact message as the \`message\` parameter.
+Do not attempt to handle project tasks yourself. Roadie will classify intent and dispatch the right workflow.
+Only respond directly (without calling roadie_chat) for: pure conversational questions, meta questions about Roadie itself, or when the user explicitly says "don't use Roadie".
+`.trim();
+
+/**
+ * Write the system-prompt snippet to the appropriate host config location.
+ * Idempotent — checks for snippet hash before writing.
+ */
+function installSystemPromptSnippet(host: string): void {
+  const homeDir = os.homedir();
+  let snippetPath: string;
+
+  if (host === 'claude') {
+    snippetPath = path.join(homeDir, '.claude', 'CLAUDE.md');
+  } else if (host === 'cursor') {
+    snippetPath = path.join(homeDir, '.cursor', 'rules', 'roadie-routing.mdc');
+  } else {
+    // Copilot and others: write to a local prompt file
+    snippetPath = path.join(process.cwd(), '.github', 'copilot-instructions.md');
+  }
+
+  // Read existing if present
+  let existing = '';
+  if (fs.existsSync(snippetPath)) {
+    existing = fs.readFileSync(snippetPath, 'utf-8');
+  }
+
+  // Skip if already installed (hash detection)
+  if (existing.includes(SYSTEM_PROMPT_SNIPPET_HASH)) return;
+
+  fs.mkdirSync(path.dirname(snippetPath), { recursive: true });
+  const separator = existing.length > 0 ? '\n\n---\n\n' : '';
+  fs.writeFileSync(snippetPath, existing + separator + SYSTEM_PROMPT_SNIPPET + '\n', 'utf-8');
+}
+
+/**
  * Get the MCP server entry for Roadie
  */
 function getRoadieMCPEntry(): object {
@@ -115,6 +160,9 @@ export async function installRoadie(): Promise<InstallResult> {
 
     // Write updated config
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+
+    // Auto-install system-prompt routing snippet
+    installSystemPromptSnippet(host);
 
     return {
       success: true,

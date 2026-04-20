@@ -46,7 +46,11 @@ export interface WorkflowOutcomeInput {
   stepsTotal: number;
   durationMs?: number;
   modelTiersUsed?: string;
+  modelUsed?: string;
   errorSummary?: string;
+  failureReason?: string;
+  correlationId?: string;
+  costUsd?: number;
 }
 
 export interface WorkflowHistoryEntry {
@@ -58,7 +62,11 @@ export interface WorkflowHistoryEntry {
   stepsTotal: number;
   durationMs: number | null;
   modelTiersUsed: string | null;
+  modelUsed: string | null;
   errorSummary: string | null;
+  failureReason: string | null;
+  correlationId: string | null;
+  costUsd: number | null;
   createdAt: string;
 }
 
@@ -100,7 +108,7 @@ const MAX_SNAPSHOTS_PER_FILE = 50;
 const MAX_WORKFLOW_ENTRIES = 100;
 
 /** Current schema version. Increment when ALTER TABLE migrations are needed. */
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 /** Maximum number of .bak files to keep per database file (B4). */
 const MAX_BACKUPS = 3;
@@ -125,7 +133,11 @@ const LEARNING_SCHEMA = `
     steps_total INTEGER NOT NULL DEFAULT 0,
     duration_ms INTEGER,
     model_tiers_used TEXT,
+    model_used TEXT,
     error_summary TEXT,
+    failure_reason TEXT,
+    correlation_id TEXT,
+    cost_usd REAL,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
@@ -325,6 +337,19 @@ export class LearningDatabase {
       // v0 → v1: ensure learning_schema_version table exists (already in LEARNING_SCHEMA)
       // No ALTER TABLE needed for v1 since the schema is created fresh if missing
 
+      // v1 → v2: add cost/failure tracking columns to workflow_history
+      if (currentVersion < 2) {
+        const alterStatements = [
+          `ALTER TABLE workflow_history ADD COLUMN model_used TEXT`,
+          `ALTER TABLE workflow_history ADD COLUMN failure_reason TEXT`,
+          `ALTER TABLE workflow_history ADD COLUMN correlation_id TEXT`,
+          `ALTER TABLE workflow_history ADD COLUMN cost_usd REAL`,
+        ];
+        for (const sql of alterStatements) {
+          try { db.exec(sql); } catch { /* column already exists — safe to ignore */ }
+        }
+      }
+
       db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
       this.log('info', `[LearningDatabase] Schema migrated to v${SCHEMA_VERSION}`);
     }
@@ -452,8 +477,8 @@ export class LearningDatabase {
     const db = this.db;
     const globalDb = this.globalDb;
     
-    const stmt = `INSERT INTO workflow_history (workflow_type, prompt, status, steps_completed, steps_total, duration_ms, model_tiers_used, error_summary)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+    const stmt = `INSERT INTO workflow_history (workflow_type, prompt, status, steps_completed, steps_total, duration_ms, model_tiers_used, model_used, error_summary, failure_reason, correlation_id, cost_usd)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
     const params = [
       entry.workflowType,
       entry.prompt,
@@ -462,7 +487,11 @@ export class LearningDatabase {
       entry.stepsTotal,
       entry.durationMs ?? null,
       entry.modelTiersUsed ?? null,
+      entry.modelUsed ?? null,
       entry.errorSummary ?? null,
+      entry.failureReason ?? null,
+      entry.correlationId ?? null,
+      entry.costUsd ?? null,
     ];
 
     this.safeExec(() => {

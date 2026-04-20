@@ -36,6 +36,8 @@ import { EngineeringRigorSkill } from './templates/engineering-rigor';
 import type { FileSystemProvider } from '../providers';
 import type { Logger } from '../platform-adapters';
 import { CONSOLE_LOGGER } from '../platform-adapters';
+import { getConfig } from '../config-loader';
+import { getAuditLog } from '../observability/audit-log';
 
 interface FileSpec {
   type: GeneratedFileType;
@@ -104,6 +106,47 @@ export class FileGenerator {
   private isFileOpenInEditor(filePath: string): boolean {
     if (!this.fileSystem) return false;
     return this.fileSystem.isFileOpenInEditor(filePath);
+  }
+
+  /**
+   * Safe write: enforces dry-run, safe-mode (whitelist-only), path-traversal guard,
+   * and emits an audit event on every write or block.
+   */
+  private async safeWrite(fullPath: string, content: string, reason: WriteReason): Promise<boolean> {
+    const cfg = getConfig();
+    const audit = getAuditLog(this.workspaceRoot);
+    const relativePath = path.relative(this.workspaceRoot, fullPath);
+
+    // Path traversal guard — reject writes outside workspaceRoot
+    const resolved = path.resolve(fullPath);
+    const root = path.resolve(this.workspaceRoot);
+    if (!resolved.startsWith(root + path.sep) && resolved !== root) {
+      this.log.warn(`FileGenerator: BLOCKED path traversal attempt: ${fullPath}`);
+      audit.append({ type: 'dry_run_blocked', filePath: relativePath, message: 'path traversal blocked' });
+      return false;
+    }
+
+    // Dry-run mode: log intent but don't write
+    if (this.isDryRun || cfg.dryRun) {
+      this.log.info(`FileGenerator: DRY RUN - would write ${relativePath} (reason=${reason})`);
+      audit.append({ type: 'dry_run_blocked', filePath: relativePath, message: `dry-run: ${reason}` });
+      return false;
+    }
+
+    // Safe mode: only allow writes inside .github/ (Roadie's own output directory)
+    if (cfg.safeMode) {
+      const isRoadieOwned = relativePath.startsWith('.github') || relativePath.startsWith('.roadie');
+      if (!isRoadieOwned) {
+        this.log.warn(`FileGenerator: SAFE MODE - blocked write to ${relativePath}. Only .github/ and .roadie/ allowed.`);
+        audit.append({ type: 'dry_run_blocked', filePath: relativePath, message: 'safe-mode: write outside .github/ blocked' });
+        return false;
+      }
+    }
+
+    await fs.mkdir(path.dirname(fullPath), { recursive: true });
+    await fs.writeFile(fullPath, content, 'utf8');
+    audit.append({ type: 'file_written', filePath: relativePath, message: reason });
+    return true;
   }
 
   /**
@@ -179,13 +222,9 @@ export class FileGenerator {
       }
 
       const writeReason: WriteReason = existingContent === null ? 'new' : 'updated';
+      let written = false;
       try {
-        await fs.mkdir(path.dirname(fullPath), { recursive: true });
-        if (this.isDryRun) {
-          this.log.info(`FileGenerator: DRY RUN - would write skill ${skill.path} (reason=${writeReason})`);
-        } else {
-          await fs.writeFile(fullPath, content, 'utf8');
-        }
+        written = await this.safeWrite(fullPath, content, writeReason);
       } catch (err: unknown) {
         this.log.warn(`FileGenerator: failed to write skill ${skill.path}`, err);
         results.push({
@@ -199,7 +238,7 @@ export class FileGenerator {
         continue;
       }
 
-      this.log.info(`FileGenerator: wrote skill ${skill.path} (reason=${writeReason})`);
+      if (written) this.log.info(`FileGenerator: wrote skill ${skill.path} (reason=${writeReason})`);
       results.push({
         type: 'skill' as any,
         path: skill.path,
@@ -255,13 +294,9 @@ export class FileGenerator {
       }
 
       const writeReason: WriteReason = existingContent === null ? 'new' : 'updated';
+      let agentWritten = false;
       try {
-        await fs.mkdir(path.dirname(fullPath), { recursive: true });
-        if (this.isDryRun) {
-          this.log.info(`FileGenerator: DRY RUN - would write ${agent.filePath} (reason=${writeReason})`);
-        } else {
-          await fs.writeFile(fullPath, content, 'utf8');
-        }
+        agentWritten = await this.safeWrite(fullPath, content, writeReason);
       } catch (err: unknown) {
         this.log.warn(`FileGenerator: failed to write ${agent.filePath}`, err);
         results.push({
@@ -275,12 +310,14 @@ export class FileGenerator {
         continue;
       }
 
-      this.log.info(`FileGenerator: wrote ${agent.filePath} (reason=${writeReason})`);
+      if (agentWritten) {
+        this.log.info(`FileGenerator: wrote ${agent.filePath} (reason=${writeReason})`);
 
-      if (this.learningDb) {
-        try {
-          this.learningDb.recordSnapshot(agent.filePath, content, 'roadie');
-        } catch { /* snapshots are non-critical */ }
+        if (this.learningDb) {
+          try {
+            this.learningDb.recordSnapshot(agent.filePath, content, 'roadie');
+          } catch { /* snapshots are non-critical */ }
+        }
       }
 
       results.push({
@@ -288,7 +325,7 @@ export class FileGenerator {
         path: agent.filePath,
         content,
         contentHash: `sha256:${newHash}`,
-        written: true,
+        written: agentWritten,
         writeReason,
       });
     }
@@ -300,7 +337,7 @@ export class FileGenerator {
    * Generate per-directory .github/instructions/ files.
    */
   private async generatePathInstructionFiles(model: ProjectModel): Promise<GeneratedFile[]> {
-    const files = generatePathInstructions(model, { simplified: false });
+    const files = generatePathInstructions(model, this.workspaceRoot, { simplified: false });
     const results: GeneratedFile[] = [];
 
     for (const file of files) {
@@ -339,13 +376,9 @@ export class FileGenerator {
       }
 
       const writeReason: WriteReason = existingContent === null ? 'new' : 'updated';
+      let pathWritten = false;
       try {
-        await fs.mkdir(path.dirname(fullPath), { recursive: true });
-        if (this.isDryRun) {
-          this.log.info(`FileGenerator: DRY RUN - would write ${file.filePath} (reason=${writeReason})`);
-        } else {
-          await fs.writeFile(fullPath, content, 'utf8');
-        }
+        pathWritten = await this.safeWrite(fullPath, content, writeReason);
       } catch (err: unknown) {
         this.log.warn(`FileGenerator: failed to write ${file.filePath}`, err);
         results.push({
@@ -359,12 +392,11 @@ export class FileGenerator {
         continue;
       }
 
-      this.log.info(`FileGenerator: wrote ${file.filePath} (reason=${writeReason})`);
-
-      if (this.learningDb) {
-        try {
-          this.learningDb.recordSnapshot(file.filePath, content, 'roadie');
-        } catch { /* snapshots are non-critical */ }
+      if (pathWritten) {
+        this.log.info(`FileGenerator: wrote ${file.filePath} (reason=${writeReason})`);
+        if (this.learningDb) {
+          try { this.learningDb.recordSnapshot(file.filePath, content, 'roadie'); } catch { /* non-critical */ }
+        }
       }
 
       results.push({
@@ -372,7 +404,7 @@ export class FileGenerator {
         path: file.filePath,
         content,
         contentHash: `sha256:${newHash}`,
-        written: true,
+        written: pathWritten,
         writeReason,
       });
     }
@@ -423,13 +455,9 @@ export class FileGenerator {
       }
 
       const writeReason: WriteReason = existingContent === null ? 'new' : 'updated';
+      let cursorWritten = false;
       try {
-        await fs.mkdir(path.dirname(fullPath), { recursive: true });
-        if (this.isDryRun) {
-          this.log.info(`FileGenerator: DRY RUN - would write ${file.filePath} (reason=${writeReason})`);
-        } else {
-          await fs.writeFile(fullPath, content, 'utf8');
-        }
+        cursorWritten = await this.safeWrite(fullPath, content, writeReason);
       } catch (err: unknown) {
         this.log.warn(`FileGenerator: failed to write ${file.filePath}`, err);
         results.push({
@@ -443,12 +471,11 @@ export class FileGenerator {
         continue;
       }
 
-      this.log.info(`FileGenerator: wrote ${file.filePath} (reason=${writeReason})`);
-
-      if (this.learningDb) {
-        try {
-          this.learningDb.recordSnapshot(file.filePath, content, 'roadie');
-        } catch { /* snapshots are non-critical */ }
+      if (cursorWritten) {
+        this.log.info(`FileGenerator: wrote ${file.filePath} (reason=${writeReason})`);
+        if (this.learningDb) {
+          try { this.learningDb.recordSnapshot(file.filePath, content, 'roadie'); } catch { /* non-critical */ }
+        }
       }
 
       results.push({
@@ -456,7 +483,7 @@ export class FileGenerator {
         path: file.filePath,
         content,
         contentHash: `sha256:${newHash}`,
-        written: true,
+        written: cursorWritten,
         writeReason,
       });
     }
@@ -535,13 +562,9 @@ export class FileGenerator {
     // 5. Determine write reason before writing
     const writeReason: WriteReason = existingContent === null ? 'new' : 'updated';
 
+    let written = false;
     try {
-      await fs.mkdir(path.dirname(fullPath), { recursive: true });
-      if (this.isDryRun) {
-        this.log.info(`FileGenerator: DRY RUN - would write ${spec.path} (reason=${writeReason})`);
-      } else {
-        await fs.writeFile(fullPath, content, 'utf8');
-      }
+      written = await this.safeWrite(fullPath, content, writeReason);
     } catch (err: unknown) {
       this.log.warn(`FileGenerator: write failed for ${spec.type} -> ${spec.path}`, err);
       return {
@@ -554,19 +577,21 @@ export class FileGenerator {
       };
     }
 
-    const kb = (Buffer.byteLength(content, 'utf8') / 1024).toFixed(1);
-    this.log.info(
-      `FileGenerator: wrote ${spec.path} (${kb} KB, reason=${writeReason}, ` +
-      `hash=${newHash.slice(0, 8)}…)`,
-    );
+    if (written) {
+      const kb = (Buffer.byteLength(content, 'utf8') / 1024).toFixed(1);
+      this.log.info(
+        `FileGenerator: wrote ${spec.path} (${kb} KB, reason=${writeReason}, ` +
+        `hash=${newHash.slice(0, 8)}…)`,
+      );
 
-    // 7. Record snapshot in LearningDatabase (if available)
-    if (this.learningDb) {
-      try {
-        this.learningDb.recordSnapshot(spec.path, content, 'roadie');
-        this.log.debug(`FileGenerator: snapshot recorded for ${spec.path}`);
-      } catch (err) {
-        this.log.warn(`FileGenerator: failed to record snapshot for ${spec.path}`, err);
+      // 7. Record snapshot in LearningDatabase (if available)
+      if (this.learningDb) {
+        try {
+          this.learningDb.recordSnapshot(spec.path, content, 'roadie');
+          this.log.debug(`FileGenerator: snapshot recorded for ${spec.path}`);
+        } catch (err) {
+          this.log.warn(`FileGenerator: failed to record snapshot for ${spec.path}`, err);
+        }
       }
     }
 
@@ -575,7 +600,7 @@ export class FileGenerator {
       path:        spec.path,
       content,
       contentHash: `sha256:${newHash}`,
-      written:     true,
+      written,
       writeReason,
     };
   }

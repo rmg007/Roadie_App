@@ -111,7 +111,7 @@ describe('B1 — SQLite pragmas (real temp-file DB)', () => {
     learning.close();
   });
 
-  it('user_version is set to SCHEMA_VERSION (1) after initialize()', () => {
+  it('user_version is set to SCHEMA_VERSION (2) after initialize()', () => {
     const { db, filePath } = createTempDb();
     temps.push({ db, filePath });
 
@@ -119,7 +119,7 @@ describe('B1 — SQLite pragmas (real temp-file DB)', () => {
     learning.initialize(db, {}, filePath);
 
     const row = db.prepare('PRAGMA user_version').get() as { user_version: number };
-    expect(row.user_version).toBe(1);
+    expect(row.user_version).toBe(2);
 
     learning.close();
   });
@@ -143,7 +143,7 @@ describe('B1 — SQLite pragmas (real temp-file DB)', () => {
     expect(busyTimeout).toBe(5000);
     expect(synchronous).toBe(1);
     expect(tempStore).toBe(2);
-    expect(userVersion).toBe(1);
+    expect(userVersion).toBe(2);
 
     learning.close();
   });

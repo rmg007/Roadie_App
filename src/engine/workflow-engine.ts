@@ -264,7 +264,7 @@ export class WorkflowEngine {
 
       // Handle step failure (Self-Healing Escalation)
       if (result.status === 'failed') {
-        if (result.attempts >= (step.maxRetries ?? 0) && step.agentRole !== 'strategist') {
+        if ((step.maxRetries ?? 0) > 0 && step.agentRole !== 'strategist') {
           this.log.info(`[${definition.id}] Step failed after max retries. Escalating to Strategist for Self-Healing/Plan Refinement.`);
           context.progress.report('🔄 Step failed consistently. Escalating to Strategist to refine the plan...');
           await this.escalateToStrategist(step, context, result.error);
@@ -594,6 +594,14 @@ export class WorkflowEngine {
    * @param userApproval true to continue, false to cancel
    * @returns Updated WorkflowResult (either COMPLETED, CANCELLED, or WAITING_FOR_APPROVAL again)
    */
+
+  /**
+   * Returns true if the given sessionId corresponds to a workflow currently
+   * paused and awaiting approval. Used by roadie_chat to route resume vs. new execution.
+   */
+  hasPausedSession(sessionId: string): boolean {
+    return this.pausedSessions.has(sessionId);
+  }
 
   /**
    * Replace stale cancellation/progress handles from a previous chat turn

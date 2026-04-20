@@ -81,8 +81,12 @@ describe('All Workflow Definitions — structure', () => {
 
   it.each(ALL_WORKFLOWS)('%s steps all have prompt templates', (_name, wf) => {
     for (const step of wf.steps) {
-      // Skip interviewer agents and layer agents (database, backend, frontend) which have hardcoded prompts
-      if (step.agentRole === 'interviewer' || ['database', 'backend', 'frontend'].includes(step.agentRole as string)) {
+      // Skip interviewer agents, type:'agent' steps, and layer agents which have hardcoded prompts
+      if (
+        step.type === 'agent' ||
+        step.agentRole === 'interviewer' ||
+        ['database', 'backend', 'frontend', 'database_agent', 'backend_agent', 'frontend_agent'].includes(step.agentRole as string)
+      ) {
         continue;
       }
       expect(step.promptTemplate.length, `Step ${step.id} missing template`).toBeGreaterThan(0);
@@ -111,17 +115,17 @@ describe('Feature Workflow', () => {
     expect(FEATURE_WORKFLOW.steps).toHaveLength(7);
   });
 
-  it('step 3 is parallel with 3 branches (DB, backend, frontend)', () => {
-    const s = FEATURE_WORKFLOW.steps[2];
+  it('step 4 is parallel with 3 branches (DB, backend, frontend)', () => {
+    const s = FEATURE_WORKFLOW.steps[3];
     expect(s.type).toBe('parallel');
     expect(s.branches).toHaveLength(3);
-    expect(s.branches![0].agentRole).toBe('database');
-    expect(s.branches![1].agentRole).toBe('backend');
-    expect(s.branches![2].agentRole).toBe('frontend');
+    expect(s.branches![0].agentRole).toBe('database_agent');
+    expect(s.branches![1].agentRole).toBe('backend_agent');
+    expect(s.branches![2].agentRole).toBe('frontend_agent');
   });
 
-  it('step 6 (quality review) uses standard tier', () => {
-    expect(FEATURE_WORKFLOW.steps[5].modelTier).toBe('standard');
+  it('step 6 (quality review) uses premium tier', () => {
+    expect(FEATURE_WORKFLOW.steps[5].modelTier).toBe('premium');
   });
 
   it('completes all steps with mock handler', async () => {

@@ -95,7 +95,7 @@ describe('B8 — ENOSPC/EACCES → RoadieError(DB_WRITE_FAILED)', () => {
     } catch (err) {
       if (err instanceof RoadieError) {
         caughtCode = err.code;
-        caughtMessage = err.userMessage;
+        caughtMessage = err.message;
       }
     }
     expect(caughtCode).toBe('DB_WRITE_FAILED');

@@ -420,12 +420,28 @@ class RoadieMcpServer {
         switch (name) {
           case 'roadie_chat': {
             const validated = RoadieChatInputSchema.parse(args);
+            // Wire MCP progress notifications so host-AI sees step-by-step updates
+            const progressToken = (request.params as any)?._meta?.progressToken;
+            const onProgress = progressToken !== undefined
+              ? (stepName: string, stepIndex: number, total: number) => {
+                  this.server.notification({
+                    method: 'notifications/progress',
+                    params: {
+                      progressToken,
+                      progress: stepIndex,
+                      total,
+                      message: stepName,
+                    },
+                  }).catch(() => { /* ignore notification errors */ });
+                }
+              : undefined;
             const result = await handleRoadieChat(
               validated,
               container.services.intentClassifier,
               container.services.workflowEngine,
               container.services.workflowDefinitions,
-              MCP_LOGGER
+              MCP_LOGGER,
+              onProgress
             );
             return {
               content: [{ type: 'text', text: JSON.stringify(result, null, 2) }]

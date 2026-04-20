@@ -30,6 +30,7 @@ export type IntentType =
   | 'review'
   | 'document'
   | 'dependency'
+  | 'audit'
   | 'onboard'
   | 'clarify'
   | 'resume'

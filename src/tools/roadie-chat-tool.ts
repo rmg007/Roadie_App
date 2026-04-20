@@ -14,9 +14,8 @@ import type {
   WorkflowDefinition,
   WorkflowContext,
   WorkflowResult,
-  ProgressReporter,
-  CancellationHandle,
 } from '../types';
+import type { ProgressReporter, CancellationHandle } from '../providers';
 import { WorkflowEngine } from '../engine/workflow-engine';
 import type { Logger } from '../platform-adapters';
 import { STUB_LOGGER } from '../platform-adapters';
@@ -27,6 +26,7 @@ import { STUB_LOGGER } from '../platform-adapters';
 export const RoadieChatInputSchema = z.object({
   message: z.string().describe('The user message to process'),
   sessionId: z.string().optional().describe('Optional session ID for resuming interrupted workflows'),
+  explain: z.boolean().optional().describe('If true, include rationale for workflow/model/skill choices in the response'),
 });
 
 export type RoadieChatInput = z.infer<typeof RoadieChatInputSchema>;
@@ -38,9 +38,18 @@ export const RoadieChatOutputSchema = z.object({
   summary: z.string().describe('Summary of workflow execution'),
   files_changed: z.array(z.string()).describe('List of files changed'),
   next_action: z.string().optional().describe('Optional next action suggestion'),
+  rationale: z.string().optional().describe('Explain-mode: why this workflow/model/skill was chosen'),
+  progress_steps: z.array(z.string()).optional().describe('Ordered list of progress updates from execution'),
+  sessionId: z.string().optional().describe('Session ID to pass back on the next turn when a workflow is paused awaiting approval'),
 });
 
 export type RoadieChatOutput = z.infer<typeof RoadieChatOutputSchema>;
+
+/**
+ * Optional callback for streaming MCP progress notifications.
+ * Receives step name and index for streaming to host-AI.
+ */
+export type ProgressNotifier = (stepName: string, stepIndex: number, total: number) => void;
 
 /**
  * Handler for the roadie_chat MCP tool.
@@ -52,10 +61,61 @@ export async function handleRoadieChat(
   engine: WorkflowEngine,
   workflowDefs: Map<string, WorkflowDefinition>,
   log: Logger = STUB_LOGGER,
+  onProgress?: ProgressNotifier,
 ): Promise<RoadieChatOutput> {
-  const { message, sessionId } = params;
+  const { message, sessionId, explain } = params;
 
   log.info(`[roadie_chat] Received: "${message.substring(0, 100)}${message.length > 100 ? '...' : ''}"`);
+
+  // --- Resume path: sessionId provided and a paused workflow exists for it ---
+  if (sessionId && engine.hasPausedSession(sessionId)) {
+    const progressUpdates: string[] = [];
+    let stepCounter = 0;
+    const progress: ProgressReporter = {
+      report: (msg: string) => {
+        progressUpdates.push(msg);
+        log.debug(`[roadie_chat:progress] ${msg}`);
+        if (onProgress) onProgress(msg, ++stepCounter, 0);
+      },
+      reportMarkdown: (md: string) => {
+        progressUpdates.push(md);
+        log.debug(`[roadie_chat:progress:md] ${md}`);
+      },
+    };
+    const cancellation: CancellationHandle = { isCancelled: false, onCancelled: () => {} };
+
+    engine.rebindTurnHandles(sessionId, { progress, cancellation });
+
+    const userApproval = /\byes\b|\bapprove\b|\bcontinue\b|\bproceed\b/i.test(message);
+    log.info(`[roadie_chat] Resuming session ${sessionId}, approval=${userApproval}`);
+
+    let resumeResult: WorkflowResult;
+    try {
+      resumeResult = await engine.resume(sessionId, userApproval);
+    } catch (err: unknown) {
+      const error = err instanceof Error ? err.message : String(err);
+      log.error(`[roadie_chat] Resume failed: ${error}`);
+      return {
+        summary: `Roadie failed to resume workflow: ${error}`,
+        files_changed: [],
+        next_action: 'Please try again.',
+      };
+    }
+
+    const filesChanged = new Set<string>();
+    for (const stepResult of resumeResult.stepResults) {
+      const fileMatches = stepResult.output.match(/(?:file:\/\/|src\/)[^\s]+/g) || [];
+      fileMatches.forEach((f) => filesChanged.add(f));
+    }
+
+    return {
+      summary: resumeResult.summary ?? buildSummary(resumeResult, progressUpdates, 1),
+      files_changed: Array.from(filesChanged),
+      next_action: suggestNextAction(resumeResult, resumeResult.workflowId),
+      progress_steps: progressUpdates.length > 0 ? progressUpdates : undefined,
+      sessionId: resumeResult.pausedSessionId,
+    };
+  }
 
   // Step 1: Classify intent
   const classification = classifier.classify(message);
@@ -77,24 +137,36 @@ export async function handleRoadieChat(
 
   // Step 3: Create progress reporter and cancellation handle
   const progressUpdates: string[] = [];
+  let stepCounter = 0;
+  const totalSteps = workflow.steps.length;
   const progress: ProgressReporter = {
     report: (msg: string) => {
       progressUpdates.push(msg);
       log.debug(`[roadie_chat:progress] ${msg}`);
+      // Stream MCP progress notification if callback provided
+      if (onProgress) {
+        onProgress(msg, ++stepCounter, totalSteps);
+      }
+    },
+    reportMarkdown: (md: string) => {
+      progressUpdates.push(md);
+      log.debug(`[roadie_chat:progress:md] ${md}`);
     },
   };
 
   const cancellation: CancellationHandle = {
     isCancelled: false,
+    onCancelled: () => {},
   };
 
   // Step 4: Build workflow context
   const context: WorkflowContext = {
     prompt: message,
-    intent: { type: intentType, confidence: classification.confidence },
+    intent: classification,
     projectModel: {} as any, // TODO: Initialize from container
     progress,
     cancellation,
+    isAutonomous: false,
     previousStepResults: [],
   };
 
@@ -130,7 +202,21 @@ export async function handleRoadieChat(
     summary,
     files_changed: Array.from(filesChanged),
     next_action: nextAction,
+    progress_steps: progressUpdates.length > 0 ? progressUpdates : undefined,
+    sessionId: result.pausedSessionId,
   };
+
+  // Explain mode: attach rationale for workflow/model/skill choices
+  if (explain) {
+    const tiersUsed = result.modelTiersUsed?.join(', ') || 'unknown';
+    output.rationale = [
+      `Intent classified as "${intentType}" with ${(classification.confidence * 100).toFixed(0)}% confidence.`,
+      `Matched signals: ${classification.signals.slice(0, 5).join(', ') || 'none'}.`,
+      `Dispatched to "${workflow.name}" workflow (${workflow.steps.length} steps).`,
+      `Model tiers used: ${tiersUsed}.`,
+      classification.requiresLLM ? 'LLM fallback classification was triggered (local confidence < 0.7).' : 'Local classifier was sufficient (no LLM fallback needed).',
+    ].join(' ');
+  }
 
   log.info(`[roadie_chat] Completed: ${output.summary}`);
   return output;

@@ -14,7 +14,6 @@ export function generateProjectModelJson(model: ProjectModel): GeneratedSection[
     commands: model.getCommands(),
     conventions: model.getConventions(),
     overview: model.getOverview(),
-    generated_at: new Date().toISOString()
   };
 
   return [

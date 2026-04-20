@@ -56,27 +56,34 @@ describe('Bug Fix Workflow Definition', () => {
     const s = BUG_FIX_WORKFLOW.steps[0];
     expect(s.id).toBe('locate-error');
     expect(s.agentRole).toBe('diagnostician');
-    expect(s.modelTier).toBe('free');
+    expect(s.modelTier).toBe('standard');
     expect(s.toolScope).toBe('research');
   });
 
-  it('step 2 is diagnose with standard tier', () => {
+  it('step 2 is diagnose with premium tier', () => {
     const s = BUG_FIX_WORKFLOW.steps[1];
     expect(s.id).toBe('diagnose-root-cause');
+    expect(s.modelTier).toBe('premium');
+  });
+
+  it('step 3 (write-reproduction-test) is TDD step with test_reviewer role', () => {
+    const s = BUG_FIX_WORKFLOW.steps[2];
+    expect(s.id).toBe('write-reproduction-test');
+    expect(s.agentRole).toBe('test_reviewer');
     expect(s.modelTier).toBe('standard');
   });
 
-  it('step 3 (generate-fix) has maxRetries=5 for escalation', () => {
-    const s = BUG_FIX_WORKFLOW.steps[2];
+  it('step 4 (generate-fix) has maxRetries=3 for escalation', () => {
+    const s = BUG_FIX_WORKFLOW.steps[3];
     expect(s.id).toBe('generate-fix');
-    expect(s.maxRetries).toBe(5);
+    expect(s.maxRetries).toBe(3);
     expect(s.agentRole).toBe('fixer');
     expect(s.toolScope).toBe('implementation');
   });
 
-  it('step 4 (verify-tests) has 300s timeout', () => {
-    const s = BUG_FIX_WORKFLOW.steps[3];
-    expect(s.id).toBe('verify-tests');
+  it('step 5 (verify-fix) has 300s timeout', () => {
+    const s = BUG_FIX_WORKFLOW.steps[4];
+    expect(s.id).toBe('verify-fix');
     expect(s.timeoutMs).toBe(300_000);
   });
 
@@ -120,8 +127,8 @@ describe('Bug Fix Workflow Execution', () => {
     expect(report).toHaveBeenCalledWith(expect.stringContaining('Locating error source'));
     expect(report).toHaveBeenCalledWith(expect.stringContaining('Diagnosing root cause'));
     expect(report).toHaveBeenCalledWith(expect.stringContaining('Generating fix'));
-    expect(report).toHaveBeenCalledWith(expect.stringContaining('Running tests to verify fix'));
-    expect(report).toHaveBeenCalledWith(expect.stringContaining('Generating summary'));
+    expect(report).toHaveBeenCalledWith(expect.stringContaining('Verifying with full suite'));
+    expect(report).toHaveBeenCalledWith(expect.stringContaining('Generating final audit'));
   });
 
   it('passes step results to subsequent steps', async () => {
@@ -163,8 +170,8 @@ describe('Bug Fix Workflow Execution', () => {
     const result = await engine.execute(BUG_FIX_WORKFLOW, makeContext());
 
     expect(result.state).toBe(WorkflowState.PAUSED);
-    // Steps 1, 2 succeed; step 3 fails (after 6 attempts: maxRetries=5 + 1)
-    expect(result.stepResults).toHaveLength(3);
-    expect(result.stepResults[2].status).toBe('failed');
+    // Steps 1, 2, 3 succeed; step 4 fails (after maxRetries=3 escalation attempts)
+    expect(result.stepResults).toHaveLength(4);
+    expect(result.stepResults[3].status).toBe('failed');
   });
 });

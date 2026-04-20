@@ -105,6 +105,7 @@ export const INTENT_PATTERNS: Record<string, IntentPattern[]> = {
     { regex: /\breview\b/i,                                 weight: 0.55, label: 'keyword:review' },
     { regex: /\baudit\b/i,                                  weight: 0.40, label: 'keyword:audit' },
     { regex: /\banalyze\b/i,                                weight: 0.30, label: 'keyword:analyze' },
+    { regex: /\bperformance\b/i,                            weight: 0.35, label: 'keyword:performance' },
     { regex: /\bevaluate\b/i,                               weight: 0.25, label: 'keyword:evaluate' },
     { regex: /\blook at\b/i,                                weight: 0.25, label: 'keyword:look-at' },
     { regex: /\bbefore I (push|merge|commit|ship)\b/i,      weight: 0.45, label: 'signal:before-push' },
@@ -127,10 +128,10 @@ export const INTENT_PATTERNS: Record<string, IntentPattern[]> = {
   ],
 
   document: [
-    { regex: /\bdocument\b/i,                               weight: 0.45, label: 'keyword:document' },
+    { regex: /\bdocument(ation)?\b/i,                       weight: 0.45, label: 'keyword:document' },
     { regex: /\bdocs?\b/i,                                  weight: 0.35, label: 'keyword:docs' },
     { regex: /\bREADME\b/,                                  weight: 0.40, label: 'signal:README' },
-    { regex: /\bAPI docs?\b/i,                              weight: 0.40, label: 'signal:API-docs' },
+    { regex: /\bAPI (docs?|documentation)\b/i,              weight: 0.40, label: 'signal:API-docs' },
     { regex: /\bJSDoc\b/i,                                  weight: 0.40, label: 'signal:JSDoc' },
     { regex: /\bwrite documentation\b/i,                    weight: 0.45, label: 'keyword:write-documentation' },
     { regex: /\bcomments?\b/i,                              weight: 0.35, label: 'keyword:comments' },
@@ -159,7 +160,6 @@ export const INTENT_PATTERNS: Record<string, IntentPattern[]> = {
     { regex: /\bvulnerab|CVE(s)?\b/i,                       weight: 0.45, label: 'signal:vulnerability' },
     { regex: /\boutdated\b/i,                               weight: 0.35, label: 'signal:outdated' },
     { regex: /\bbreaking changes?\b/i,                      weight: 0.30, label: 'signal:breaking-change' },
-    { regex: /\bsecurity audit\b/i,                         weight: 0.40, label: 'signal:security-audit' },
     { regex: /\bReact\b|\bTypeScript\b|\bPrisma\b|\bNext\.js\b|\bExpress\b/, weight: 0.20, label: 'signal:package-name' },
     // npm / yarn / pnpm commands and common package operations
     { regex: /\bnpm (install|i|audit|update|outdated)\b/i,  weight: 0.50, label: 'signal:npm-cmd' },
@@ -217,6 +217,21 @@ export const INTENT_PATTERNS: Record<string, IntentPattern[]> = {
     { regex: /\bclone and run\b|\bhow (do|to) (i )?clone\b/i, weight: 0.45, label: 'signal:clone-run' },
     { regex: /\bshould I read\b|\bwhat.*read\b/i,           weight: 0.25, label: 'signal:what-read' },
     { regex: /\bsetup\b[\s\S]{0,20}?\b(new dev|new hire|project|dev)\b/i, weight: 0.40, label: 'signal:setup-dev' },
+  ],
+
+  audit: [
+    { regex: /\bsecurity audit\b/i,                         weight: 0.70, label: 'signal:security-audit' },
+    { regex: /\bSQL injection\b/i,                          weight: 0.70, label: 'signal:sql-injection' },
+    { regex: /\bpenetration test\b|\bpen test\b/i,          weight: 0.70, label: 'signal:pentest' },
+    { regex: /\bsecurity scan\b/i,                          weight: 0.65, label: 'signal:security-scan' },
+    { regex: /\bXSS\b|\bcross-site scripting\b/i,           weight: 0.65, label: 'signal:xss' },
+    { regex: /\bCSRF\b/i,                                   weight: 0.65, label: 'signal:csrf' },
+    { regex: /\bOWASP\b/i,                                  weight: 0.70, label: 'signal:owasp' },
+    { regex: /\bsecurity vulner/i,                          weight: 0.65, label: 'signal:security-vuln' },
+    { regex: /\bcheck for\b[\s\S]{0,40}?\bvulnerab/i,       weight: 0.65, label: 'signal:check-vuln' },
+    { regex: /\binjection vulnerab/i,                       weight: 0.70, label: 'signal:injection-vuln' },
+    { regex: /\bsecure coding\b/i,                          weight: 0.65, label: 'signal:secure-coding' },
+    { regex: /\bthreat model/i,                             weight: 0.65, label: 'signal:threat-model' },
   ],
 
   // general_chat is the fallback — no patterns. It is returned when no other intent scores >= 0.3.

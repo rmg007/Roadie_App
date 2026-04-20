@@ -225,7 +225,7 @@ describe('dependency intent', () => {
 
   it('detects "security audit"', () => {
     const r = classifier.classify('Do a security audit of our npm dependencies');
-    expect(r.intent).toBe('dependency');
+    expect(r.intent).toBe('audit');
   });
 
   it('detects "outdated"', () => {

@@ -1,4 +1,5 @@
 import * as fs from 'node:fs/promises';
+import * as fsSync from 'node:fs';
 import * as path from 'node:path';
 
 export interface SkillMetadata {
@@ -11,16 +12,64 @@ export interface SkillMetadata {
 
 export class SkillRegistryService {
   private skillsPath: string;
+  /** Cache invalidated on file-system changes */
+  private cache: SkillMetadata[] | null = null;
+  private watcher: fsSync.FSWatcher | null = null;
 
   constructor(basePath: string) {
     // basePath should be the project root
     this.skillsPath = path.join(basePath, 'assets', 'skills');
+    this.startWatcher();
+  }
+
+  /**
+   * Start a file-system watcher on the skills directory.
+   * Whenever a .md file is added/changed/removed, invalidate the skill cache
+   * so the next call to listSkills() / getAllSkills() re-reads from disk.
+   * listSkills() will reflect the change within ≤1 second.
+   */
+  private startWatcher(): void {
+    // Only watch if the directory already exists
+    if (!fsSync.existsSync(this.skillsPath)) return;
+
+    try {
+      this.watcher = fsSync.watch(this.skillsPath, { recursive: true }, (event, filename) => {
+        if (filename && filename.endsWith('.md')) {
+          this.cache = null; // invalidate
+        }
+      });
+      this.watcher.on('error', () => {
+        // Silently stop watching on error — non-critical
+        this.watcher?.close();
+        this.watcher = null;
+      });
+    } catch {
+      // fs.watch may not be available in all environments; skip gracefully
+    }
+  }
+
+  /**
+   * Stop the file-system watcher (call on shutdown).
+   */
+  stopWatcher(): void {
+    this.watcher?.close();
+    this.watcher = null;
+  }
+
+  /**
+   * Alias used by existing callers (index.ts uses listSkills).
+   */
+  async listSkills(): Promise<SkillMetadata[]> {
+    return this.getAllSkills();
   }
 
   /**
    * List all available skills grouped by category.
+   * Results are cached and invalidated automatically when files change.
    */
   async getAllSkills(): Promise<SkillMetadata[]> {
+    if (this.cache !== null) return this.cache;
+
     const skills: SkillMetadata[] = [];
     try {
       const categories = await fs.readdir(this.skillsPath);
@@ -48,6 +97,7 @@ export class SkillRegistryService {
     } catch {
       // Return empty if directory missing
     }
+    this.cache = skills;
     return skills;
   }
 

@@ -52,7 +52,7 @@ export interface PathInstructionFile {
  * Generate per-directory path-instruction files.
  * Returns an array of { filePath, sections } for each qualifying directory.
  */
-export function generatePathInstructions(model: ProjectModel, options?: { simplified?: boolean }): PathInstructionFile[] {
+export function generatePathInstructions(model: ProjectModel, projectRoot?: string, options?: { simplified?: boolean }): PathInstructionFile[] {
   const dirTree = model.getDirectoryStructure();
   if (!dirTree?.children) return [];
 

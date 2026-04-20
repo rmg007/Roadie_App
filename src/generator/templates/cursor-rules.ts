@@ -25,7 +25,7 @@ export const CURSOR_RULES_PATH = '.cursor/rules/project.mdc';
 /** Hard line-count budget to stay within Cursor's rule file size guidelines. */
 const MAX_LINES = 80;
 
-export function generateCursorRules(model: ProjectModel, options?: { simplified?: boolean }): GeneratedSection[] {
+export function generateCursorRules(model: ProjectModel, projectRoot?: string, options?: { simplified?: boolean }): GeneratedSection[] {
   const sections: GeneratedSection[] = [];
 
   const conventions = model.getConventions();
