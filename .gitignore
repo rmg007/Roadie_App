@@ -15,7 +15,12 @@ coverage/
 
 # Runtime
 *.log
+logs/runtime/*
+!logs/runtime/.gitkeep
+
+# Scratch
+scratch/experiments/*.tmp
+scratch/experiments/*.log
 
 # Phase 1.5+
-.github/.roadie/project-model.db
-.github/.roadie/*.json
+.github/.roadie/
