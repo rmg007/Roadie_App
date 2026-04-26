@@ -153,6 +153,7 @@ export class ProjectAnalyzer {
         const localSkills = await this.skillRegistry?.findRelevantSkills(lib.name) || [];
         if (localSkills.length > 0) {
           const skill = localSkills[0];
+          if (!skill) continue;
           const skillKey = `${skill.category}/${skill.name}`;
           if (seenSkills.has(skillKey)) continue;
 
@@ -161,7 +162,7 @@ export class ProjectAnalyzer {
             this.log.info(`Injecting local skill: ${skill.name} (${skill.category})`);
             this.addVerifiedPattern(lib.name, content, `roadie://skills/${skillKey}`);
             seenSkills.add(skillKey);
-            continue; 
+            continue;
           }
         }
 
@@ -170,6 +171,7 @@ export class ProjectAnalyzer {
           const libraries = await this.context7.resolveLibraryId(lib.name, 'Find best docs for current project usage');
           if (libraries.length > 0) {
             const bestLib = libraries[0];
+            if (!bestLib) continue;
             const docs = await this.context7.queryDocs(
               bestLib.libraryId, 
               'Provide a high-level summary of architecture, core API syntax, and major breaking changes.'

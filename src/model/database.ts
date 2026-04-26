@@ -310,13 +310,13 @@ export class RoadieDatabase {
 
   // ---- Conventions CRUD ----
 
-  saveConventions(conventions: any): void {
+  saveConventions(conventions: unknown): void {
     this.db.prepare('INSERT OR REPLACE INTO project_conventions (id, data_json) VALUES (1, ?)').run(
       JSON.stringify(conventions),
     );
   }
 
-  loadConventions(): any | null {
+  loadConventions(): unknown | null {
     try {
       const row = this.db.prepare('SELECT data_json FROM project_conventions WHERE id = 1').get() as { data_json: string } | undefined;
       return row ? JSON.parse(row.data_json) : null;

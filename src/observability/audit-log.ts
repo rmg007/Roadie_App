@@ -10,6 +10,8 @@
  * @depended-on-by file-generator, workflow-engine, index.ts
  */
 
+/* eslint-disable no-restricted-syntax -- Audit logging is intentionally synchronous to preserve event order and durability semantics. */
+
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -30,7 +32,20 @@ export type AuditEventType =
   | 'skill_loaded'
   | 'plugin_loaded'
   | 'config_loaded'
-  | 'dry_run_blocked';
+  | 'dry_run_blocked'
+  | 'cycle_started'
+  | 'cycle_phase_changed'
+  | 'cycle_completed'
+  | 'cycle_failed'
+  | 'checkpoint_started'
+  | 'checkpoint_created'
+  | 'checkpoint_failed'
+  | 'indexing_started'
+  | 'indexing_file_indexed'
+  | 'indexing_file_failed'
+  | 'indexing_skipped'
+  | 'indexing_completed'
+  | 'session_sanitization_completed';
 
 export interface AuditEvent {
   timestamp: string;
@@ -38,8 +53,12 @@ export interface AuditEvent {
   correlationId?: string;
   workflowId?: string;
   stepId?: string;
+  cycleId?: string;
   intent?: string;
   filePath?: string;
+  phase?: string;
+  status?: string;
+  durationMs?: number;
   message?: string;
   metadata?: Record<string, unknown>;
 }
@@ -93,8 +112,29 @@ export class AuditLog {
 
   /** Read all events from today's log. Useful for tests. */
   readToday(): AuditEvent[] {
+    return this.readFile(path.join(this.logDir, `${this.todayKey()}.jsonl`));
+  }
+
+  readLast(limit = 50): AuditEvent[] {
     if (!this.enabled) return [];
-    const filePath = path.join(this.logDir, `${this.todayKey()}.jsonl`);
+    try {
+      const files = fs.readdirSync(this.logDir)
+        .filter((file) => file.endsWith('.jsonl'))
+        .sort();
+      const events = files.flatMap((file) => this.readFile(path.join(this.logDir, file)));
+      return events.slice(-limit);
+    } catch {
+      return [];
+    }
+  }
+
+  readByTypes(types: AuditEventType[], limit = 50): AuditEvent[] {
+    return this.readLast(limit * 4)
+      .filter((event) => types.includes(event.type))
+      .slice(-limit);
+  }
+
+  private readFile(filePath: string): AuditEvent[] {
     try {
       const raw = fs.readFileSync(filePath, 'utf-8');
       return raw
@@ -119,5 +159,9 @@ export function getAuditLog(projectRoot: string, enabled = true): AuditLog {
   if (!instances.has(key)) {
     instances.set(key, new AuditLog(projectRoot, enabled));
   }
-  return instances.get(key)!;
+  const auditLog = instances.get(key);
+  if (!auditLog) {
+    throw new Error(`Failed to initialize audit log for root: ${projectRoot}`);
+  }
+  return auditLog;
 }

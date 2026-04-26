@@ -17,6 +17,9 @@
   "scripts": {
     "build": "tsup src/index.ts --outDir out --clean",
     "build:watch": "npm run build -- --watch",
+    "clean": "node -e \"const fs=require('fs');['out','coverage','logs/runtime'].forEach(p=>{try{fs.rmSync(p,{recursive:true,force:true})}catch(e){}})\"",
+    "rebuild": "npm run clean && npm run build",
+    "verify": "npm run lint && npm run typecheck && npm run test && npm run build",
     "lint": "eslint src --ext ts",
     "lint:fix": "npm run lint -- --fix",
     "format": "prettier --write src",

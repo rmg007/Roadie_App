@@ -26,12 +26,25 @@ import type { RoadieDatabase } from './database';
 
 const DEBOUNCE_MS = 5_000;
 
+function isProjectConventions(value: unknown): value is ProjectConventions {
+  if (typeof value !== 'object' || value === null) return false;
+  const conventions = value as Record<string, unknown>;
+  return (
+    Array.isArray(conventions.techStack) &&
+    Array.isArray(conventions.codingStyle) &&
+    Array.isArray(conventions.namingConventions) &&
+    Array.isArray(conventions.forbidden) &&
+    Array.isArray(conventions.constraints) &&
+    Array.isArray(conventions.recentPatterns)
+  );
+}
+
 export class InMemoryProjectModel implements ProjectModel {
   private techStack: TechStackEntry[] = [];
   private directoryTree: DirectoryNode = { path: '', type: 'directory', children: [] };
   private patterns: DetectedPattern[] = [];
   private commands: ProjectCommand[] = [];
-  private conventions?: ProjectConventions;
+  private conventions: ProjectConventions | undefined;
   private preferences: DeveloperPreferences = { telemetryEnabled: false, autoCommit: false };
   private dirty = false;
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -48,7 +61,8 @@ export class InMemoryProjectModel implements ProjectModel {
     if (root) this.directoryTree = root;
     this.patterns = db.loadPatterns();
     this.commands = db.loadCommands();
-    this.conventions = db.loadConventions() || undefined;
+    const loadedConventions = db.loadConventions();
+    this.conventions = isProjectConventions(loadedConventions) ? loadedConventions : undefined;
   }
 
   // ---- ProjectModel interface ----

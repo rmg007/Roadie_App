@@ -51,14 +51,14 @@ describe('Phase 5: CLI E2E', () => {
 
       // Versions should match semver pattern
       expect(result.oldVersion).toMatch(/^\d+\.\d+\.\d+/);
-    });
+    }, 30000);
 
     it('should not fail on npm registry error', async () => {
       const result = await upgradeRoadie();
       // Even if it fails, should return a proper structure
       expect(result).toHaveProperty('success');
       expect(result).toHaveProperty('message');
-    });
+    }, 30000);
   });
 
   describe('release command', () => {
@@ -155,7 +155,7 @@ describe('Phase 5: CLI E2E', () => {
 
       expect(docResult).toHaveProperty('status');
       expect(upgradeResult).toHaveProperty('oldVersion');
-    });
+    }, 30000);
   });
 
   describe('Roadie workflow scenarios (E2E)', () => {

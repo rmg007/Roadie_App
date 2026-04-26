@@ -1,12 +1,13 @@
 import type { ProjectModel } from '../../types';
+import { ROADIE_SKILLS_DIR } from '../output-paths';
 
 /**
  * @template engineering-rigor
  * @description Skill definition for professional-grade engineering rigor (GSD Protocol).
  */
-export const EngineeringRigorSkill = (model: ProjectModel) => ({
+export const EngineeringRigorSkill = (_model: ProjectModel): { type: 'skill'; path: string; content: string } => ({
   type: 'skill' as const,
-  path: '.roadie/skills/engineering-rigor.md',
+  path: `${ROADIE_SKILLS_DIR}/engineering-rigor.md`,
   content: 
 `---
 name: engineering-rigor

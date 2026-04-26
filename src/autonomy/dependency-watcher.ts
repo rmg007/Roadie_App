@@ -8,6 +8,8 @@
  * @depended-on-by autonomy-loop
  */
 
+/* eslint-disable no-restricted-syntax -- Dependency scans intentionally use synchronous reads to evaluate changes atomically per cycle. */
+
 import * as fs from 'node:fs';
 import * as nodePath from 'node:path';
 import type { Logger } from '../platform-adapters';
@@ -209,8 +211,8 @@ export class DependencyWatcher {
   hasChanged(): boolean {
     const packageJsonPath = nodePath.join(this.projectRoot, 'package.json');
     const lockfiles = ['package-lock.json', 'yarn.lock', 'pnpm-lock.yaml'];
-
-    const allFiles = [packageJsonPath, ...lockfiles.map((f) => nodePath.join(this.projectRoot, f))];
+    void packageJsonPath;
+    void lockfiles;
 
     // Simple check: if lastDeps is empty, we haven't initialized yet
     if (this.lastDeps.size === 0 && this.lastDevDeps.size === 0) {

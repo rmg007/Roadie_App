@@ -12,7 +12,6 @@
 
 import type {
   PersistentProjectModel,
-  ProjectModel,
   TechStackEntry,
   DirectoryNode,
   DetectedPattern,
@@ -157,6 +156,18 @@ export class PersistentProjectModelImpl implements PersistentProjectModel {
   }
 
   // ---- ProjectModel interface ----
+
+  getDirectoryTree(): DirectoryNode | undefined {
+    return this.directoryTree;
+  }
+
+  getConventions(): import('../types').ProjectConventions | undefined {
+    return undefined;
+  }
+
+  getOverview(): string {
+    return '';
+  }
 
   getTechStack(): TechStackEntry[] {
     return this.techStack;

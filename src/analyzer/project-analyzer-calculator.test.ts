@@ -69,7 +69,7 @@ describe('ProjectAnalyzer + FileGenerator — ts-calculator', () => {
     const generator = new FileGenerator(tmpDir);
     const results = await generator.generateAll(model);
 
-    const copilot = results.find((r) => r.type === 'copilot_instructions');
+    const copilot = results.find((r) => r.type === 'roadie_instructions');
     expect(copilot).toBeDefined();
     expect(copilot!.written).toBe(true);
     // Copilot instructions is a minimal ToC that links to modular tech-stack.md
@@ -87,7 +87,7 @@ describe('ProjectAnalyzer + FileGenerator — ts-calculator', () => {
     const generator = new FileGenerator(tmpDir);
     const results = await generator.generateAll(model);
 
-    const copilot = results.find((r) => r.type === 'copilot_instructions');
+    const copilot = results.find((r) => r.type === 'roadie_instructions');
     expect(copilot!.content).toContain('npm run test');
     expect(copilot!.content).toContain('npm run build');
   });

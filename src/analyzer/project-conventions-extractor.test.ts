@@ -32,8 +32,9 @@ describe('ProjectConventionsExtractor', () => {
       techStack: ['TypeScript', 'node.js', 'Vitest'],
       namingConventions: ['Use camelCase for variables', 'Use PascalCase for classes'],
       codingStyle: ['Prefer functional programming', 'Use async/await'],
-      forbidden: undefined,
-      constraints: undefined
+      forbidden: [],
+      constraints: [],
+      recentPatterns: [],
     });
   });
 

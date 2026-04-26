@@ -33,14 +33,21 @@ export class ProjectConventionsExtractor {
   }
 
   private parseClaudeMd(content: string): ProjectConventions {
-    const conventions: ProjectConventions = {};
+    const conventions: ProjectConventions = {
+      techStack: [],
+      codingStyle: [],
+      namingConventions: [],
+      forbidden: [],
+      constraints: [],
+      recentPatterns: [],
+    };
     
     // Simple regex-based extraction for common sections
-    conventions.techStack = this.extractList(content, /###?\s*Tech Stack([\s\S]*?)(?=###?|$)/i);
-    conventions.namingConventions = this.extractList(content, /###?\s*Naming Conventions([\s\S]*?)(?=###?|$)/i);
-    conventions.codingStyle = this.extractList(content, /###?\s*(?:Coding Style|Code Style)([\s\S]*?)(?=###?|$)/i);
-    conventions.forbidden = this.extractList(content, /###?\s*(?:Forbidden|Don't|Anti-patterns)([\s\S]*?)(?=###?|$)/i);
-    conventions.constraints = this.extractList(content, /###?\s*(?:Constraints|Guardrails)([\s\S]*?)(?=###?|$)/i);
+    conventions.techStack = this.extractList(content, /###?\s*Tech Stack([\s\S]*?)(?=###?|$)/i) ?? [];
+    conventions.namingConventions = this.extractList(content, /###?\s*Naming Conventions([\s\S]*?)(?=###?|$)/i) ?? [];
+    conventions.codingStyle = this.extractList(content, /###?\s*(?:Coding Style|Code Style)([\s\S]*?)(?=###?|$)/i) ?? [];
+    conventions.forbidden = this.extractList(content, /###?\s*(?:Forbidden|Don't|Anti-patterns)([\s\S]*?)(?=###?|$)/i) ?? [];
+    conventions.constraints = this.extractList(content, /###?\s*(?:Constraints|Guardrails)([\s\S]*?)(?=###?|$)/i) ?? [];
 
     return conventions;
   }
@@ -49,7 +56,7 @@ export class ProjectConventionsExtractor {
     const match = regex.exec(content);
     if (!match) return undefined;
 
-    const section = match[1];
+    const section = match[1] ?? '';
     const items = section
       .split('\n')
       .map(line => line.trim())

@@ -150,20 +150,22 @@ export class SelfHealer {
       case 'unknown':
       default:
         // Downgrade model tier for retry
-        const downgradedTier = this.downgradeModelTier(fault.currentModelTier);
-        if (downgradedTier !== fault.currentModelTier) {
+        {
+          const downgradedTier = this.downgradeModelTier(fault.currentModelTier);
+          if (downgradedTier !== fault.currentModelTier) {
+            return {
+              type: 'retry_lower_tier',
+              newModelTier: downgradedTier,
+              reason: `Unknown error, retrying with lower tier (${fault.currentModelTier} → ${downgradedTier})`,
+            };
+          }
+
+          // If already on free tier, escalate
           return {
-            type: 'retry_lower_tier',
-            newModelTier: downgradedTier,
-            reason: `Unknown error, retrying with lower tier (${fault.currentModelTier} → ${downgradedTier})`,
+            type: 'escalate_to_human',
+            reason: `Unknown error after ${attemptCount} attempts at lowest model tier`,
           };
         }
-
-        // If already on free tier, escalate
-        return {
-          type: 'escalate_to_human',
-          reason: `Unknown error after ${attemptCount} attempts at lowest model tier`,
-        };
     }
   }
 

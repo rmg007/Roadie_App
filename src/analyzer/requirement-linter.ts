@@ -40,7 +40,8 @@ export class RequirementLinter {
     const matches = Array.from(text.matchAll(VAGUE_PATTERN));
 
     for (const match of matches) {
-      const term = match[1].toLowerCase();
+      const term = (match[1] ?? '').toLowerCase();
+      if (!term) continue;
       const index = match.index || 0;
       const start = Math.max(0, index - 30);
       const end = Math.min(text.length, index + 30);

@@ -18,12 +18,14 @@
  * @depended-on-by edit-tracker, section-manager, file-watcher-manager
  */
 
+/* eslint-disable no-restricted-syntax -- SQLite initialization, backups, and integrity checks intentionally use synchronous filesystem operations. */
+
 import Database from 'better-sqlite3';
 type SqliteDb = Database.Database;
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as nodePath from 'node:path';
-import { RoadieError } from '../shell/errors';
+import { RoadieError, RoadieErrorCode } from '../shell/errors';
 import type { Logger } from '../platform-adapters';
 import { STUB_LOGGER } from '../platform-adapters';
 
@@ -92,6 +94,8 @@ export interface WorkflowSnapshot {
   definition: Record<string, unknown>;
   context: Record<string, unknown>;
   stepResults: Record<string, unknown>[];
+  completedStepIds?: string[];
+  modelTiersUsed?: string[];
   status: string;
   createdAt: string;
   updatedAt: string;
@@ -207,6 +211,7 @@ export class LearningDatabase {
   private get isTrusted(): boolean {
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
+      // @ts-expect-error vscode is optional in Node.js context
       const vscode = require('vscode') as typeof import('vscode');
       return vscode.workspace.isTrusted !== false;
     } catch {
@@ -392,7 +397,7 @@ export class LearningDatabase {
   private safeExec<T>(fn: () => T): T {
     if (!this.isTrusted) {
       throw new RoadieError(
-        'DB_WRITE_FAILED',
+        RoadieErrorCode.DB_WRITE_FAILED,
         'Database writes are blocked: workspace is not trusted.',
       );
     }
@@ -402,7 +407,7 @@ export class LearningDatabase {
       const code = (err as NodeJS.ErrnoException).code;
       if (code === 'ENOSPC' || code === 'EACCES') {
         throw new RoadieError(
-          'DB_WRITE_FAILED',
+          RoadieErrorCode.DB_WRITE_FAILED,
           code === 'ENOSPC'
             ? 'Cannot write to database: disk is full (ENOSPC).'
             : 'Cannot write to database: permission denied (EACCES).',
@@ -825,7 +830,9 @@ function toFileSnapshot(row: {
 function toWorkflowEntry(row: {
   id: number; workflow_type: string; prompt: string; status: string;
   steps_completed: number; steps_total: number; duration_ms: number | null;
-  model_tiers_used: string | null; error_summary: string | null; created_at: string;
+  model_tiers_used: string | null; model_used?: string | null;
+  error_summary: string | null; failure_reason?: string | null;
+  correlation_id?: string | null; cost_usd?: number | null; created_at: string;
 }): WorkflowHistoryEntry {
   return {
     id: row.id,
@@ -836,7 +843,11 @@ function toWorkflowEntry(row: {
     stepsTotal: row.steps_total,
     durationMs: row.duration_ms,
     modelTiersUsed: row.model_tiers_used,
+    modelUsed: row.model_used ?? null,
     errorSummary: row.error_summary,
+    failureReason: row.failure_reason ?? null,
+    correlationId: row.correlation_id ?? null,
+    costUsd: row.cost_usd ?? null,
     createdAt: row.created_at,
   };
 }

@@ -5,7 +5,7 @@
  */
 
 import { execSync } from 'node:child_process';
-import * as fs from 'node:fs';
+import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { z } from 'zod';
 
@@ -29,10 +29,15 @@ function parseSemver(version: string): { major: number; minor: number; patch: nu
   if (!match) {
     throw new Error(`Invalid semver: ${version}`);
   }
+  const [, majorStr, minorStr, patchStr] = match;
+  if (!majorStr || !minorStr || !patchStr) {
+    throw new Error(`Invalid semver: ${version}`);
+  }
+
   return {
-    major: parseInt(match[1], 10),
-    minor: parseInt(match[2], 10),
-    patch: parseInt(match[3], 10),
+    major: parseInt(majorStr, 10),
+    minor: parseInt(minorStr, 10),
+    patch: parseInt(patchStr, 10),
   };
 }
 
@@ -92,7 +97,7 @@ export async function releaseRoadie(bumpType: string): Promise<ReleaseResult> {
 
     // Read current version
     const packagePath = path.resolve(__dirname, '..', '..', 'package.json');
-    const pkg = JSON.parse(fs.readFileSync(packagePath, 'utf-8'));
+    const pkg = JSON.parse(await fs.readFile(packagePath, 'utf-8')) as { version: string };
     const oldVersion = pkg.version;
 
     // Bump version
@@ -100,7 +105,7 @@ export async function releaseRoadie(bumpType: string): Promise<ReleaseResult> {
 
     // Update package.json
     pkg.version = newVersion;
-    fs.writeFileSync(packagePath, JSON.stringify(pkg, null, 2) + '\n', 'utf-8');
+    await fs.writeFile(packagePath, JSON.stringify(pkg, null, 2) + '\n', 'utf-8');
 
     // Commit version bump
     execSync(`git add package.json`, { stdio: 'pipe' });
@@ -121,7 +126,7 @@ export async function releaseRoadie(bumpType: string): Promise<ReleaseResult> {
     }
 
     // Try to create GitHub release (requires gh CLI)
-    let releaseUrl = `https://github.com/rmg007/Roadie_App/releases/tag/v${newVersion}`;
+    const releaseUrl = `https://github.com/rmg007/Roadie_App/releases/tag/v${newVersion}`;
     try {
       execSync(
         `gh release create v${newVersion} --title "Release ${newVersion}" --notes "${changelog.replace(/"/g, '\\"')}"`,

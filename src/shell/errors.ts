@@ -9,7 +9,7 @@ export enum RoadieErrorCode {
 }
 
 export class RoadieError extends Error {
-  constructor(public readonly code: RoadieErrorCode, message: string, public readonly detail?: any) {
+  constructor(public readonly code: RoadieErrorCode, message: string, public readonly detail?: unknown) {
     super(`[${code}] ${message}`);
     this.name = 'RoadieError';
   }

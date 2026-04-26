@@ -39,7 +39,6 @@ export class Context7Client {
 
       return await response.json() as LibraryResult[];
     } catch (error) {
-      console.error('Failed to resolve library via Context7:', error);
       return [];
     }
   }

@@ -1,8 +1,6 @@
 import type { ProjectModel } from '../../types';
 import type { GeneratedSection } from '../section-manager';
 
-export const PROJECT_MODEL_JSON_PATH = '.github/roadie/project-model.json';
-
 /**
  * Generate a machine-readable JSON summary of the project model.
  * This is used by AI agents for high-confidence architectural context.

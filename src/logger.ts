@@ -7,7 +7,7 @@
  * @depended-on-by step-executor, workflow-engine, config-loader
  */
 
-import * as fs from 'node:fs';
+import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { Logger } from './platform-adapters';
 import { getConfig } from './config-loader';
@@ -31,17 +31,17 @@ function redactSensitiveFields(context?: unknown): Record<string, unknown> | und
   const copy = JSON.parse(JSON.stringify(context));
   const sensitiveKeys = ['password', 'apiKey', 'secret', 'token', 'key', 'auth', 'Authorization'];
 
-  function traverse(obj: any): void {
+  function traverse(obj: Record<string, unknown>): void {
     for (const key in obj) {
       if (sensitiveKeys.some((sk) => key.toLowerCase().includes(sk.toLowerCase()))) {
         obj[key] = '***REDACTED***';
       } else if (typeof obj[key] === 'object' && obj[key] !== null) {
-        traverse(obj[key]);
+        traverse(obj[key] as Record<string, unknown>);
       }
     }
   }
 
-  traverse(copy);
+  traverse(copy as Record<string, unknown>);
   return copy;
 }
 
@@ -66,50 +66,49 @@ export class StructuredLogger implements Logger {
     this.maxFileCount = config.logging?.fileMaxCount ?? 10;
 
     // Ensure log directory exists
-    try {
-      fs.mkdirSync(this.logDir, { recursive: true });
-    } catch {
-      /* Silent */
-    }
-
-    this.rotate();
+    void fs.mkdir(this.logDir, { recursive: true })
+      .then(() => this.rotate())
+      .catch(() => {
+        /* Silent */
+      });
   }
 
   /**
    * Rotate log file if it exceeds max size or doesn't exist.
    * Keeps only the last maxFileCount files.
    */
-  private rotate(): void {
+  private async rotate(): Promise<void> {
     const timestamp = new Date().toISOString().split('T')[0];
     const filename = `roadie-${timestamp}.log`;
     this.currentFile = path.join(this.logDir, filename);
 
     try {
-      if (fs.existsSync(this.currentFile)) {
-        const stats = fs.statSync(this.currentFile);
+      try {
+        const stats = await fs.stat(this.currentFile);
         this.currentFileSize = stats.size;
 
         if (this.currentFileSize >= this.maxFileSizeMb * 1024 * 1024) {
           // Rotate to timestamped file
           const backupName = `roadie-${timestamp}-${Date.now()}.log`;
           const backupPath = path.join(this.logDir, backupName);
-          fs.renameSync(this.currentFile, backupPath);
+          await fs.rename(this.currentFile, backupPath);
           this.currentFileSize = 0;
         }
-      } else {
+      } catch {
         this.currentFileSize = 0;
       }
 
       // Cleanup old files (keep only maxFileCount)
-      const files = fs
-        .readdirSync(this.logDir)
+      const files = (await fs.readdir(this.logDir))
         .filter((f) => f.startsWith('roadie-') && f.endsWith('.log'))
         .sort()
         .reverse();
 
       for (let i = this.maxFileCount; i < files.length; i++) {
         try {
-          fs.unlinkSync(path.join(this.logDir, files[i]));
+          const file = files[i];
+          if (!file) continue;
+          await fs.unlink(path.join(this.logDir, file));
         } catch {
           /* Silent */
         }
@@ -138,35 +137,38 @@ export class StructuredLogger implements Logger {
       level,
       module: this.module,
       message,
-      ...(context ? { context: redactSensitiveFields(context) } : {}),
+      ...(context ? { context: redactSensitiveFields(context) as Record<string, unknown> } : {}),
     };
 
     const line = JSON.stringify(entry);
 
     // Write to stdout
-    console.error(line);
+    process.stderr.write(`${line}\n`);
 
     // Write to file
-    try {
-      if (this.currentFile) {
-        fs.appendFileSync(this.currentFile, line + '\n');
-        this.currentFileSize += line.length + 1;
+    if (this.currentFile) {
+      void fs.appendFile(this.currentFile, line + '\n')
+        .then(() => {
+          this.currentFileSize += line.length + 1;
 
-        // Check if we need to rotate
-        if (this.currentFileSize >= this.maxFileSizeMb * 1024 * 1024) {
-          this.rotate();
-        }
-      }
-    } catch {
-      /* Silent */
+          // Check if we need to rotate
+          if (this.currentFileSize >= this.maxFileSizeMb * 1024 * 1024) {
+            return this.rotate();
+          }
+
+          return undefined;
+        })
+        .catch(() => {
+          /* Silent */
+        });
     }
   }
 
-  debug(message: string, detail?: any): void {
+  debug(message: string, detail?: unknown): void {
     this.writeLog('debug', message, detail);
   }
 
-  info(message: string, detail?: any): void {
+  info(message: string, detail?: unknown): void {
     this.writeLog('info', message, detail);
   }
 
@@ -181,11 +183,9 @@ export class StructuredLogger implements Logger {
   setLogFile(filePath: string): void {
     // Allow explicit log file path override
     this.currentFile = filePath;
-    try {
-      fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    } catch {
+    void fs.mkdir(path.dirname(filePath), { recursive: true }).catch(() => {
       /* Silent */
-    }
+    });
   }
 }
 

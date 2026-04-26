@@ -19,9 +19,7 @@ import type { DependencyWatchResult } from './dependency-watcher';
 import { createDependencyWatcher } from './dependency-watcher';
 import type { FailurePatternAnalysis } from './failure-pattern-learner';
 import { createFailurePatternLearner } from './failure-pattern-learner';
-import type { ModelSelectionResult } from './model-selector';
 import { createModelSelector } from './model-selector';
-import type { HealingResult } from './self-healer';
 import { createSelfHealer } from './self-healer';
 
 // ---- Types ----
@@ -325,7 +323,11 @@ export class AutonomyLoop {
   /**
    * Get individual module statistics.
    */
-  getModuleStats() {
+  getModuleStats(): {
+    failurePatterns: FailurePatternAnalysis;
+    modelSelector: { trackedStepTypes: string[] };
+    selfHealer: ReturnType<AutonomyLoop['selfHealer']['getHealingStats']>;
+  } {
     return {
       failurePatterns: this.failurePatternLearner.analyzeFailurePatterns(),
       modelSelector: {

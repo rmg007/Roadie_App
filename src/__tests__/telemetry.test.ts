@@ -71,4 +71,60 @@ describe('Telemetry', () => {
     try { await fs.access(oldFilePath); } catch { exists = false; }
     expect(exists).toBe(false);
   });
+
+  it('redacts sensitive values and omits prompt content when configured', async () => {
+    const { getConfig } = await import('../config-loader');
+    vi.mocked(getConfig).mockReturnValue({
+      telemetry: {
+        enabled: true,
+        profile: 'standard',
+        retainDays: 30,
+        capturePromptContent: false,
+        captureToolArguments: false,
+        maxEventBytes: 65_536,
+      },
+    } as any);
+
+    await telemetry.recordEvent({
+      type: 'tool_call_started',
+      token: 'super-secret-token',
+      prompt: 'please implement this quickly',
+      arguments: {
+        apiKey: 'abc123',
+        q: 'hello',
+      },
+    });
+
+    const events = await telemetry.readToday();
+    const ev = events.find((e) => e.type === 'tool_call_started');
+    expect(ev).toBeDefined();
+    expect(ev?.token).toBe('[REDACTED]');
+    expect(ev?.prompt).toMatchObject({ omitted: true, length: 29 });
+    expect(ev?.arguments).toMatchObject({ omitted: true, keys: ['apiKey', 'q'] });
+  });
+
+  it('stores a compact fallback event when payload exceeds maxEventBytes', async () => {
+    const { getConfig } = await import('../config-loader');
+    vi.mocked(getConfig).mockReturnValue({
+      telemetry: {
+        enabled: true,
+        profile: 'standard',
+        retainDays: 30,
+        capturePromptContent: true,
+        captureToolArguments: true,
+        maxEventBytes: 1_024,
+      },
+    } as any);
+
+    await telemetry.recordEvent({
+      type: 'very_large_event',
+      blob: 'x'.repeat(20_000),
+    });
+
+    const events = await telemetry.readToday();
+    const ev = events.find((e) => e.type === 'very_large_event');
+    expect(ev).toBeDefined();
+    expect(ev?.truncated).toBe(true);
+    expect(typeof ev?.originalSizeBytes).toBe('number');
+  });
 });

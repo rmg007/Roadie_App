@@ -13,14 +13,14 @@ export interface DatabaseAgentResult {
 
 export class DatabaseAgent {
   constructor(
-    private modelProvider: any,
+    private modelProvider: unknown,
     private progress: ProgressReporter,
   ) {}
 
   async generate(
-    requirementsBrief: string,
-    interviewTranscript: string[],
-    conventions: any,
+    _requirementsBrief: string,
+    _interviewTranscript: string[],
+    _conventions: unknown,
   ): Promise<DatabaseAgentResult> {
     return {
       schemaPrisma: '// Stub: database schema generation deferred to Phase 2',

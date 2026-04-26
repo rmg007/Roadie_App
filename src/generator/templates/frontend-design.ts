@@ -1,12 +1,13 @@
 import type { ProjectModel } from '../../types';
+import { ROADIE_SKILLS_DIR } from '../output-paths';
 
 /**
  * @template frontend-design
  * @description Skill definition for distinctive, production-grade frontend design.
  */
-export const FrontendDesignSkill = (model: ProjectModel) => ({
+export const FrontendDesignSkill = (_model: ProjectModel): { type: 'skill'; path: string; content: string } => ({
   type: 'skill' as const,
-  path: '.github/roadie/skills/frontend-design.md',
+  path: `${ROADIE_SKILLS_DIR}/frontend-design.md`,
   content: 
 `---
 name: frontend-design

@@ -66,10 +66,10 @@ export class ChatInbox {
    */
   enqueue(message: string, sessionId?: string): string {
     const id = `inbox-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    const entry: InboxMessage = { id, message, sessionId, enqueuedAt: new Date() };
+    const entry: InboxMessage = { id, message, enqueuedAt: new Date(), ...(sessionId !== undefined ? { sessionId } : {}) };
     this.queue.push(entry);
     this.logger.info(`[ChatInbox] Enqueued message ${id} (queue depth: ${this.queue.length})`);
-    this.drain();
+    void this.drain();
     return id;
   }
 
@@ -98,12 +98,14 @@ export class ChatInbox {
     this.processing = true;
 
     while (this.queue.length > 0) {
-      const entry = this.queue.shift()!;
+      const entry = this.queue.shift();
+      if (!entry) break;
       const startTime = Date.now();
       this.logger.info(`[ChatInbox] Processing message ${entry.id}: "${entry.message.substring(0, 80)}..."`);
 
       try {
-        const proc = processor ?? this._defaultProcessor!;
+        const proc = processor ?? this._defaultProcessor;
+        if (!proc) break;
         const result = await proc(entry);
         const event: InboxCompletionEvent = {
           messageId: entry.id,

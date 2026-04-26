@@ -21,14 +21,14 @@ import type { GeneratedSection } from '../section-manager';
 import { renderConventionsString } from './template-utils';
 
 /** Allows tests to override the timestamp generation. */
-let getTimestampFn = () => new Date().toISOString();
+let getTimestampFn = (): string => new Date().toISOString();
 
 export function setTimestampForTesting(fn: () => string): void {
   getTimestampFn = fn;
 }
 
 export function resetTimestamp(): void {
-  getTimestampFn = () => new Date().toISOString();
+  getTimestampFn = (): string => new Date().toISOString();
 }
 
 export const PATH_INSTRUCTIONS_DIR = '.github/instructions';

@@ -11,11 +11,17 @@
  * @depended-on-by workflow-engine.ts
  */
 
-import * as path from 'node:path';
-import * as fs from 'node:fs';
-import type { WorkflowStep, WorkflowContext, StepResult, ModelTier } from '../types';
+import {
+  DEFAULT_WORKFLOW_EXECUTION_POLICY,
+  type WorkflowStep,
+  type WorkflowContext,
+  type StepResult,
+  type ModelTier,
+  type StepFailureReason,
+} from '../types';
 import type { Logger } from '../platform-adapters';
 import { STUB_LOGGER } from '../platform-adapters';
+import { getConfig } from '../config-loader';
 
 /**
  * Callback invoked by StepExecutor for each attempt.
@@ -27,55 +33,35 @@ export type StepHandlerFn = (
   attemptInfo: { attempt: number; tier: ModelTier; previousError?: string },
 ) => Promise<StepResult>;
 
-/** Check if dry-run mode is enabled via environment variable. */
-function isDryRun(): boolean {
-  return process.env.ROADIE_DRY_RUN === '1';
+const MIN_STEP_TIMEOUT_MS = 1_000;
+
+function resolveContextProjectRoot(context: WorkflowContext): string | undefined {
+  const projectModel = context.projectModel as Partial<WorkflowContext['projectModel']>;
+  if (typeof projectModel.getDirectoryTree === 'function') {
+    const directoryTree = projectModel.getDirectoryTree();
+    if (directoryTree?.path) {
+      return directoryTree.path;
+    }
+  }
+
+  if (typeof projectModel.getDirectoryStructure === 'function') {
+    const directoryStructure = projectModel.getDirectoryStructure();
+    if (directoryStructure?.path) {
+      return directoryStructure.path;
+    }
+  }
+
+  return undefined;
 }
 
-/**
- * Validate that a file path is safe (within project root, no traversal escapes).
- * Checks:
- *   - No `../` segments
- *   - Not an absolute path outside projectRoot
- *   - Not a symlink that escapes projectRoot
- *
- * @returns true if path is safe, false otherwise
- */
-function isPathSafe(filePath: string, projectRoot: string): boolean {
-  try {
-    // Normalize paths to absolute
-    const abs = path.isAbsolute(filePath) ? filePath : path.join(projectRoot, filePath);
-    const normalized = path.normalize(abs);
-    const rootNormalized = path.normalize(projectRoot);
-
-    // Check: does not escape projectRoot
-    if (!normalized.startsWith(rootNormalized)) {
-      return false;
-    }
-
-    // Check: no `../` in the normalized path (double-check)
-    if (normalized.includes('..')) {
-      return false;
-    }
-
-    // Check: if it's a symlink, verify the target is within projectRoot
-    if (fs.existsSync(abs)) {
-      const stats = fs.lstatSync(abs);
-      if (stats.isSymbolicLink()) {
-        const target = fs.readlinkSync(abs);
-        const targetAbs = path.isAbsolute(target) ? target : path.join(path.dirname(abs), target);
-        const targetNormalized = path.normalize(targetAbs);
-        if (!targetNormalized.startsWith(rootNormalized)) {
-          return false;
-        }
-      }
-    }
-
-    return true;
-  } catch {
-    // On any error, deny for safety
-    return false;
+/** Check if dry-run mode is enabled for the active workflow context. */
+function isDryRun(context: WorkflowContext): boolean {
+  const projectRoot = resolveContextProjectRoot(context);
+  if (projectRoot) {
+    return getConfig(projectRoot).dryRun;
   }
+
+  return process.env.ROADIE_DRY_RUN === '1' || process.env.ROADIE_DRY_RUN === 'true';
 }
 
 /** Escalate to the next model tier. Premium cannot escalate further. */
@@ -103,6 +89,19 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, stepId: string): 
   }
 }
 
+function getStepTimeoutMs(step: WorkflowStep, context: WorkflowContext): number {
+  const policy = context.executionPolicy ?? DEFAULT_WORKFLOW_EXECUTION_POLICY;
+  const requestedTimeout = step.timeoutMs;
+  const defaultTimeoutMs = Math.max(MIN_STEP_TIMEOUT_MS, policy.tool.defaultMs);
+  const maxTimeoutMs = Math.max(defaultTimeoutMs, policy.tool.maxMs);
+
+  if (!Number.isFinite(requestedTimeout) || requestedTimeout <= 0) {
+    return defaultTimeoutMs;
+  }
+
+  return Math.max(MIN_STEP_TIMEOUT_MS, Math.min(requestedTimeout, maxTimeoutMs));
+}
+
 export class StepExecutor {
   constructor(private handler: StepHandlerFn, private log: Logger = STUB_LOGGER) {}
 
@@ -119,15 +118,16 @@ export class StepExecutor {
    */
   async executeStep(step: WorkflowStep, context: WorkflowContext): Promise<StepResult> {
     // use this.log
-    const dryRunMode = isDryRun();
+    const dryRunMode = isDryRun(context);
     if (dryRunMode) {
       this.log.info(`[DRY-RUN] Step '${step.id}' would be executed (dry-run mode enabled)`);
     }
 
     const maxAttempts = Math.max(1, (step.maxRetries ?? 0) + 1);
-    const timeoutMs = Math.max(1000, step.timeoutMs ?? 30_000);
+    const timeoutMs = getStepTimeoutMs(step, context);
     let currentTier = step.modelTier;
     let previousError: string | undefined;
+    let lastFailureReason: StepFailureReason | undefined;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       // Check cancellation before each attempt
@@ -140,6 +140,7 @@ export class StepExecutor {
           tokenUsage: { input: 0, output: 0 },
           attempts:   attempt,
           modelUsed:  '',
+          failureReason: 'cancelled',
         };
       }
 
@@ -180,6 +181,7 @@ export class StepExecutor {
 
         // Step returned failure — prepare for retry
         previousError = result.error ?? result.output;
+        lastFailureReason = result.failureReason ?? 'internal';
         if (previousError && previousError.length > 2_000) {
           previousError = previousError.slice(0, 2_000);
         }
@@ -191,8 +193,9 @@ export class StepExecutor {
         // Timeout or unexpected error
         previousError = err instanceof Error ? err.message : String(err);
         const isTimeout = previousError.includes('timed out');
+        lastFailureReason = isTimeout ? 'timeout' : 'internal';
         if (isTimeout) {
-          this.log.warn(`[${step.id}] Attempt ${attempt}/${maxAttempts} timed out (${step.timeoutMs}ms)`);
+          this.log.warn(`[${step.id}] Attempt ${attempt}/${maxAttempts} timed out (${timeoutMs}ms)`);
         } else {
           this.log.error(`[${step.id}] Attempt ${attempt}/${maxAttempts} threw`, err);
         }
@@ -211,6 +214,7 @@ export class StepExecutor {
       attempts:   maxAttempts,
       modelUsed:  '',
       error:      errMsg,
+      failureReason: lastFailureReason ?? 'internal',
     };
   }
 }

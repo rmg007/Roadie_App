@@ -11,9 +11,13 @@
 ## Commands
 - **build**: `npm run build`
 - **build:watch**: `npm run build:watch`
+- **clean**: `npm run clean`
+- **rebuild**: `npm run rebuild`
+- **verify**: `npm run verify`
 - **lint**: `npm run lint`
 - **lint:fix**: `npm run lint:fix`
 - **format**: `npm run format`
+- **typecheck**: `npm run typecheck`
 - **test**: `npm run test`
 - **test:watch**: `npm run test:watch`
 - **test:coverage**: `npm run test:coverage`
@@ -33,9 +37,25 @@
 <!-- roadie:start:repo-map -->
 ## Repository Map
 
+- **assets/** (static)
+- **skills/**
+- **coding/**
+- **composio/**
+- **database/**
+- **document/**
+- **framework/**
+- **specialized/**
+- **docs/**
+- **logs/**
+- **runtime/**
+- **scratch/**
+- **experiments/**
 - **src/** (source)
+- **__tests__/** (test)
 - **analyzer/** (source)
+- **autonomy/** (source)
 - **classifier/** (source)
+- **cli/** (source)
 - **dictionary/** (source)
 - **engine/** (source)
 - **definitions/** (source)
@@ -45,7 +65,32 @@
 - **learning/** (source)
 - **__tests__/** (test)
 - **model/** (source)
+- **observability/** (source)
+- **platform-adapters/** (source)
+- **plugins/** (source)
 - **shell/** (source)
+- **spawner/** (source)
+- **tools/** (source)
+- **test/** (test)
+- **benchmarks/** (test)
+- **e2e/** (test)
+- **fixtures/** (test)
+- **intent-classification/** (test)
+- **mixed-js-ts/** (test)
+- **src/** (source)
+- **nested-monorepo/** (test)
+- **packages/** (test)
+- **core/** (test)
+- **src/** (source)
+- **ui/** (test)
+- **src/** (source)
+- **node-js-nextjs/** (test)
+- **__tests__/** (test)
+- **src/** (source)
+- **ts-calculator/** (test)
+- **src/** (source)
+- **operations/** (source)
+- **test/** (test)
 <!-- roadie:end:repo-map -->
 
 <!-- roadie:start:forbidden -->

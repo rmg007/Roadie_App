@@ -3,9 +3,16 @@ import { CONSOLE_LOGGER, type Logger } from '../platform-adapters';
 
 export interface ScrapeResult {
   markdown: string;
-  metadata?: any;
+  metadata?: unknown;
   success: boolean;
   error?: string;
+}
+
+interface FirecrawlScrapeResponse {
+  success?: boolean;
+  error?: string;
+  markdown?: string;
+  metadata?: unknown;
 }
 
 export class FirecrawlClient {
@@ -36,9 +43,9 @@ export class FirecrawlClient {
 
     try {
       this.log.info(`Firecrawl: Scraping ${url}...`);
-      const response = await this.app.scrapeUrl(url, {
+      const response = await this.app.scrape(url, {
         formats: ['markdown'],
-      });
+      }) as FirecrawlScrapeResponse;
 
       if (!response.success) {
         throw new Error(response.error || 'Unknown error during scrape');
@@ -49,9 +56,10 @@ export class FirecrawlClient {
         metadata: response.metadata,
         success: true,
       };
-    } catch (err: any) {
-      this.log.error(`Firecrawl: Failed to scrape ${url}: ${err.message}`);
-      return { markdown: '', success: false, error: err.message };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.log.error(`Firecrawl: Failed to scrape ${url}: ${message}`);
+      return { markdown: '', success: false, error: message };
     }
   }
 
@@ -75,8 +83,9 @@ export class FirecrawlClient {
       // to provide the URL.
       
       return { markdown: '', success: false, error: 'Search not implemented. Provide a direct URL.' };
-    } catch (err: any) {
-      return { markdown: '', success: false, error: err.message };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { markdown: '', success: false, error: message };
     }
   }
 }

@@ -215,6 +215,15 @@ export const MergeConflictSchema = z.object({
   resolution: z.enum(['append-below', 'auto-merged']), // Append Below is the only strategy
 });
 
+export const SessionStateSchema = z.object({
+  status: z.enum(['idle', 'in_progress', 'completed', 'failed']),
+  currentPhase: z.string().optional(),
+  lastCheckpoint: z.string().optional(),
+  startTime: z.string().datetime({ offset: true }),
+  lastUpdated: z.string().datetime({ offset: true }),
+  filesProcessed: z.array(z.string()),
+});
+
 // =====================================================================
 // Error Schemas
 // =====================================================================

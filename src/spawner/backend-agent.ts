@@ -14,15 +14,15 @@ export interface BackendAgentResult {
 
 export class BackendAgent {
   constructor(
-    private modelProvider: any,
+    private modelProvider: unknown,
     private progress: ProgressReporter,
   ) {}
 
   async generate(
-    requirementsBrief: string,
-    apiSpec: string,
-    databaseSchema: string,
-    conventions: any,
+    _requirementsBrief: string,
+    _apiSpec: string,
+    _databaseSchema: string,
+    _conventions: unknown,
   ): Promise<BackendAgentResult> {
     return {
       routesTS: '// Stub: backend routes generation deferred to Phase 2',

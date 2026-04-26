@@ -15,14 +15,14 @@ export interface FrontendAgentResult {
 
 export class FrontendAgent {
   constructor(
-    private modelProvider: any,
+    private modelProvider: unknown,
     private progress: ProgressReporter,
   ) {}
 
   async generate(
-    requirementsBrief: string,
-    apiSpec: string,
-    conventions: any,
+    _requirementsBrief: string,
+    _apiSpec: string,
+    _conventions: unknown,
   ): Promise<FrontendAgentResult> {
     return {
       pagesTSX: '// Stub: frontend pages generation deferred to Phase 2',

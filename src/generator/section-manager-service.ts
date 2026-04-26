@@ -11,7 +11,7 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { hashContent, mergeSections, type GeneratedSection } from './section-manager.js';
+import { hashContent, type GeneratedSection } from './section-manager.js';
 import type { Logger } from '../platform-adapters';
 import { STUB_LOGGER } from '../platform-adapters';
 

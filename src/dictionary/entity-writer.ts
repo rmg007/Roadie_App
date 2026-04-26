@@ -9,6 +9,7 @@
  */
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
+// @ts-expect-error node:sqlite types not available in this environment
 const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite');
 type SqliteDb = InstanceType<typeof DatabaseSync>;
 import type { Logger } from '../platform-adapters';

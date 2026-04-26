@@ -107,7 +107,8 @@ function enforceBudget(sections: GeneratedSection[], maxLines: number): Generate
 
   // Drop optional sections (coding-standards) until we fit
   while (sections.length > 1) {
-    const last = sections[sections.length - 1]!;
+    const last = sections[sections.length - 1];
+    if (!last) break;
     if (last.id === 'coding-standards') {
       sections.pop();
       const newTotal =

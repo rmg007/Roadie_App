@@ -10,12 +10,8 @@
  * @depended-on-by file-generator.ts
  */
 
-import * as path from 'node:path';
 import type { ProjectModel } from '../../types';
 import type { GeneratedSection } from '../section-manager';
-import { renderConventionsString } from './template-utils';
-
-export const COPILOT_INSTRUCTIONS_PATH = '.roadie/instructions.md';
 
 /**
  * Generates the primary project instruction file (ToC).

@@ -127,7 +127,7 @@ export async function scanDependencies(
       build: 'build', test: 'test', dev: 'dev', start: 'dev',
       lint: 'lint', format: 'format',
     };
-    for (const [name, cmd] of Object.entries(scripts)) {
+    for (const [name] of Object.entries(scripts)) {
       const type = scriptMap[name] ?? 'other';
       commands.push({ name, command: `${pm} run ${name}`, sourceFile: 'package.json', type });
     }

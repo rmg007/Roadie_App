@@ -7,10 +7,10 @@
 
 /** Generic logging levels. */
 export interface Logger {
-  info(message: string, detail?: any): void;
+  info(message: string, detail?: unknown): void;
   warn(message: string, error?: unknown): void;
   error(message: string, error?: unknown): void;
-  debug(message: string, detail?: any): void;
+  debug(message: string, detail?: unknown): void;
   setLogFile?(filePath: string): void;
 }
 
@@ -40,55 +40,59 @@ export const STUB_PROGRESS: ProgressReporter = {
 };
 
 export const CONSOLE_LOGGER: Logger = {
-  info:  (msg) => console.log(`[INFO] ${msg}`),
-  warn:  (msg, err) => console.warn(`[WARN] ${msg}`, err || ''),
-  error: (msg, err) => console.error(`[ERROR] ${msg}`, err || ''),
-  debug: (msg) => console.debug(`[DEBUG] ${msg}`),
+  info: (msg) => process.stderr.write(`[INFO] ${msg}\n`),
+  warn: (msg, err) => process.stderr.write(`[WARN] ${msg}${err ? ` ${String(err)}` : ''}\n`),
+  error: (msg, err) => process.stderr.write(`[ERROR] ${msg}${err ? ` ${String(err)}` : ''}\n`),
+  debug: (msg) => process.stderr.write(`[DEBUG] ${msg}\n`),
 };
 
-import * as fs from 'node:fs';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
 
-const formatLog = (level: string, message: string, error?: any) => {
+const formatLog = (level: string, message: string, error?: unknown): string => {
   const timestamp = new Date().toISOString();
   let line = `[${timestamp}] [${level}] ${message}`;
   if (error) {
-    line += ` | ${typeof error === 'object' ? JSON.stringify(error) : error}`;
+    line += ` | ${typeof error === 'object' ? JSON.stringify(error) : String(error)}`;
   }
   return line;
 };
 
 let logFilePath: string | null = null;
 
-const writeToFile = (line: string) => {
+const writeToFile = (line: string): void => {
   if (logFilePath) {
-    try {
-      fs.appendFileSync(logFilePath, line + '\n');
-    } catch { /* Silent */ }
+    void fs.appendFile(logFilePath, line + '\n').catch(() => {
+      /* Silent */
+    });
   }
 };
 
 export const MCP_LOGGER: Logger = {
   info: (msg, detail) => {
     const line = formatLog('INFO', msg, detail);
-    console.error(line);
+    process.stderr.write(`${line}\n`);
     writeToFile(line);
   },
   warn: (msg, err) => {
     const line = formatLog('WARN', msg, err);
-    console.error(line);
+    process.stderr.write(`${line}\n`);
     writeToFile(line);
   },
   error: (msg, err) => {
     const line = formatLog('ERROR', msg, err);
-    console.error(line);
+    process.stderr.write(`${line}\n`);
     writeToFile(line);
   },
   debug: (msg, detail) => {
     const line = formatLog('DEBUG', msg, detail);
-    console.error(line);
+    process.stderr.write(`${line}\n`);
     writeToFile(line);
   },
-  setLogFile: (path: string) => {
-    logFilePath = path;
+  setLogFile: (filePath: string) => {
+    void fs.mkdir(path.dirname(filePath), { recursive: true }).catch(() => {
+      /* Silent */
+    });
+    logFilePath = filePath;
   }
 };

@@ -37,13 +37,13 @@ describe('FileGenerator', () => {
 
   it('generates copilot-instructions.md with tech stack', async () => {
     const results = await generator.generateAll(model);
-    const copilot = results.find((r) => r.type === 'copilot_instructions');
+    const copilot = results.find((r) => r.type === 'roadie_instructions');
     expect(copilot).toBeDefined();
     expect(copilot!.written).toBe(true);
     expect(copilot!.content).toContain('TypeScript');
 
     // File should exist on disk at the actual path
-    const content = await fs.readFile(path.join(tmpDir, '.roadie', 'instructions.md'), 'utf8');
+    const content = await fs.readFile(path.join(tmpDir, '.claude', 'roadie', 'instructions.md'), 'utf8');
     expect(content).toContain('<!-- roadie:start:roadie-toc -->');
   });
 
@@ -114,7 +114,7 @@ describe('FileGenerator', () => {
   it('creates .github/.roadie/.gitignore', async () => {
     await generator.generateAll(model);
     const gitignore = await fs.readFile(
-      path.join(tmpDir, '.github', '.roadie', '.gitignore'),
+      path.join(tmpDir, '.claude', 'roadie', '.gitignore'),
       'utf8',
     );
     expect(gitignore).toContain('project-model.db');
@@ -122,7 +122,7 @@ describe('FileGenerator', () => {
 
   it('includes commands in copilot-instructions.md', async () => {
     const results = await generator.generateAll(model);
-    const copilot = results.find((r) => r.type === 'copilot_instructions');
+    const copilot = results.find((r) => r.type === 'roadie_instructions');
     expect(copilot!.content).toContain('vitest run');
     expect(copilot!.content).toContain('next build');
   });

@@ -5,7 +5,7 @@
  */
 
 import { execSync } from 'node:child_process';
-import * as fs from 'node:fs';
+import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { z } from 'zod';
@@ -33,7 +33,8 @@ function checkNode(): Check {
   try {
     const version = execSync('node --version', { encoding: 'utf-8' }).trim();
     const match = version.match(/v(\d+)\./);
-    const major = match ? parseInt(match[1], 10) : 0;
+    const majorToken = match?.[1];
+    const major = majorToken ? parseInt(majorToken, 10) : 0;
 
     if (major >= 22) {
       return { name: 'Node.js', status: 'pass', details: `${version}` };
@@ -71,63 +72,68 @@ function checkGit(): Check {
 /**
  * Check MCP configuration presence
  */
-function checkMcpConfig(): Check {
+async function checkMcpConfig(): Promise<Check> {
   const homeDir = os.homedir();
   const claudeConfigPath = path.join(homeDir, '.claude', 'claude_desktop_config.json');
 
-  if (fs.existsSync(claudeConfigPath)) {
-    try {
-      const config = JSON.parse(fs.readFileSync(claudeConfigPath, 'utf-8'));
-      const hasRoadie =
-        config.mcpServers?.roadie ||
-        config.servers?.roadie ||
-        config.mcp?.roadie;
+  try {
+    const content = await fs.readFile(claudeConfigPath, 'utf-8');
+    const config = JSON.parse(content) as {
+      mcpServers?: Record<string, unknown>;
+      servers?: Record<string, unknown>;
+      mcp?: Record<string, unknown>;
+    };
+    const hasRoadie =
+      config.mcpServers?.roadie ||
+      config.servers?.roadie ||
+      config.mcp?.roadie;
 
-      if (hasRoadie) {
-        return {
-          name: 'MCP Config',
-          status: 'pass',
-          details: 'Roadie MCP registered',
-        };
-      }
+    if (hasRoadie) {
       return {
         name: 'MCP Config',
-        status: 'warning',
-        details: 'Claude config found, but Roadie not registered',
-      };
-    } catch {
-      return {
-        name: 'MCP Config',
-        status: 'warning',
-        details: 'Claude config corrupted',
+        status: 'pass',
+        details: 'Roadie MCP registered',
       };
     }
-  }
+    return {
+      name: 'MCP Config',
+      status: 'warning',
+      details: 'Claude config found, but Roadie not registered',
+    };
+  } catch {
+    // If file does not exist, we treat as missing config.
+    const exists = await fs.access(claudeConfigPath).then(() => true).catch(() => false);
+    if (!exists) {
+      return {
+        name: 'MCP Config',
+        status: 'warning',
+        details: 'No Claude config found',
+      };
+    }
 
-  return {
-    name: 'MCP Config',
-    status: 'warning',
-    details: 'No Claude config found',
-  };
+    return {
+      name: 'MCP Config',
+      status: 'warning',
+      details: 'Claude config corrupted',
+    };
+  }
 }
 
 /**
  * Check LearningDatabase accessibility
  */
-function checkLearningDatabase(): Check {
+async function checkLearningDatabase(): Promise<Check> {
   try {
     const globalRoadieDir = path.join(os.homedir(), '.roadie');
     const dbPath = path.join(globalRoadieDir, 'global-model.db');
 
     // Check if .roadie directory is writable
-    if (!fs.existsSync(globalRoadieDir)) {
-      fs.mkdirSync(globalRoadieDir, { recursive: true });
-    }
+    await fs.mkdir(globalRoadieDir, { recursive: true });
 
     // Try writing a temp file
     const testFile = path.join(globalRoadieDir, '.doctor-test');
-    fs.writeFileSync(testFile, 'test', 'utf-8');
-    fs.unlinkSync(testFile);
+    await fs.writeFile(testFile, 'test', 'utf-8');
+    await fs.unlink(testFile);
 
     return {
       name: 'LearningDatabase',
@@ -146,13 +152,13 @@ function checkLearningDatabase(): Check {
 /**
  * Check log file accessibility
  */
-function checkLogFiles(): Check {
+async function checkLogFiles(): Promise<Check> {
   try {
     const logDir = path.join(process.cwd(), '.');
     const testLog = path.join(logDir, '.doctor-test.log');
 
-    fs.writeFileSync(testLog, 'test\n', 'utf-8');
-    fs.unlinkSync(testLog);
+    await fs.writeFile(testLog, 'test\n', 'utf-8');
+    await fs.unlink(testLog);
 
     return {
       name: 'Log Files',
@@ -176,9 +182,9 @@ export async function runDoctor(): Promise<DoctorResult> {
     checkNode(),
     checkNpm(),
     checkGit(),
-    checkMcpConfig(),
-    checkLearningDatabase(),
-    checkLogFiles(),
+    await checkMcpConfig(),
+    await checkLearningDatabase(),
+    await checkLogFiles(),
   ];
 
   const failures = checks.filter((c) => c.status === 'fail').length;

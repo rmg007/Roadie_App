@@ -27,6 +27,7 @@ import { VectorStoreService } from './engine/vector-store-service';
 import { GitService } from './platform-adapters/git-service';
 import { RequirementLinter } from './analyzer/requirement-linter';
 import { SessionTracker } from './engine/session-tracker';
+import { getRuntimeMode, initializeConfig } from './config-loader';
 import { IntentClassifier } from './classifier/intent-classifier';
 import { WorkflowEngine } from './engine/workflow-engine';
 import { StepExecutor } from './engine/step-executor';
@@ -37,6 +38,7 @@ import { REVIEW_WORKFLOW } from './engine/definitions/review';
 import { DOCUMENT_WORKFLOW } from './engine/definitions/document';
 import { DEPENDENCY_WORKFLOW } from './engine/definitions/dependency';
 import { ONBOARD_WORKFLOW } from './engine/definitions/onboard';
+import type { WorkflowDefinition } from './types';
 
 // =====================================================================
 // Config
@@ -62,6 +64,7 @@ export interface ContainerServices {
   configProvider: ConfigProvider;
   context7: Context7Client;
   skillRegistry: SkillRegistryService;
+  firecrawl: FirecrawlClient;
   vectorStore: VectorStoreService;
   git: GitService;
   requirementLinter: RequirementLinter;
@@ -69,7 +72,7 @@ export interface ContainerServices {
   isDryRun: boolean;
   intentClassifier: IntentClassifier;
   workflowEngine: WorkflowEngine;
-  workflowDefinitions: Map<string, any>;
+  workflowDefinitions: Map<string, WorkflowDefinition>;
 }
 
 // =====================================================================
@@ -125,7 +128,8 @@ export async function createMCPContainer(
   modelProvider?: ModelProvider, // Optional, can be injected by MCP server
 ): Promise<Container> {
   const projectRoot = config.projectRoot;
-  const dbPath = config.dbPath ?? path.join(projectRoot, '.github', '.roadie', 'project-model.db');
+  const runtimeConfig = initializeConfig(projectRoot);
+  const dbPath = config.dbPath ?? path.join(projectRoot, '.roadie', 'project-model.db');
 
   let roadieDb = null;
   let learningDb = null;
@@ -159,20 +163,34 @@ export async function createMCPContainer(
   const skillRegistry = new SkillRegistryService(projectRoot);
   const firecrawl = new FirecrawlClient();
   const vectorStore = new VectorStoreService(projectRoot);
-  const git = new GitService(projectRoot);
+  const runtimeMode = getRuntimeMode(projectRoot);
+  const git = new GitService(projectRoot, runtimeMode);
   const requirementLinter = new RequirementLinter(log);
   const sessionTracker = new SessionTracker(projectRoot);
-  const isDryRun = process.env.ROADIE_DRY_RUN === '1' || process.env.ROADIE_DRY_RUN === 'true';
+  const isDryRun = runtimeConfig.dryRun;
 
   const c7Client = new Context7Client();
   const projectModel = new InMemoryProjectModel(roadieDb);
   const projectAnalyzer = new ProjectAnalyzer(projectModel, undefined, learningDb ?? undefined, log, c7Client, skillRegistry, firecrawl);
 
-  const fileGenerator = new FileGenerator(projectRoot, learningDb ?? undefined, fsProvider, log);
+  const fileGenerator = new FileGenerator(projectRoot, learningDb ?? undefined, fsProvider, log, isDryRun);
 
   // Initialize chat-native components
   const intentClassifier = new IntentClassifier(log);
-  const stepExecutor = new StepExecutor(projectModel, modelProvider, log);
+  // Create a step handler that delegates to the model provider
+  const stepHandler: import('./engine/step-executor').StepHandlerFn = async (step, _context, attemptInfo) => {
+    if (!modelProvider) {
+      return { stepId: step.id, status: 'failed' as const, output: 'No model provider available', tokenUsage: { input: 0, output: 0 }, attempts: attemptInfo.attempt, modelUsed: 'none' };
+    }
+    try {
+      const response = await modelProvider.sendRequest(step.modelTier, [{ role: 'user' as const, content: step.promptTemplate }], { modelOptions: { maxTokens: 4000 } });
+      return { stepId: step.id, status: 'success' as const, output: response.text, tokenUsage: { input: response.usage.inputTokens, output: response.usage.outputTokens }, attempts: attemptInfo.attempt, modelUsed: step.modelTier };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { stepId: step.id, status: 'failed' as const, output: message, tokenUsage: { input: 0, output: 0 }, attempts: attemptInfo.attempt, modelUsed: step.modelTier };
+    }
+  };
+  const stepExecutor = new StepExecutor(stepHandler, log);
   const workflowEngine = new WorkflowEngine(stepExecutor, learningDb ?? undefined, log);
 
   // Register workflow definitions
@@ -191,7 +209,14 @@ export async function createMCPContainer(
     projectModel,
     projectAnalyzer,
     fileGenerator,
-    modelProvider: modelProvider!, // Should be provided if model calls are needed
+    modelProvider: modelProvider ?? {
+      selectModels: async () => [],
+      sendRequest: async () => ({
+        text: 'No model provider available',
+        toolCalls: [],
+        usage: { inputTokens: 0, outputTokens: 0 },
+      }),
+    },
     fileSystemProvider: fsProvider,
     configProvider: cfgProvider,
     context7: c7Client,

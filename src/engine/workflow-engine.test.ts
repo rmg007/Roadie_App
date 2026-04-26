@@ -54,6 +54,7 @@ function makeContext(overrides: Partial<WorkflowContext> = {}): WorkflowContext 
       isCancelled: false,
       onCancelled: vi.fn(),
     },
+    isAutonomous: false,
     ...overrides,
   };
 }
@@ -69,7 +70,7 @@ function successResult(stepId: string): StepResult {
   };
 }
 
-function failResult(stepId: string): StepResult {
+function failResult(stepId: string, failureReason?: StepResult['failureReason']): StepResult {
   return {
     stepId,
     status: 'failed',
@@ -78,6 +79,7 @@ function failResult(stepId: string): StepResult {
     attempts: 3,
     modelUsed: 'gpt-4.1',
     error: `Step ${stepId} failed after 3 attempts`,
+    ...(failureReason !== undefined ? { failureReason } : {}),
   };
 }
 
@@ -211,6 +213,36 @@ describe('WorkflowEngine', () => {
     expect(result.summary).toContain('Bug Fix');
     expect(result.summary).toContain('1/1');
     expect(result.summary).toContain('COMPLETED');
+  });
+
+  it('includes structured failure details in the summary when paused', async () => {
+    const handler: StepHandlerFn = vi.fn().mockResolvedValue(failResult('s1', 'timeout'));
+    const engine = createEngine(handler);
+    const result = await engine.execute(
+      makeDefinition([makeStep('s1', 'Step 1', { maxRetries: 0 })], { name: 'Bug Fix' }),
+      makeContext(),
+    );
+
+    expect(result.state).toBe(WorkflowState.PAUSED);
+    expect(result.summary).toContain('Last failure: s1');
+    expect(result.summary).toContain('reason=timeout');
+  });
+
+  it('truncates long failure text in the summary', async () => {
+    const longError = 'x'.repeat(400);
+    const handler: StepHandlerFn = vi.fn().mockResolvedValue({
+      ...failResult('s1', 'internal'),
+      error: longError,
+    });
+    const engine = createEngine(handler);
+    const result = await engine.execute(
+      makeDefinition([makeStep('s1', 'Step 1', { maxRetries: 0 })], { name: 'Bug Fix' }),
+      makeContext(),
+    );
+
+    expect(result.summary).toContain('error=');
+    expect(result.summary).not.toContain(longError);
+    expect(result.summary.length).toBeLessThan(longError.length + 80);
   });
 
   it('does not execute remaining steps after failure', async () => {

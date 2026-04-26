@@ -1,13 +1,12 @@
 import type { ProjectModel } from '../../types';
 import type { GeneratedSection } from '../section-manager';
-
-export const PROMPTS_MD_PATH = '.github/roadie/PROMPTS.md';
+import { ROADIE_AGENTS_DIR } from '../output-paths';
 
 /**
  * Generate a centralized PROMPTS.md index.
  * This file contains a library of copy-pasteable prompts for different agent roles.
  */
-export function generatePromptsMd(model: ProjectModel): GeneratedSection[] {
+export function generatePromptsMd(_model: ProjectModel): GeneratedSection[] {
   const agents = [
     { id: 'diagnostician', name: 'Diagnostician', goal: 'Root cause analysis' },
     { id: 'fixer', name: 'Fixer', goal: 'Bug implementation' },
@@ -19,9 +18,9 @@ export function generatePromptsMd(model: ProjectModel): GeneratedSection[] {
   const lines = agents.map(a => 
     `### 🤖 ${a.name}\n` +
     `**Goal:** ${a.goal}\n` +
-    `**Load Instructions:** \`Read .github/agents/${a.id}.agent.md\`\n` +
+    `**Load Instructions:** \`Read ${ROADIE_AGENTS_DIR}/${a.id}.agent.md\`\n` +
     `**Initial Prompt:**\n` +
-    `> "You are the ${a.name} Specialist. Read your instructions in .github/agents/${a.id}.agent.md and then analyze the current task."`
+    `> "You are the ${a.name} Specialist. Read your instructions in ${ROADIE_AGENTS_DIR}/${a.id}.agent.md and then analyze the current task."`
   );
 
   return [

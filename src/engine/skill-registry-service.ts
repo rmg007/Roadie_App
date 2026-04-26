@@ -130,20 +130,15 @@ export class SkillRegistryService {
    */
   public async addDiscoveredSkill(techName: string, content: string): Promise<void> {
     const discoveredDir = path.join(this.skillsPath, 'discovered');
-    
-    try {
-      // Ensure the discovered directory exists
-      await fs.mkdir(discoveredDir, { recursive: true });
-      
-      const fileName = `${techName.toLowerCase().replace(/\s+/g, '_')}.md`;
-      const filePath = path.join(discoveredDir, fileName);
-      
-      const formattedContent = `# Discovered Skill: ${techName}\n\n> [!NOTE]\n> This skill was autonomously acquired via Firecrawl search and verified by the Roadie Analyzer.\n\n${content}`;
-      
-      await fs.writeFile(filePath, formattedContent, 'utf-8');
-    } catch (err) {
-      console.error(`SkillRegistry: Failed to commit discovered skill: ${err}`);
-      throw err;
-    }
+
+    // Ensure the discovered directory exists
+    await fs.mkdir(discoveredDir, { recursive: true });
+
+    const fileName = `${techName.toLowerCase().replace(/\s+/g, '_')}.md`;
+    const filePath = path.join(discoveredDir, fileName);
+
+    const formattedContent = `# Discovered Skill: ${techName}\n\n> [!NOTE]\n> This skill was autonomously acquired via Firecrawl search and verified by the Roadie Analyzer.\n\n${content}`;
+
+    await fs.writeFile(filePath, formattedContent, 'utf-8');
   }
 }

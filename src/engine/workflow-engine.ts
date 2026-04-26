@@ -25,6 +25,7 @@ import type {
   SerializableWorkflowContext,
   WorkflowSnapshot,
   ProjectModel,
+  ProgressReporter,
 } from '../types';
 import { WorkflowState } from '../types';
 import { StepExecutor } from './step-executor';
@@ -34,10 +35,42 @@ import { BackendAgent } from '../spawner/backend-agent';
 import { FrontendAgent } from '../spawner/frontend-agent';
 import type { Logger } from '../platform-adapters';
 import { STUB_LOGGER } from '../platform-adapters';
-import type { LearningDatabase } from '../learning/learning-database';
+import type { LearningDatabase, WorkflowSnapshot as LearningDbWorkflowSnapshot } from '../learning/learning-database';
 
 // H4: Definition registry for snapshot deserialization
 const WORKFLOW_DEFINITION_REGISTRY: Record<string, WorkflowDefinition> = {};
+type ModelProviderContainer = { modelProvider?: unknown };
+
+function getContextString(context: WorkflowContext, key: string): string {
+  const value = context[key];
+  return typeof value === 'string' ? value : '';
+}
+
+function getContextValue(context: WorkflowContext, key: string): unknown {
+  return context[key];
+}
+
+function getContextOptionalString(context: WorkflowContext, key: string): string | undefined {
+  const value = getContextValue(context, key);
+  return typeof value === 'string' ? value : undefined;
+}
+
+function isWorkflowDefinition(value: unknown): value is WorkflowDefinition {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as { id?: unknown; steps?: unknown };
+  return typeof candidate.id === 'string' && Array.isArray(candidate.steps);
+}
+
+function hasModelProvider(value: unknown): value is ModelProviderContainer {
+  return typeof value === 'object' && value !== null && 'modelProvider' in value;
+}
+
+function getModelProvider(projectModel: ProjectModel): unknown {
+  if (hasModelProvider(projectModel)) {
+    return projectModel.modelProvider ?? { sendRequest: async () => ({ text: '' }) };
+  }
+  return { sendRequest: async () => ({ text: '' }) };
+}
 
 /**
  * Register a workflow definition for later lookup during snapshot resumption.
@@ -87,7 +120,7 @@ export class WorkflowEngine {
   /** Session storage for paused workflows keyed by sessionId */
   private pausedSessions: Map<string, PausedWorkflowSession> = new Map();
   /** Learning database for P4 snapshot persistence (optional) */
-  private learningDb?: LearningDatabase;
+  private learningDb: LearningDatabase | undefined = undefined;
   // H9: Track state per workflow execution (not instance-level)
   private executionState: Map<string, WorkflowState> = new Map();
   private log: Logger;
@@ -184,7 +217,7 @@ export class WorkflowEngine {
           currentStepIndex: i,
           definition,
           context,
-          stepResults: [...stepResults],
+          stepResults: [...(stepResults as StepResult[])],
           modelTiersUsed: [...tiersUsed],
           timestamp: new Date(),
         });
@@ -197,7 +230,7 @@ export class WorkflowEngine {
             currentStepIndex: i,
             definition: definition.id,
             context: this.serializeContext(context),
-            stepResults: [...stepResults],
+            stepResults: [...(stepResults as StepResult[])],
             completedStepIds: stepResults.map((r) => r.stepId),
             modelTiersUsed: [...tiersUsed],
             status: 'paused',
@@ -205,8 +238,7 @@ export class WorkflowEngine {
             updatedAt: new Date().toISOString(),
             threadId,
           };
-          await this.learningDb.saveWorkflowSnapshot(snapshot);
-          this.log.debug(`Workflow snapshot saved for approval: ${definition.id} at step ${i + 1}`);
+          await this.learningDb.saveWorkflowSnapshot(snapshot as unknown as LearningDbWorkflowSnapshot);
         }
 
         this.log.info(
@@ -239,9 +271,9 @@ export class WorkflowEngine {
       let result: StepResult;
       const stepStart = Date.now();
 
-      if (step.type === 'question') {
+      if ((step.type as string) === 'question') {
         result = await this.executeQuestionStep(step, context);
-      } else if (step.agentRole === 'interviewer') {
+      } else if ((step.agentRole as string) === 'interviewer') {
         result = await this.executeInterviewerAgent(step, context);
       } else if (step.type === 'parallel' && step.branches && step.branches.length > 0) {
         this.transition(definition.id, state, WorkflowState.WAITING_PARALLEL);
@@ -264,7 +296,7 @@ export class WorkflowEngine {
 
       // Handle step failure (Self-Healing Escalation)
       if (result.status === 'failed') {
-        if ((step.maxRetries ?? 0) > 0 && step.agentRole !== 'strategist') {
+        if ((step.maxRetries ?? 0) > 0 && (step.agentRole as string) !== 'strategist') {
           this.log.info(`[${definition.id}] Step failed after max retries. Escalating to Strategist for Self-Healing/Plan Refinement.`);
           context.progress.report('🔄 Step failed consistently. Escalating to Strategist to refine the plan...');
           await this.escalateToStrategist(step, context, result.error);
@@ -318,7 +350,7 @@ export class WorkflowEngine {
     };
 
     // Phase 3: Add rollback info if workflow failed and checkpoint exists
-    if ((state === WorkflowState.PAUSED || state === WorkflowState.FAILED) && checkpointSha) {
+    if ((state === WorkflowState.PAUSED || (state as string) === 'FAILED') && checkpointSha) {
       workflowResult.rollbackAvailable = true;
       workflowResult.rollbackSha = checkpointSha;
       workflowResult.rollbackCommand = `git reset --hard ${checkpointSha.substring(0, 7)}`;
@@ -393,6 +425,7 @@ export class WorkflowEngine {
           attempts:   1,
           modelUsed:  '',
           error:      errMsg,
+          failureReason: 'internal',
         });
       }
     }
@@ -431,13 +464,13 @@ export class WorkflowEngine {
     try {
       if (agentRole === 'database') {
         const agent = new DatabaseAgent(
-          (context.projectModel as any).modelProvider || { sendRequest: async () => ({ text: '' }) },
+          getModelProvider(context.projectModel),
           context.progress,
         );
         // H2: Forward conventions as final arg
         const result = await agent.generate(
           context.requirementsBrief || '',
-          context.interviewTranscript || [],
+          (context.interviewTranscript ?? []) as unknown as string[],
           context.conventions,
         );
         context.databaseSchema = result.schemaPrisma;
@@ -452,14 +485,14 @@ export class WorkflowEngine {
         };
       } else if (agentRole === 'backend') {
         const agent = new BackendAgent(
-          (context.projectModel as any).modelProvider || { sendRequest: async () => ({ text: '' }) },
+          getModelProvider(context.projectModel),
           context.progress,
         );
         // H2: Forward conventions as final arg
         const result = await agent.generate(
           context.requirementsBrief || '',
-          (context as any).apiSpec || '',
-          (context as any).databaseSchema || '',
+          getContextString(context, 'apiSpec'),
+          getContextString(context, 'databaseSchema'),
           context.conventions,
         );
         context.backendRoutes = result.routesTS;
@@ -475,13 +508,13 @@ export class WorkflowEngine {
         };
       } else if (agentRole === 'frontend') {
         const agent = new FrontendAgent(
-          (context.projectModel as any).modelProvider || { sendRequest: async () => ({ text: '' }) },
+          getModelProvider(context.projectModel),
           context.progress,
         );
         // H2: Forward conventions as final arg
         const result = await agent.generate(
           context.requirementsBrief || '',
-          (context as any).apiSpec || '',
+          getContextString(context, 'apiSpec'),
           context.conventions,
         );
         context.frontendPages = result.pagesTSX;
@@ -511,6 +544,7 @@ export class WorkflowEngine {
         attempts: 1,
         modelUsed: 'claude',
         error,
+        failureReason: 'internal',
       };
     }
   }
@@ -520,7 +554,7 @@ export class WorkflowEngine {
    * Stores the response in context[responseField] for later steps to use.
    */
   private async executeQuestionStep(
-    step: any,
+    step: unknown,
     context: WorkflowContext,
   ): Promise<StepResult> {
     // use this.log
@@ -552,7 +586,9 @@ export class WorkflowEngine {
     context: WorkflowContext,
   ): Promise<StepResult> {
     // use this.log
-    const modelProvider = (context.projectModel as any)?.modelProvider;
+    const modelProvider = hasModelProvider(context.projectModel)
+      ? context.projectModel.modelProvider
+      : undefined;
     if (!modelProvider) {
       this.log.warn('[interview] ModelProvider not available — falling back to stepExecutor');
       return this.stepExecutor.executeStep(step, context);
@@ -561,12 +597,12 @@ export class WorkflowEngine {
     const result = await interviewer.conduct(context, step.modelTier || 'standard');
 
     // Store interview results in context for downstream steps
-    context.interviewTranscript = result.transcript;
+    context.interviewTranscript = result.transcript as unknown as import('../types').ConversationTurn[];
     context.requirementsBrief = result.requirementsBrief;
     context.interviewConfidence = result.finalConfidence;
 
     this.log.info(
-      `[${context.intent.type}] Interview complete: ${result.totalQuestions} questions, ` +
+      `[${context.intent.intent}] Interview complete: ${result.totalQuestions} questions, ` +
       `${result.finalConfidence}% confidence, stopped by: ${result.stoppedBy}`,
     );
 
@@ -584,7 +620,25 @@ export class WorkflowEngine {
   private buildSummary(definition: WorkflowDefinition, results: StepResult[], state?: WorkflowState): string {
     const succeeded = results.filter((r) => r.status === 'success').length;
     const total = results.length;
-    return `Workflow '${definition.name}': ${succeeded}/${total} steps completed. State: ${state || 'COMPLETED'}`;
+    const summary = `Workflow '${definition.name}': ${succeeded}/${total} steps completed. State: ${state || 'COMPLETED'}`;
+    const failedResults = results.filter((result) => result.status === 'failed');
+    const lastFailedResult = failedResults[failedResults.length - 1];
+
+    if (!lastFailedResult) {
+      return summary;
+    }
+
+    const summarizedError = lastFailedResult.error
+      ? lastFailedResult.error.replace(/\s+/g, ' ').slice(0, 160)
+      : undefined;
+
+    const failureParts = [
+      `Last failure: ${lastFailedResult.stepId}`,
+      lastFailedResult.failureReason ? `reason=${lastFailedResult.failureReason}` : undefined,
+      summarizedError ? `error=${summarizedError}` : undefined,
+    ].filter((part): part is string => part !== undefined);
+
+    return `${summary}. ${failureParts.join(', ')}`;
   }
 
   /**
@@ -736,9 +790,9 @@ export class WorkflowEngine {
       let result: StepResult;
       const stepStart = Date.now();
 
-      if (step.type === 'question') {
+      if ((step.type as string) === 'question') {
         result = await this.executeQuestionStep(step, context);
-      } else if (step.agentRole === 'interviewer') {
+      } else if ((step.agentRole as string) === 'interviewer') {
         result = await this.executeInterviewerAgent(step, context);
       } else if (step.type === 'parallel' && step.branches && step.branches.length > 0) {
         this.transition(workflowId, state, WorkflowState.WAITING_PARALLEL);
@@ -750,7 +804,7 @@ export class WorkflowEngine {
       }
 
       const stepMs = Date.now() - stepStart;
-      stepResults.push(result);
+      (stepResults as StepResult[]).push(result);
 
       // Track model tier
       if (result.modelUsed) {
@@ -824,18 +878,25 @@ export class WorkflowEngine {
    * Extracts safe, serializable fields only — no function refs or provider objects.
    */
   private serializeContext(context: WorkflowContext): SerializableWorkflowContext {
-    return {
+    const serialized: SerializableWorkflowContext = {
       prompt: context.prompt,
       intent: context.intent,
       projectModel: { tech: 'unknown' }, // Minimal projection
-      interviewTranscript: context.interviewTranscript,
-      requirementsBrief: context.requirementsBrief,
-      interviewConfidence: context.interviewConfidence,
-      databaseSchema: (context as any).databaseSchema,
-      backendRoutes: (context as any).backendRoutes,
-      backendAuth: (context as any).backendAuth,
-      frontendPages: (context as any).frontendPages,
+      ...(context.interviewTranscript !== undefined ? { interviewTranscript: context.interviewTranscript } : {}),
+      ...(context.requirementsBrief !== undefined ? { requirementsBrief: context.requirementsBrief } : {}),
+      ...(context.interviewConfidence !== undefined ? { interviewConfidence: context.interviewConfidence } : {}),
     };
+
+    const databaseSchema = getContextOptionalString(context, 'databaseSchema');
+    if (databaseSchema !== undefined) serialized.databaseSchema = databaseSchema;
+    const backendRoutes = getContextOptionalString(context, 'backendRoutes');
+    if (backendRoutes !== undefined) serialized.backendRoutes = backendRoutes;
+    const backendAuth = getContextOptionalString(context, 'backendAuth');
+    if (backendAuth !== undefined) serialized.backendAuth = backendAuth;
+    const frontendPages = getContextOptionalString(context, 'frontendPages');
+    if (frontendPages !== undefined) serialized.frontendPages = frontendPages;
+
+    return serialized;
   }
 
   /**
@@ -844,24 +905,24 @@ export class WorkflowEngine {
    */
   private deserializeContext(
     json: SerializableWorkflowContext,
-    progress: ReturnType<typeof getLogger> extends any ? any : never,
+    progress: ProgressReporter,
     projectModel?: ProjectModel,
   ): WorkflowContext {
-    // For typing simplicity: accept progress as any since it's a ProgressReporter mock
     return {
       prompt: json.prompt,
       intent: json.intent,
       projectModel: projectModel || ({} as ProjectModel), // H3: Use passed projectModel
       progress,
-      cancellation: { isCancelled: false },
-      interviewTranscript: json.interviewTranscript,
-      requirementsBrief: json.requirementsBrief,
-      interviewConfidence: json.interviewConfidence,
-      databaseSchema: json.databaseSchema,
-      backendRoutes: json.backendRoutes,
-      backendAuth: json.backendAuth,
-      frontendPages: json.frontendPages,
-    };
+      cancellation: { isCancelled: false, onCancelled: (_cb: () => void) => {} },
+      isAutonomous: false,
+      ...(json.interviewTranscript !== undefined ? { interviewTranscript: json.interviewTranscript } : {}),
+      ...(json.requirementsBrief !== undefined ? { requirementsBrief: json.requirementsBrief } : {}),
+      ...(json.interviewConfidence !== undefined ? { interviewConfidence: json.interviewConfidence } : {}),
+      ...(json.databaseSchema !== undefined ? { databaseSchema: json.databaseSchema } : {}),
+      ...(json.backendRoutes !== undefined ? { backendRoutes: json.backendRoutes } : {}),
+      ...(json.backendAuth !== undefined ? { backendAuth: json.backendAuth } : {}),
+      ...(json.frontendPages !== undefined ? { frontendPages: json.frontendPages } : {}),
+    } as WorkflowContext;
   }
 
   /**
@@ -875,7 +936,7 @@ export class WorkflowEngine {
    */
   async resumeFromSnapshot(
     snapshotId: string,
-    progress: any, // ProgressReporter type
+    progress: ProgressReporter,
     projectModel?: ProjectModel,
   ): Promise<WorkflowResult> {
     // use this.log
@@ -884,10 +945,11 @@ export class WorkflowEngine {
       throw new Error('Learning database not configured for snapshot resumption');
     }
 
-    const snapshot = await this.learningDb.loadWorkflowSnapshot(snapshotId);
-    if (!snapshot) {
+    const snapshotRaw = await this.learningDb.loadWorkflowSnapshot(snapshotId);
+    if (!snapshotRaw) {
       throw new Error(`Snapshot not found: ${snapshotId}`);
     }
+    const snapshot = snapshotRaw as unknown as WorkflowSnapshot;
 
     const {
       workflowId,
@@ -895,15 +957,17 @@ export class WorkflowEngine {
       context: serialized,
       currentStepIndex,
       stepResults,
-      status,
       completedStepIds,
       modelTiersUsed,
     } = snapshot;
 
     // H4: Look up full definition from registry using the ID
-    const definition = typeof definitionId === 'string'
-      ? getWorkflowDefinitionById(definitionId)
-      : (definitionId as any); // Fallback for legacy snapshots with full definition
+    let definition: WorkflowDefinition | null = null;
+    if (typeof definitionId === 'string') {
+      definition = getWorkflowDefinitionById(definitionId);
+    } else if (isWorkflowDefinition(definitionId)) {
+      definition = definitionId;
+    }
 
     if (!definition) {
       throw new Error(`Workflow definition not found for ID: ${definitionId}`);
@@ -912,8 +976,8 @@ export class WorkflowEngine {
     this.log.info(`[${workflowId}] Resuming from snapshot ${snapshotId} at step ${currentStepIndex + 1}`);
 
     // Reconstruct context with fresh progress/cancellation and proper projectModel (H3)
-    const context = this.deserializeContext(serialized, progress, projectModel);
-    context.previousStepResults = [...stepResults];
+    const context = this.deserializeContext(serialized as SerializableWorkflowContext, progress, projectModel);
+    context.previousStepResults = [...(stepResults as StepResult[])];
 
     // Continue execution loop from next step
     const totalSteps = definition.steps.length;
@@ -951,7 +1015,7 @@ export class WorkflowEngine {
           currentStepIndex: i,
           definition,
           context,
-          stepResults: [...stepResults],
+          stepResults: [...(stepResults as StepResult[])],
           modelTiersUsed: [...tiersUsed],
           timestamp: new Date(),
         });
@@ -980,9 +1044,9 @@ export class WorkflowEngine {
       let result: StepResult;
       const stepStart = Date.now();
 
-      if (step.type === 'question') {
+      if ((step.type as string) === 'question') {
         result = await this.executeQuestionStep(step, context);
-      } else if (step.agentRole === 'interviewer') {
+      } else if ((step.agentRole as string) === 'interviewer') {
         result = await this.executeInterviewerAgent(step, context);
       } else if (step.type === 'parallel' && step.branches && step.branches.length > 0) {
         this.transition(workflowId, state, WorkflowState.WAITING_PARALLEL);
@@ -1027,14 +1091,14 @@ export class WorkflowEngine {
           definition: workflowId, // H4: Store definition ID, not full object
           context: this.serializeContext(context),
           stepResults: [...stepResults],
-          completedStepIds: Array.from(currentCompletedIds),
+          completedStepIds: Array.from(currentCompletedIds) as string[],
           modelTiersUsed: Array.from(tiersUsed),
           status: 'saved',
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-          threadId: (snapshot as any).threadId || 'unknown',
+          threadId: snapshot.threadId || 'unknown',
         };
-        await this.learningDb.saveWorkflowSnapshot(intermediateSnapshot);
+        await this.learningDb.saveWorkflowSnapshot(intermediateSnapshot as unknown as LearningDbWorkflowSnapshot);
         this.log.debug(`Workflow snapshot saved: ${workflowId} at step ${i + 1}`);
       }
 
@@ -1057,7 +1121,7 @@ export class WorkflowEngine {
     return {
       workflowId,
       state,
-      stepResults,
+      stepResults: stepResults as StepResult[],
       duration: totalMs,
       modelTiersUsed: [...tiersUsed],
       summary: `Snapshot resumed: ${succeeded}/${totalSteps} steps completed.`,
@@ -1087,19 +1151,22 @@ export class WorkflowEngine {
       id: `healing-${step.id}`,
       name: `Self-Healing for ${step.name}`,
       type: 'sequential',
-      agentRole: 'strategist' as any,
+      agentRole: 'strategist' as unknown as WorkflowStep['agentRole'],
       modelTier: 'premium',
       toolScope: 'research',
       contextScope: 'full',
       promptTemplate: `<role>You are a Principal Strategist.</role>\n<task>\nAnalyze why the previous step failed and refine the plan.\n</task>\n<context>\nFailed Step: {failed_step}\nError: {error}\n</context>`,
+      timeoutMs: 60_000,
+      maxRetries: 0,
     };
 
     // Use a simplified handler for the strategist recovery
-    const healingResult = await this.stepExecutor.executeStep(strategistStep, {
+    const healingContext: WorkflowContext = {
       ...context,
       failed_step: step.name,
       error,
-    } as any);
+    };
+    const healingResult = await this.stepExecutor.executeStep(strategistStep, healingContext);
 
     if (healingResult.status === 'success') {
       context.refinedPlan = healingResult.output;

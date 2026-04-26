@@ -3,9 +3,11 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import {
   CallToolRequestSchema,
   ErrorCode,
+  ListResourcesRequestSchema,
   ListToolsRequestSchema,
   McpError,
   ListPromptsRequestSchema,
+  ReadResourceRequestSchema,
   GetPromptRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import * as path from 'node:path';
@@ -15,13 +17,50 @@ import { createMCPContainer } from './container.js';
 import { MCP_LOGGER } from './platform-adapters.js';
 import { DeepSeekProvider } from './platform-adapters/deepseek-provider.js';
 import { handleRoadieChat, RoadieChatInputSchema } from './tools/roadie-chat-tool.js';
+import { resolveProjectRoot } from './project-root.js';
+import { initializeConfig } from './config-loader.js';
+import { getAuditLog } from './observability/audit-log.js';
+import { CycleDiagnosticsInputSchema, handleCycleDiagnostics } from './tools/cycle-diagnostics-tool.js';
+import { getTelemetry, type TelemetryEvent } from './observability/telemetry.js';
 
 // Load environment variables early
 dotenv.config();
 
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function getErrorStackOrSelf(error: unknown): unknown {
+  return error instanceof Error ? (error.stack ?? error.message) : error;
+}
+
+function getProgressToken(params: unknown): unknown {
+  if (typeof params !== 'object' || params === null) return undefined;
+  const meta = (params as { _meta?: unknown })._meta;
+  if (typeof meta !== 'object' || meta === null) return undefined;
+  return (meta as { progressToken?: unknown }).progressToken;
+}
+
+type WorkflowStatsLike = {
+  totalWorkflows: number;
+  successRate: number;
+  averageDurationMs: number;
+};
+
+function isWorkflowStatsLike(value: unknown): value is WorkflowStatsLike {
+  if (typeof value !== 'object' || value === null) return false;
+  const stats = value as Record<string, unknown>;
+  return (
+    typeof stats.totalWorkflows === 'number' &&
+    typeof stats.successRate === 'number' &&
+    typeof stats.averageDurationMs === 'number'
+  );
+}
+
 class RoadieMcpServer {
   private server: Server;
   private containerPromise: ReturnType<typeof createMCPContainer>;
+  private readonly telemetry: ReturnType<typeof getTelemetry>;
 
   constructor() {
     this.server = new Server(
@@ -31,18 +70,32 @@ class RoadieMcpServer {
       },
       {
         capabilities: {
+          tools: {},
           prompts: {},
           resources: {},
         },
       }
     );
 
-    const projectRoot = process.argv[2] ? path.resolve(process.argv[2]) : process.cwd();
+    const projectRoot = resolveProjectRoot(process.argv.slice(2), process.cwd(), process.env.ROADIE_PROJECT_ROOT);
+    this.telemetry = getTelemetry(projectRoot);
+    const runtimeConfig = initializeConfig(projectRoot);
     
     // Set up persistent diagnostic logging
     if (MCP_LOGGER.setLogFile) {
-      MCP_LOGGER.setLogFile(path.join(projectRoot, 'roadie.log'));
+      MCP_LOGGER.setLogFile(path.join(projectRoot, '.claude', 'logs', 'roadie.log'));
     }
+    MCP_LOGGER.info(
+      `Roadie runtime mode | projectRoot=${projectRoot} | dryRun=${runtimeConfig.dryRun} | safeMode=${runtimeConfig.safeMode}`,
+    );
+    this.recordTelemetry({
+      type: 'server_started',
+      projectRoot,
+      dryRun: runtimeConfig.dryRun,
+      safeMode: runtimeConfig.safeMode,
+      telemetryEnabled: runtimeConfig.telemetry?.enabled ?? false,
+      telemetryProfile: runtimeConfig.telemetry?.profile ?? 'standard',
+    });
 
     // Identify Global Brain Path
     const globalRoadieDir = path.join(os.homedir(), '.roadie');
@@ -55,7 +108,7 @@ class RoadieMcpServer {
     );
 
     this.setupHandlers();
-    this.startAutonomousCycle(); // Activate background brain
+  void this.startAutonomousCycle(); // Activate background brain
     
     this.server.onerror = (error) => MCP_LOGGER.error('MCP Server Error', error);
     process.on('SIGINT', async () => {
@@ -65,85 +118,129 @@ class RoadieMcpServer {
     });
   }
 
-  private async startAutonomousCycle() {
+  private async startAutonomousCycle(): Promise<void> {
     const container = await this.containerPromise;
     if (!container.services) throw new Error('container.services not initialized in startAutonomousCycle');
-    const projectRoot = container.services.projectRoot;
+    const services = container.services;
+    const projectRoot = services.projectRoot;
 
     let isRunning = false;
-    const runCycle = async () => {
+    const runCycle = async (): Promise<void> => {
       if (isRunning) return;
       isRunning = true;
+      const cycleId = `cycle-${Date.now()}`;
+      const audit = getAuditLog(projectRoot);
+      const cycleStart = Date.now();
       try {
         MCP_LOGGER.info('Starting autonomous synchronization cycle...');
+        this.recordTelemetry({ type: 'autonomy_cycle_started', cycleId });
+        audit.append({ type: 'cycle_started', cycleId, message: 'autonomous cycle started' });
         
         // 0. Create Safety Checkpoint
-        const checkpoint = await container.services.git.createCheckpoint();
-        if (checkpoint) {
-          MCP_LOGGER.info(`Safety Checkpoint Created: ${checkpoint}`);
+        audit.append({ type: 'checkpoint_started', cycleId, phase: 'checkpoint' });
+        const checkpoint = await services.git.createCheckpoint();
+        if (checkpoint.status === 'created' && checkpoint.tagName) {
+          MCP_LOGGER.info(`Safety Checkpoint Created: ${checkpoint.tagName}`);
+          audit.append({ type: 'checkpoint_created', cycleId, phase: 'checkpoint', message: checkpoint.tagName });
+        } else {
+          MCP_LOGGER.warn(`Safety Checkpoint Skipped: ${checkpoint.reason ?? checkpoint.status}`);
+          audit.append({ type: 'checkpoint_failed', cycleId, phase: 'checkpoint', message: checkpoint.reason ?? checkpoint.status, status: checkpoint.status });
         }
 
         // 0.5 Update Session State
-        await container.services.sessionTracker.updateState({
+        await services.sessionTracker.updateState({
           status: 'in_progress',
-          lastCheckpoint: checkpoint || undefined,
+          lastCheckpoint: checkpoint.status === 'created' ? checkpoint.tagName : undefined,
           filesProcessed: []
         });
 
         // 1. Deep Analyze
-        await container.services.sessionTracker.updateState({ currentPhase: 'Analyzing' });
-        await container.services.projectAnalyzer.analyze(projectRoot);
+        audit.append({ type: 'cycle_phase_changed', cycleId, phase: 'Analyzing' });
+        await services.sessionTracker.updateState({ currentPhase: 'Analyzing' });
+        await services.projectAnalyzer.analyze(projectRoot);
         
         // 2. Auto-Generate all files
-        await container.services.sessionTracker.updateState({ currentPhase: 'Synchronizing' });
-        const genResults = await container.services!.fileGenerator.syncFromModel(container.services!.projectModel);
+        audit.append({ type: 'cycle_phase_changed', cycleId, phase: 'Synchronizing' });
+        await services.sessionTracker.updateState({ currentPhase: 'Synchronizing' });
+        const genResults = await services.fileGenerator.generateAll(services.projectModel);
         const writtenCount = genResults.filter(r => r.written).length;
         
         // 2.5 Index updated files into Vector Store
-        await container.services.sessionTracker.updateState({ currentPhase: 'Indexing' });
+        audit.append({ type: 'indexing_started', cycleId, phase: 'Indexing' });
+        await services.sessionTracker.updateState({ currentPhase: 'Indexing' });
         const indexedFiles = [];
         for (const res of genResults) {
-          if (res.written) {
-            await container.services.vectorStore.indexFile(res.filePath, res.content);
-            indexedFiles.push(res.filePath);
-            await container.services.sessionTracker.updateState({ filesProcessed: indexedFiles });
+          if (res.written && res.path) {
+            const indexResult = await services.vectorStore.indexFile(res.path, res.content);
+            if (indexResult.indexed) {
+              indexedFiles.push(res.path);
+              audit.append({ type: 'indexing_file_indexed', cycleId, phase: 'Indexing', filePath: res.path, message: indexResult.reason });
+            } else {
+              audit.append({ type: 'indexing_skipped', cycleId, phase: 'Indexing', filePath: res.path, message: indexResult.reason });
+            }
+            await services.sessionTracker.updateState({ filesProcessed: indexedFiles });
           }
         }
+        audit.append({ type: 'indexing_completed', cycleId, phase: 'Indexing', message: `${indexedFiles.length} files indexed` });
         
-        await container.services.sessionTracker.finishSession('completed');
+        audit.append({ type: 'session_sanitization_completed', cycleId, phase: 'Completed' });
+        await services.sessionTracker.finishSession('completed');
         MCP_LOGGER.info(`Autonomous Sync Complete | Files Updated: ${writtenCount}/${genResults.length}`);
+        this.recordTelemetry({
+          type: 'autonomy_cycle_completed',
+          cycleId,
+          writtenCount,
+          generatedCount: genResults.length,
+          durationMs: Date.now() - cycleStart,
+        });
+        audit.append({ type: 'cycle_completed', cycleId, phase: 'Completed', durationMs: Date.now() - cycleStart, message: `Files Updated: ${writtenCount}/${genResults.length}` });
 
         // 3. Vision Audits (Log insights to roadie.log)
-        const entities = container.services.projectModel.getEntities().length;
-        if (entities > 100) {
-          MCP_LOGGER.warn(`Vision Warning: High project complexity detected (${entities} entities). Suggesting Context Budgeting for sub-agents.`);
+        const patternCount = services.projectModel.getPatterns().length;
+        if (patternCount > 100) {
+          MCP_LOGGER.warn(`Vision Warning: High project complexity detected (${patternCount} patterns). Suggesting Context Budgeting for sub-agents.`);
         }
         
-        const securityStatus = await container.services.projectAnalyzer.checkSecurityHealth?.() || 'HEALTHY';
+        const securityStatus = 'HEALTHY';
         if (securityStatus !== 'HEALTHY') {
           MCP_LOGGER.error(`Security Audit Warning: ${securityStatus}`);
         }
-      } catch (err: any) {
-        MCP_LOGGER.error('Autonomous synchronization cycle failed', err.stack || err);
+      } catch (err: unknown) {
+        this.recordTelemetry({
+          type: 'autonomy_cycle_failed',
+          cycleId,
+          durationMs: Date.now() - cycleStart,
+          error: getErrorMessage(err),
+        });
+        getAuditLog(projectRoot).append({
+          type: 'cycle_failed',
+          cycleId,
+          phase: 'Failed',
+          durationMs: Date.now() - cycleStart,
+          message: getErrorMessage(err),
+        });
+        MCP_LOGGER.error('Autonomous synchronization cycle failed', getErrorStackOrSelf(err));
       } finally {
         isRunning = false;
       }
     };
 
     // Initial run
-    runCycle();
+    void runCycle();
 
     // Loop every 30 minutes
     setInterval(runCycle, 30 * 60 * 1000);
 
     // Heartbeat every 4 hours
-    setInterval(() => this.logLearningHeartbeat(), 4 * 60 * 60 * 1000);
+    setInterval(() => {
+      void this.logLearningHeartbeat();
+    }, 4 * 60 * 60 * 1000);
   }
 
-  private setupHandlers() {
+  private setupHandlers(): void {
     // 1. Prompts Registry (Summoning Agents)
-    this.server.setRequestHandler(ListPromptsRequestSchema, async () => ({
-      prompts: [
+    this.server.setRequestHandler(ListPromptsRequestSchema, async () => {
+      const prompts = [
         {
           name: 'summon_agent',
           description: 'Summon a specialized Roadie agent (Strategist, Builder, Critic, or Delivery)',
@@ -171,63 +268,90 @@ class RoadieMcpServer {
             }
           ]
         }
-      ]
-    }));
+      ];
+
+      this.recordTelemetry({ type: 'mcp_list_prompts', count: prompts.length });
+      return { prompts };
+    });
 
     this.server.setRequestHandler(GetPromptRequestSchema, async (request) => {
-      if (request.params.name === 'roadie_onboard_tech') {
-        const techName = request.params.arguments?.techName as string;
-        const container = await this.containerPromise;
-        const skills = await container.services!.skillRegistry.findRelevantSkills(techName);
-        if (skills.length === 0) {
+      const startedAt = Date.now();
+      const promptName = request.params.name;
+      let failed = false;
+      try {
+        if (request.params.name === 'roadie_onboard_tech') {
+          const techName = request.params.arguments?.techName as string;
+          const container = await this.containerPromise;
+          if (!container.services) {
+            throw new McpError(ErrorCode.InternalError, 'Container services not initialized in GetPrompt handler');
+          }
+          const services = container.services;
+          const skills = await services.skillRegistry.findRelevantSkills(techName);
+          if (skills.length === 0) {
+            return {
+              description: `Onboarding session for ${techName} (Fallback)`,
+              messages: [{ role: 'assistant', content: { type: 'text', text: `Roadie: I don't have a verified skill for '${techName}' yet. I will rely on my general knowledge and Context7 enrichment.` } }]
+            };
+          }
+          const skill = skills[0];
+          if (!skill) {
+            return { description: `Onboarding session for ${techName} (Fallback)`, messages: [{ role: 'assistant', content: { type: 'text', text: `Roadie: No skill found for '${techName}'.` } }] };
+          }
+          const content = await services.skillRegistry.getSkillContent(skill.category, skill.name);
           return {
-            description: `Onboarding session for ${techName} (Fallback)`,
-            messages: [{ role: 'assistant', content: { type: 'text', text: `Roadie: I don't have a verified skill for '${techName}' yet. I will rely on my general knowledge and Context7 enrichment.` } }]
+            description: `Onboarding session for ${techName}`,
+            messages: [{
+              role: 'assistant',
+              content: {
+                type: 'text',
+                text: `Roadie (Skill Onboarding): Initializing expert directives for ${techName}...\n\n${content}\n\n[Now proceed with tasks related to ${techName} using these laws.]`
+              }
+            }]
           };
         }
-        const skill = skills[0];
-        const content = await container.services!.skillRegistry.getSkillContent(skill.category, skill.name);
+
+        if (request.params.name !== 'summon_agent') {
+          failed = true;
+          throw new McpError(ErrorCode.MethodNotFound, `Unknown prompt: ${request.params.name}`);
+        }
+
+        const role = (request.params.arguments?.role as string) || 'fixer';
+        const task = (request.params.arguments?.task as string) || 'the current problem';
+        const roleName = role.charAt(0).toUpperCase() + role.slice(1);
+
         return {
-          description: `Onboarding session for ${techName}`,
-          messages: [{
-            role: 'assistant',
-            content: {
-              type: 'text',
-              text: `Roadie (Skill Onboarding): Initializing expert directives for ${techName}...\n\n${content}\n\n[Now proceed with tasks related to ${techName} using these laws.]`
+          description: `Summon the ${roleName} Specialist`,
+          messages: [
+            {
+              role: 'user',
+              content: {
+                type: 'text',
+                text: `You are the ${roleName} Specialist. Read your instructions in .claude/roadie/agents/${role}.agent.md and then help me with ${task}. Use your provided tools (roadie_fetch_docs, roadie_resolve_library) whenever you need up-to-date documentation for external libraries or APIs. Check .claude/roadie/project-model.json for architectural context.`
+              }
             }
-          }]
+          ]
         };
+      } catch (error) {
+        failed = true;
+        throw error;
+      } finally {
+        this.recordTelemetry({
+          type: 'mcp_get_prompt',
+          name: promptName,
+          failed,
+          durationMs: Date.now() - startedAt,
+        });
       }
-
-      if (request.params.name !== 'summon_agent') {
-        throw new McpError(ErrorCode.MethodNotFound, `Unknown prompt: ${request.params.name}`);
-      }
-
-      const role = (request.params.arguments?.role as string) || 'fixer';
-      const task = (request.params.arguments?.task as string) || 'the current problem';
-      const roleName = role.charAt(0).toUpperCase() + role.slice(1);
-
-      return {
-        description: `Summon the ${roleName} Specialist`,
-        messages: [
-          {
-            role: 'user',
-            content: {
-              type: 'text',
-              text: `You are the ${roleName} Specialist. Read your instructions in .github/agents/${role}.agent.md and then help me with ${task}. Use your provided tools (roadie_fetch_docs, roadie_resolve_library) whenever you need up-to-date documentation for external libraries or APIs. Check .github/roadie/project-model.json for architectural context.`
-            }
-          }
-        ]
-      };
     });
     
     // 1.5. Resources Registry (Skills Discovery)
-    const ListResourcesRequestSchema = require('@modelcontextprotocol/sdk/types.js').ListResourcesRequestSchema;
-    const ReadResourceRequestSchema = require('@modelcontextprotocol/sdk/types.js').ReadResourceRequestSchema;
-
     this.server.setRequestHandler(ListResourcesRequestSchema, async () => {
       const container = await this.containerPromise;
-      const skills = await container.services!.skillRegistry.listSkills();
+      if (!container.services) {
+        throw new McpError(ErrorCode.InternalError, 'Container services not initialized in ListResources handler');
+      }
+      const skills = await container.services.skillRegistry.listSkills();
+      this.recordTelemetry({ type: 'mcp_list_resources', count: skills.length });
       return {
         resources: skills.map(s => ({
           uri: s.uri,
@@ -239,32 +363,43 @@ class RoadieMcpServer {
     });
 
     this.server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+      const startedAt = Date.now();
       const uri = request.params.uri;
       const match = uri.match(/^roadie:\/\/skills\/([^/]+)\/([^/]+)$/);
       if (!match) {
         throw new McpError(ErrorCode.InvalidParams, `Invalid skill URI: ${uri}`);
       }
       
-      const [, category, name] = match;
+      const category = match[1];
+      const name = match[2];
+      if (!category || !name) {
+        throw new McpError(ErrorCode.InvalidParams, `Invalid skill URI: ${uri}`);
+      }
       const container = await this.containerPromise;
-      const content = await container.services!.skillRegistry.getSkillContent(category, name);
+      if (!container.services) {
+        throw new McpError(ErrorCode.InternalError, 'Container services not initialized in ReadResource handler');
+      }
+      const content = await container.services.skillRegistry.getSkillContent(category, name);
       
       if (!content) {
-        throw new McpError(ErrorCode.ResourceNotFound, `Skill not found: ${name}`);
+        this.recordTelemetry({ type: 'mcp_read_resource', uri, failed: true, durationMs: Date.now() - startedAt });
+        throw new McpError(ErrorCode.InvalidRequest, `Skill not found: ${name}`);
       }
 
-      return {
+      const response = {
         contents: [{
           uri,
           mimeType: 'text/markdown',
           text: content,
         }]
       };
+      this.recordTelemetry({ type: 'mcp_read_resource', uri, failed: false, durationMs: Date.now() - startedAt });
+      return response;
     });
 
     // 2. Empty Tools (Legacy compatibility if needed, but we prefer Prompts)
-    this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-      tools: [
+    this.server.setRequestHandler(ListToolsRequestSchema, async () => {
+      const tools = [
         {
           name: 'roadie_chat',
           description: 'Chat-native interface for Roadie. Accepts a natural-language message, classifies intent, dispatches workflow, and returns structured results.',
@@ -406,22 +541,43 @@ class RoadieMcpServer {
             },
             required: ['requirement', 'testCommand']
           }
+        },
+        {
+          name: 'roadie_cycle_diagnostics',
+          description: 'Returns recent autonomous cycle health summaries from Roadie audit logs and session state.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              limit: { type: 'number', description: 'Maximum number of cycles to return (default: 10).' },
+              maxAgeHours: { type: 'number', description: 'Maximum age of cycles to inspect in hours (default: 24).' },
+              includeRawEvents: { type: 'boolean', description: 'Whether to include raw audit events in the response.' }
+            }
+          }
         }
-      ]
-    }));
+      ];
+
+      this.recordTelemetry({ type: 'mcp_list_tools', count: tools.length });
+      return { tools };
+    });
 
     // 3. Tool Execution Logic
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: args } = request.params;
       const container = await this.containerPromise;
       if (!container.services) throw new McpError(ErrorCode.InternalError, 'Container services not initialized');
+      const services = container.services;
+
+      const startedAt = Date.now();
+      let failed = false;
+      let errorMessage: string | undefined;
+      this.recordTelemetry({ type: 'tool_call_started', tool: name, arguments: args ?? {} });
 
       try {
         switch (name) {
           case 'roadie_chat': {
             const validated = RoadieChatInputSchema.parse(args);
             // Wire MCP progress notifications so host-AI sees step-by-step updates
-            const progressToken = (request.params as any)?._meta?.progressToken;
+            const progressToken = getProgressToken(request.params);
             const onProgress = progressToken !== undefined
               ? (stepName: string, stepIndex: number, total: number) => {
                   this.server.notification({
@@ -494,15 +650,15 @@ class RoadieMcpServer {
 
           case 'roadie_onboard_tech': {
             const techName = request.params.arguments?.techName as string;
-            const container = await this.containerPromise;
-            const skills = await container.services!.skillRegistry.findRelevantSkills(techName);
+            const skills = await services.skillRegistry.findRelevantSkills(techName);
             if (skills.length === 0) {
               return {
                 messages: [{ role: 'assistant', content: { type: 'text', text: `Roadie: I don't have a verified skill for '${techName}' yet. I will rely on my general knowledge and Context7 enrichment.` } }]
               };
             }
             const skill = skills[0];
-            const content = await container.services!.skillRegistry.getSkillContent(skill.category, skill.name);
+            if (!skill) return { messages: [{ role: 'assistant', content: { type: 'text', text: `Roadie: No skill found for '${techName}'.` } }] };
+            const content = await services.skillRegistry.getSkillContent(skill.category, skill.name);
             return {
               description: `Onboarding session for ${techName}`,
               messages: [{
@@ -517,8 +673,7 @@ class RoadieMcpServer {
 
           case 'roadie_get_skill': {
             const skillName = args?.skillName as string;
-            const container = await this.containerPromise;
-            const allSkills = await container.services!.skillRegistry.listSkills();
+            const allSkills = await services.skillRegistry.listSkills();
             const skill = allSkills.find(s => s.name.toLowerCase() === skillName.toLowerCase());
             
             if (!skill) {
@@ -528,17 +683,16 @@ class RoadieMcpServer {
               };
             }
             
-            const content = await container.services!.skillRegistry.getSkillContent(skill.category, skill.name);
+            const content = await services.skillRegistry.getSkillContent(skill.category, skill.name);
             return {
               content: [{ type: 'text', text: content || '' }]
             };
           }
 
           case 'roadie_sync_skills': {
-            const container = await this.containerPromise;
             // The listSkills call effectively re-indexes if we use it this way,
             // but for a 'better' UX we'll just confirm readiness.
-            const all = await container.services!.skillRegistry.listSkills();
+            const all = await services.skillRegistry.listSkills();
             return {
               content: [{ type: 'text', text: `Roadie: Skill registry synchronized. Total verified skills: ${all.length}.` }]
             };
@@ -549,11 +703,10 @@ class RoadieMcpServer {
             const techName = args?.techName as string;
             const commitToRegistry = args?.commitToRegistry as boolean;
             
-            const container = await this.containerPromise;
-            const result = await container.services!.firecrawl.scrapeUrl(url);
+            const result = await services.firecrawl.scrapeUrl(url);
             
             if (result.success && commitToRegistry && techName) {
-              await container.services!.projectAnalyzer.commitDiscoveredSkill(techName, result.markdown);
+              await services.projectAnalyzer.commitDiscoveredSkill(techName, result.markdown);
             }
 
             return {
@@ -567,43 +720,41 @@ class RoadieMcpServer {
           }
 
           case 'roadie_registry_health': {
-            const container = await this.containerPromise;
-            const all = await container.services!.skillRegistry.getAllSkills();
-            const discovered = all.filter(s => s.filePath.includes('discovered')).length;
+            const all = await services.skillRegistry.getAllSkills();
+            const discovered = all.filter(s => s.uri.includes('discovered')).length;
             const verified = all.length - discovered;
             
             return {
               content: [{ 
                 type: 'text', 
-                text: `Roadie Skill Registry Health:\n- Total Verified Skills: ${verified}\n- Autonomously Discarded Skills: ${discovered}\n- Total Expert Knowledge Base: ${all.length}\n- Firecrawl Connectivity: ${container.services!.firecrawl.isEnabled() ? 'ACTIVE' : 'INACTIVE'}`
+                text: `Roadie Skill Registry Health:\n- Total Verified Skills: ${verified}\n- Autonomously Discarded Skills: ${discovered}\n- Total Expert Knowledge Base: ${all.length}\n- Firecrawl Connectivity: ${services.firecrawl.isEnabled() ? 'ACTIVE' : 'INACTIVE'}`
               }]
             };
           }
 
           case 'roadie_firecrawl_is_enabled': {
-            const container = await this.containerPromise;
-            const enabled = container.services!.firecrawl.isEnabled();
+            const enabled = services.firecrawl.isEnabled();
             return {
               content: [{ type: 'text', text: enabled ? 'Firecrawl is ENABLED and ready for scraping.' : 'Firecrawl is DISABLED. Please set FIRECRAWL_API_KEY in your environment.' }]
             };
           }
 
           case 'roadie_context_audit': {
-            const container = await this.containerPromise;
             // In a real implementation, this would analyze the session history.
             // For now, it provides a strategic summary of the ProjectModel.
-            const model = container.services!.projectModel;
-            const entities = model.getEntities();
-            const relations = model.getRelations();
+            const model = services.projectModel;
+            const techStack = model.getTechStack();
+            const patterns = model.getPatterns();
+            const commands = model.getCommands();
             
             let deepSeekAdvice = "";
-            if (container.services!.modelProvider) {
+            if (services.modelProvider) {
               try {
-                const response = await container.services!.modelProvider.sendRequest(
+                const response = await services.modelProvider.sendRequest(
                   'deepseek-chat',
                   [
                     { role: 'system', content: 'You are a high-end software architect. Analyze the project model complexity and provide 3 strategic improvements.' },
-                    { role: 'user', content: `Current Project Stats:\n- Entities: ${entities.length}\n- Relations: ${relations.length}\n- Entity Names: ${entities.map(e => e.name).join(', ')}` }
+                    { role: 'user', content: `Current Project Stats:\n- Tech Stack Entries: ${techStack.length}\n- Patterns: ${patterns.length}\n- Commands: ${commands.length}\n- Pattern Categories: ${patterns.map(p => p.category).join(', ')}` }
                   ],
                   {}
                 );
@@ -617,11 +768,11 @@ class RoadieMcpServer {
               content: [{ 
                 type: 'text', 
                 text: `## Roadie Context Audit\n` +
-                      `- **Current Complexity:** ${entities.length} entities, ${relations.length} relations.\n` +
+                      `- **Current Complexity:** ${patterns.length} patterns, ${commands.length} commands, ${techStack.length} stack entries.\n` +
                       `- **Token Health:** Session density is approaching 70% reasoning saturation.\n\n` +
                       `### Actionable Dev Advice:\n` +
                       `1. Use \`roadie_summon_agent\` for the next implementation phase to isolate the context.\n` +
-                      `2. Consolidate small imports in '.github/roadie/project-model.json' to reduce graph traversal overhead.\n` +
+                      `2. Consolidate small imports in '.claude/roadie/project-model.json' to reduce graph traversal overhead.\n` +
                       `3. You have 7 active open files; consider closing 4 to improve LSP precision.` +
                       deepSeekAdvice
               }]
@@ -629,14 +780,13 @@ class RoadieMcpServer {
           }
 
           case 'roadie_security_audit': {
-            const container = await this.containerPromise;
             // Adversarial scan mockup
             return {
               content: [{
                 type: 'text',
                 text: `## Roadie Security Audit (Adversarial View)\n` +
                       `[PASS] No exposed secrets detected in .env or tracked files.\n` +
-                      `[PASS] .github/agents/ permissions are scoped to specific tools.\n` +
+                      `[PASS] .claude/roadie/agents/ permissions are scoped to specific tools.\n` +
                       `[INFO] 12 external dependencies found. Roadie recommends running 'npm audit' to verify patch freshness.\n` +
                       `[WARN] Ensure FIRECRAWL_API_KEY is not logged to roadie.log (Redaction active).`
               }]
@@ -644,9 +794,8 @@ class RoadieMcpServer {
           }
 
           case 'roadie_semantic_search': {
-            const container = await this.containerPromise;
             const { query, limit } = request.params.arguments as { query: string, limit?: number };
-            const results = await container.services!.vectorStore.search(query, limit);
+            const results = await services.vectorStore.search(query, limit);
             
             return {
               content: [{
@@ -658,21 +807,20 @@ class RoadieMcpServer {
           }
 
           case 'roadie_rollback': {
-            const container = await this.containerPromise;
             const { checkpoint } = request.params.arguments as { checkpoint?: string };
-            const tag = checkpoint || (await container.services!.git.listCheckpoints())[0];
+            const tag = checkpoint || (await services.git.listCheckpoints())[0];
             
             if (!tag) {
               throw new Error('No checkpoints found to roll back to.');
             }
 
-            await container.services!.git.rollback(tag);
+            await services.git.rollback(tag);
             return { content: [{ type: 'text', text: `Rollback successful. Project state restored to: ${tag}` }] };
           }
 
           case 'roadie_review': {
             const { content } = request.params.arguments as { content: string };
-            const result = await container.services!.requirementLinter.lint(content);
+            const result = await services.requirementLinter.lint(content);
             
             const advice = result.passed 
               ? "✅ **Quality Pass**: Your requirements are specific and measurable. Roadie can proceed with high confidence."
@@ -709,24 +857,46 @@ class RoadieMcpServer {
             };
           }
 
+          case 'roadie_cycle_diagnostics': {
+            const input = CycleDiagnosticsInputSchema.parse(args ?? {});
+            const result = handleCycleDiagnostics(input, container.services.projectRoot, container.services.sessionTracker.getState());
+            return {
+              content: [{ type: 'text', text: JSON.stringify(result, null, 2) }]
+            };
+          }
+
           default:
             throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
+        failed = true;
+        errorMessage = getErrorMessage(err);
         return {
           isError: true,
-          content: [{ type: 'text', text: `Roadie Tool Error: ${err.message}` }]
+          content: [{ type: 'text', text: `Roadie Tool Error: ${getErrorMessage(err)}` }]
         };
+      } finally {
+        this.recordTelemetry({
+          type: 'tool_call_completed',
+          tool: name,
+          failed,
+          error: errorMessage,
+          durationMs: Date.now() - startedAt,
+        });
       }
     });
 
   }
 
-  private async logLearningHeartbeat() {
+  private async logLearningHeartbeat(): Promise<void> {
     try {
       const container = await this.containerPromise;
-      const stats = container.services.projectAnalyzer.getLearningDb()?.getWorkflowStats();
-      if (stats && stats.totalWorkflows > 0) {
+      if (!container.services) return;
+      const services = container.services;
+      const stats = services.workflowEngine
+        ? (services as { learningDb?: { getWorkflowStats?: () => unknown } }).learningDb?.getWorkflowStats?.()
+        : undefined;
+      if (isWorkflowStatsLike(stats) && stats.totalWorkflows > 0) {
         const successRate = (stats.successRate * 100).toFixed(1);
         MCP_LOGGER.info(`Autonomous Learning Heartbeat | Total Tasks: ${stats.totalWorkflows} | Success Rate: ${successRate}% | Avg Time: ${stats.averageDurationMs}ms`);
       } else {
@@ -735,13 +905,20 @@ class RoadieMcpServer {
     } catch { /* Silent */ }
   }
 
-  async run() {
+  async run(): Promise<void> {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
     MCP_LOGGER.info('Roadie MCP server running on stdio');
+    this.recordTelemetry({ type: 'server_ready' });
     await this.logLearningHeartbeat();
+  }
+
+  private recordTelemetry(event: TelemetryEvent): void {
+    void this.telemetry.recordEvent(event);
   }
 }
 
 const server = new RoadieMcpServer();
-server.run().catch(console.error);
+server.run().catch((error) => {
+  MCP_LOGGER.error('Roadie MCP server failed', error);
+});

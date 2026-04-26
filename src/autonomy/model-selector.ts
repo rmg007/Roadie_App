@@ -67,7 +67,8 @@ export class ModelSelector {
       });
     }
 
-    const metrics = this.successMatrix.get(stepType)!;
+    const metrics = this.successMatrix.get(stepType);
+    if (!metrics) return;
     metrics[tier].total++;
     if (succeeded) {
       metrics[tier].successes++;
@@ -80,7 +81,7 @@ export class ModelSelector {
    * Select the best model tier for a step based on history.
    */
   selectModelForStep(context: ModelSelectionContext): ModelSelectionResult {
-    const { stepId, stepType, complexity } = context;
+    const { stepType, complexity } = context;
 
     // Get historical metrics for this step type
     const metrics = this.successMatrix.get(stepType);
@@ -106,6 +107,13 @@ export class ModelSelector {
     // Sort by success rate
     tierRates.sort((a, b) => b.rate - a.rate);
     const recommended = tierRates[0];
+    if (!recommended) {
+      return {
+        selectedTier: 'premium',
+        confidence: 0,
+        reason: 'No historical data available',
+      };
+    }
 
     // Adjust selection based on complexity
     let selectedTier = recommended.tier;
@@ -155,7 +163,7 @@ export class ModelSelector {
       { tier: 'premium' as const, rate: successByTier.premium.rate },
     ];
     rates.sort((a, b) => b.rate - a.rate);
-    const recommendedTier = rates[0].tier;
+    const recommendedTier = rates[0]?.tier ?? 'premium';
 
     // Confidence based on sample size
     const totalSamples = metrics.free.total + metrics.standard.total + metrics.premium.total;

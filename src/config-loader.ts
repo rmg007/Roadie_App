@@ -8,6 +8,8 @@
  * @depended-on-by step-executor, workflow-engine
  */
 
+/* eslint-disable no-restricted-syntax -- Config loading is intentionally synchronous so configuration is available during early startup. */
+
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { z } from 'zod';
@@ -24,6 +26,11 @@ const RoadieConfigSchema = z.object({
   requireApproval: z.array(z.string()).optional().default(['force-push', 'schema-migrate', 'mass-delete']),
   telemetry: z.object({
     enabled: z.boolean().optional().default(false),
+    profile: z.enum(['minimal', 'standard', 'maximum']).optional().default('standard'),
+    retainDays: z.number().int().min(1).max(365).optional().default(30),
+    capturePromptContent: z.boolean().optional().default(false),
+    captureToolArguments: z.boolean().optional().default(true),
+    maxEventBytes: z.number().int().min(1_024).max(1_048_576).optional().default(65_536),
   }).optional().default({}),
   models: z
     .object({
@@ -57,16 +64,27 @@ const RoadieConfigSchema = z.object({
 
 export type RoadieConfig = z.infer<typeof RoadieConfigSchema>;
 
+export interface RuntimeMode {
+  dryRun: boolean;
+  safeMode: boolean;
+}
+
 /**
  * Load configuration from disk and environment.
  * Loads from .roadie/config.json if it exists, then applies env overrides.
  * Warns if sensitive fields (passwords) are found.
  */
-function loadConfig(): RoadieConfig {
+function parseBooleanEnv(value: string | undefined): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (value === '1' || value.toLowerCase() === 'true') return true;
+  if (value === '0' || value.toLowerCase() === 'false') return false;
+  return undefined;
+}
+
+function loadConfig(projectRoot: string): RoadieConfig {
   let config: Partial<RoadieConfig> = {};
 
   // Load from .roadie/config.json if present
-  const projectRoot = process.cwd();
   const configPath = path.join(projectRoot, '.roadie', 'config.json');
 
   if (fs.existsSync(configPath)) {
@@ -83,40 +101,58 @@ function loadConfig(): RoadieConfig {
           'secret' in parsed ||
           'token' in parsed)
       ) {
-        console.warn('[CONFIG] ⚠️  Sensitive fields detected in config.json (password, apiKey, secret, token). These should be set via environment variables only.');
+        process.stderr.write('[CONFIG] Sensitive fields detected in config.json (password, apiKey, secret, token). Set these via environment variables only.\n');
       }
 
       config = parsed;
     } catch (err) {
-      console.warn(`[CONFIG] Failed to load ${configPath}:`, err instanceof Error ? err.message : err);
+      const message = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`[CONFIG] Failed to load ${configPath}: ${message}\n`);
     }
   }
 
   // Apply environment overrides
-  if (process.env.ROADIE_DRY_RUN === '1') {
-    config.dryRun = true;
+  const dryRunOverride = parseBooleanEnv(process.env.ROADIE_DRY_RUN);
+  const safeModeOverride = parseBooleanEnv(process.env.ROADIE_SAFE_MODE);
+
+  if (dryRunOverride !== undefined) {
+    config.dryRun = dryRunOverride;
   }
-  if (process.env.ROADIE_SAFE_MODE === '1') {
-    config.safeMode = true;
+  if (safeModeOverride !== undefined) {
+    config.safeMode = safeModeOverride;
   }
   if (process.env.ROADIE_MAX_RETRIES) {
     config.maxRetries = parseInt(process.env.ROADIE_MAX_RETRIES, 10);
   }
   if (process.env.ROADIE_LOG_LEVEL) {
-    if (!config.logging) config.logging = {};
-    config.logging.level = process.env.ROADIE_LOG_LEVEL as 'debug' | 'info' | 'warn' | 'error';
+    config.logging = {
+      ...(config.logging ?? {} as RoadieConfig['logging']),
+      level: process.env.ROADIE_LOG_LEVEL as 'debug' | 'info' | 'warn' | 'error',
+    } as RoadieConfig['logging'];
   }
   if (process.env.ROADIE_DEFAULT_TIER) {
-    if (!config.models) config.models = {};
-    config.models.defaultTier = process.env.ROADIE_DEFAULT_TIER as 'free' | 'standard' | 'premium';
+    config.models = {
+      ...(config.models ?? {} as RoadieConfig['models']),
+      defaultTier: process.env.ROADIE_DEFAULT_TIER as 'free' | 'standard' | 'premium',
+    } as RoadieConfig['models'];
   }
   if (process.env.ROADIE_TIMEOUT_MS) {
-    if (!config.models) config.models = {};
-    config.models.timeoutMs = parseInt(process.env.ROADIE_TIMEOUT_MS, 10);
+    config.models = {
+      ...(config.models ?? {} as RoadieConfig['models']),
+      timeoutMs: parseInt(process.env.ROADIE_TIMEOUT_MS, 10),
+    } as RoadieConfig['models'];
   }
   if (process.env.ROADIE_TELEMETRY === '1') {
-    if (!config.telemetry) config.telemetry = {};
-    config.telemetry.enabled = true;
+    config.telemetry = {
+      ...(config.telemetry ?? {} as RoadieConfig['telemetry']),
+      enabled: true,
+    } as RoadieConfig['telemetry'];
+  }
+  if (process.env.ROADIE_TELEMETRY_PROFILE) {
+    config.telemetry = {
+      ...(config.telemetry ?? {} as RoadieConfig['telemetry']),
+      profile: process.env.ROADIE_TELEMETRY_PROFILE as 'minimal' | 'standard' | 'maximum',
+    } as RoadieConfig['telemetry'];
   }
 
   // Validate and apply defaults
@@ -124,16 +160,46 @@ function loadConfig(): RoadieConfig {
 }
 
 /** Global config singleton instance. */
-let globalConfig: RoadieConfig | null = null;
+const configCache = new Map<string, RoadieConfig>();
+let activeProjectRoot: string | null = null;
+
+export function initializeConfig(projectRoot: string): RoadieConfig {
+  const resolvedRoot = path.resolve(projectRoot);
+  activeProjectRoot = resolvedRoot;
+  if (!configCache.has(resolvedRoot)) {
+    configCache.set(resolvedRoot, loadConfig(resolvedRoot));
+  }
+  const config = configCache.get(resolvedRoot);
+  if (!config) {
+    throw new Error(`Failed to initialize config for root: ${resolvedRoot}`);
+  }
+  return config;
+}
 
 /**
  * Get the loaded configuration (lazy-loaded singleton).
  */
-export function getConfig(): RoadieConfig {
-  if (!globalConfig) {
-    globalConfig = loadConfig();
+export function getConfig(projectRoot?: string): RoadieConfig {
+  const resolvedRoot = path.resolve(projectRoot ?? activeProjectRoot ?? process.cwd());
+  if (!configCache.has(resolvedRoot)) {
+    configCache.set(resolvedRoot, loadConfig(resolvedRoot));
   }
-  return globalConfig;
+  if (!activeProjectRoot) {
+    activeProjectRoot = resolvedRoot;
+  }
+  const config = configCache.get(resolvedRoot);
+  if (!config) {
+    throw new Error(`Config not found for root: ${resolvedRoot}`);
+  }
+  return config;
+}
+
+export function getRuntimeMode(projectRoot?: string): RuntimeMode {
+  const config = getConfig(projectRoot);
+  return {
+    dryRun: config.dryRun,
+    safeMode: config.safeMode,
+  };
 }
 
 /**
@@ -158,6 +224,16 @@ export function isAutoApproved(operationType: string): boolean {
 /**
  * Reset config singleton (for testing).
  */
-export function resetConfig(): void {
-  globalConfig = null;
+export function resetConfig(projectRoot?: string): void {
+  if (projectRoot) {
+    const resolvedRoot = path.resolve(projectRoot);
+    configCache.delete(resolvedRoot);
+    if (activeProjectRoot === resolvedRoot) {
+      activeProjectRoot = null;
+    }
+    return;
+  }
+
+  configCache.clear();
+  activeProjectRoot = null;
 }

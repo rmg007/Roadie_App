@@ -9,6 +9,8 @@
  * @depended-on-by autonomy-loop
  */
 
+/* eslint-disable no-restricted-syntax -- Drift snapshots intentionally use synchronous file traversal to keep each cycle snapshot atomic. */
+
 import * as fs from 'node:fs';
 import * as nodePath from 'node:path';
 import { createHash } from 'node:crypto';
@@ -151,10 +153,11 @@ export class DriftDetector {
 
     this.lastSnapshot = currentSnapshot;
 
+    const remediationWorkflow = this.determineRemediationWorkflow(changes);
     return {
       drifted: changes.length > 0,
       changes,
-      remediationWorkflow: this.determineRemediationWorkflow(changes),
+      ...(remediationWorkflow !== undefined ? { remediationWorkflow } : {}),
       severity,
     };
   }

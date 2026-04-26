@@ -20,8 +20,6 @@ import * as path from 'node:path';
 import type { ProjectModel } from '../../types';
 import type { GeneratedSection } from '../section-manager';
 
-export const CLAUDE_MD_PATH = 'CLAUDE.md';
-
 /** Hard line-count budget to stay within Claude Code's auto-read window. */
 const MAX_LINES = 120;
 

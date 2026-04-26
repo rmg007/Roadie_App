@@ -102,7 +102,15 @@ export class IntentClassifier {
     }
 
     // sorted.length > 0 is guaranteed by the guard above
-    const topEntry = sorted[0]!;
+    const topEntry = sorted[0];
+    if (!topEntry) {
+      return {
+        intent: 'general_chat',
+        confidence: CONFIDENCE_THRESHOLDS.unknown,
+        signals: [],
+        requiresLLM: true,
+      };
+    }
     const topIntent = topEntry[0];
     const topData = topEntry[1];
 
@@ -162,7 +170,8 @@ export class IntentClassifier {
     //    This prevents zero-score intents from triggering an ambiguous cap
     //    just because the top score is also low but valid.
     if (sorted.length >= 2) {
-      const secondScore = sorted[1]![1].score;
+      const secondEntry = sorted[1];
+      const secondScore = secondEntry?.[1].score ?? 0;
       if (
         secondScore >= 0.2 &&
         topData.score - secondScore < CONFIDENCE_THRESHOLDS.ambiguousDelta

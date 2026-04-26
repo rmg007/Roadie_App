@@ -19,12 +19,10 @@
  */
 
 import * as path from 'node:path';
-import type { ProjectModel, ProjectConventions } from '../../types';
+import type { ProjectModel } from '../../types';
 import type { GeneratedSection } from '../section-manager';
 import type { LearningDatabase } from '../../learning/learning-database';
 import { renderConventionsString } from './template-utils';
-
-export const AGENTS_MD_PATH = 'AGENTS.md';
 
 export function generateAgentDefinitions(model: ProjectModel, learningDb?: LearningDatabase): GeneratedSection[] {
   const sections: GeneratedSection[] = [];
@@ -139,7 +137,10 @@ export function generateAgentDefinitions(model: ProjectModel, learningDb?: Learn
 
     const collectRoles = (node: typeof dirTree): void => {
       if (node.role && node.role in roleGroups) {
-        roleGroups[node.role].push(path.basename(node.path));
+        const group = roleGroups[node.role];
+        if (group) {
+          group.push(path.basename(node.path));
+        }
       }
       node.children?.forEach(collectRoles);
     };

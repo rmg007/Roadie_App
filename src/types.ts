@@ -11,6 +11,8 @@
 
 import type { ProgressReporter, CancellationHandle } from './providers';
 
+export type { ProgressReporter, CancellationHandle };
+
 // =====================================================================
 // Intent Classification Types
 // =====================================================================
@@ -146,6 +148,10 @@ export interface WorkflowStep {
   contextScope?: 'full' | 'stack' | 'structure' | 'commands' | 'patterns';
   /** If true, pause workflow after this step completes successfully and wait for user approval */
   requiresApproval?: boolean;
+  /** If true, this step only reads and does not modify any files */
+  readOnly?: boolean;
+  /** If true, this step follows TDD methodology (write test before fix) */
+  tdd?: boolean;
 }
 
 /**
@@ -165,6 +171,8 @@ export interface WorkflowContext {
   cancellation: CancellationHandle;
   /** If true, bypasses all human-in-the-loop approval gates (Turbo Mode) */
   isAutonomous: boolean;
+  /** Optional execution policy overrides for bounded runtime behavior. */
+  executionPolicy?: WorkflowExecutionPolicy;
   /** Results from previous step (if any) */
   previousStepResults?: StepResult[];
   /** Full transcript from interviewer agent (if conducted) */
@@ -202,7 +210,44 @@ export interface StepResult {
   modelUsed: string;
   /** Human-readable error message if status === 'failed' */
   error?: string;
+  /** Structured failure category for deterministic recovery and reporting. */
+  failureReason?: StepFailureReason;
 }
+
+export type StepFailureReason =
+  | 'timeout'
+  | 'validation'
+  | 'dependency'
+  | 'internal'
+  | 'cancelled';
+
+export interface ExecutionTimeoutBudget {
+  defaultMs: number;
+  maxMs: number;
+}
+
+export interface WorkflowExecutionPolicy {
+  tool: ExecutionTimeoutBudget;
+  network: ExecutionTimeoutBudget;
+  git: ExecutionTimeoutBudget;
+  deterministicRetries: boolean;
+}
+
+export const DEFAULT_WORKFLOW_EXECUTION_POLICY: WorkflowExecutionPolicy = {
+  tool: {
+    defaultMs: 15_000,
+    maxMs: 45_000,
+  },
+  network: {
+    defaultMs: 10_000,
+    maxMs: 30_000,
+  },
+  git: {
+    defaultMs: 8_000,
+    maxMs: 20_000,
+  },
+  deterministicRetries: true,
+};
 
 /**
  * Final result of a complete workflow execution.
@@ -567,15 +612,14 @@ export function isPhase15Active(model: ProjectModel): model is PersistentProject
  * Types of files Roadie generates in Phase 1.
  */
 export type GeneratedFileType =
-  | 'copilot_instructions'  // .github/copilot-instructions.md
+  | 'roadie_instructions'   // .roadie/instructions.md (Claude Code ToC)
   | 'agents_md'             // AGENTS.md at project root
-  | 'agent_operating_rules'  // .github/AGENT_OPERATING_RULES.md
-  | 'granular_agent'        // .github/agents/*.agent.md
-  | 'codebase_dictionary'   // .github/codebase-dictionary.md (M24, Phase 1.5)
+  | 'agent_operating_rules' // .roadie/AGENT_OPERATING_RULES.md
+  | 'granular_agent'        // .roadie/agents/*.agent.md
+  | 'codebase_dictionary'   // .roadie/codebase-dictionary.md (M24, Phase 1.5)
   | 'claude_md'             // CLAUDE.md at workspace root (Claude Code)
-  | 'cursor_rules'          // .cursor/rules/project.mdc (Cursor)
-  | 'cursor_rules_dir'      // .cursor/rules/{dir}.mdc (Cursor per-directory)
-  | 'path_instructions';    // .github/instructions/{dir}.instructions.md (Copilot path-scoped)
+  | 'project_model_json'    // .claude/roadie/project-model.json
+  | 'prompts_md';           // .roadie/prompts.md
 
 /**
  * Reason a generated file was written or skipped.
@@ -751,7 +795,7 @@ export interface SerializableWorkflowDefinition {
     promptTemplate: string;
     timeoutMs: number;
     maxRetries: number;
-    branches?: Array<any>;
+    branches?: Array<unknown>;
     contextScope?: 'full' | 'stack' | 'structure' | 'commands' | 'patterns';
     requiresApproval?: boolean;
   }>;

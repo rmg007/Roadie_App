@@ -51,6 +51,24 @@ describe('AuditLog', () => {
     expect(events).toEqual([]);
   });
 
+  it('readLast returns the most recent events across files', async () => {
+    await log.append({ type: 'cycle_started', cycleId: 'cycle-1' });
+    await log.append({ type: 'cycle_completed', cycleId: 'cycle-1' });
+
+    const events = log.readLast(1);
+    expect(events).toHaveLength(1);
+    expect(events[0].type).toBe('cycle_completed');
+  });
+
+  it('readByTypes filters events by type', async () => {
+    await log.append({ type: 'cycle_started', cycleId: 'cycle-1' });
+    await log.append({ type: 'checkpoint_failed', cycleId: 'cycle-1', message: 'no head' });
+
+    const events = log.readByTypes(['checkpoint_failed'], 5);
+    expect(events).toHaveLength(1);
+    expect(events[0].message).toBe('no head');
+  });
+
   it('pruneOlderThan removes old files (by mtime)', async () => {
     // Manually create a file and set its mtime to 10 days ago
     const auditDir = path.join(tmpDir, '.roadie', 'audit');

@@ -6,20 +6,24 @@
  * @exports main
  */
 
+/* eslint-disable no-console -- CLI intentionally writes user-facing output to stdout/stderr. */
+
 import { z } from 'zod';
-import { installRoadie } from './install.js';
-import { upgradeRoadie } from './upgrade.js';
-import { releaseRoadie, BumpType } from './release.js';
-import { runDoctor } from './doctor.js';
+import { installRoadie, type InstallResult } from './install.js';
+import { upgradeRoadie, type UpgradeResult } from './upgrade.js';
+import { releaseRoadie, type ReleaseResult } from './release.js';
+import { runDoctor, type DoctorResult } from './doctor.js';
 
 const CommandSchema = z.enum(['install', 'upgrade', 'doctor', 'release']);
+type Command = z.infer<typeof CommandSchema>;
+type CliResult = InstallResult | UpgradeResult | DoctorResult | ReleaseResult;
 
 /**
  * Pretty-print result as JSON or human-readable text
  */
 function printResult(
-  command: string,
-  result: any,
+  command: Command,
+  result: CliResult,
   options: { json?: boolean } = {}
 ): void {
   if (options.json) {
@@ -27,29 +31,32 @@ function printResult(
   } else {
     // Human-readable output
     if (command === 'doctor') {
-      console.log(`\n  Status: ${result.status.toUpperCase()}`);
-      console.log(`  ${result.message}\n`);
-      for (const check of result.checks) {
+      const doctorResult = result as DoctorResult;
+      console.log(`\n  Status: ${doctorResult.status.toUpperCase()}`);
+      console.log(`  ${doctorResult.message}\n`);
+      for (const check of doctorResult.checks) {
         const icon =
           check.status === 'pass' ? '✓' : check.status === 'warning' ? '⚠' : '✗';
         console.log(`  ${icon} ${check.name}: ${check.details}`);
       }
       console.log();
     } else if (command === 'release') {
-      const icon = result.success ? '✓' : '✗';
-      console.log(`\n  ${icon} ${result.message}`);
-      if (result.success) {
-        console.log(`  Version: ${result.version}`);
-        console.log(`  URL: ${result.releaseUrl}`);
+      const releaseResult = result as ReleaseResult;
+      const icon = releaseResult.success ? '✓' : '✗';
+      console.log(`\n  ${icon} ${releaseResult.message}`);
+      if (releaseResult.success) {
+        console.log(`  Version: ${releaseResult.version}`);
+        console.log(`  URL: ${releaseResult.releaseUrl}`);
       }
       console.log();
     } else {
-      const icon = result.success ? '✓' : '✗';
-      console.log(`\n  ${icon} ${result.message}`);
-      if (result.host) console.log(`  Host: ${result.host}`);
-      if (result.configPath) console.log(`  Config: ${result.configPath}`);
-      if (result.oldVersion) console.log(`  Old: ${result.oldVersion}`);
-      if (result.newVersion) console.log(`  New: ${result.newVersion}`);
+      const standardResult = result as InstallResult | UpgradeResult;
+      const icon = standardResult.success ? '✓' : '✗';
+      console.log(`\n  ${icon} ${standardResult.message}`);
+      if ('host' in standardResult) console.log(`  Host: ${standardResult.host}`);
+      if ('configPath' in standardResult) console.log(`  Config: ${standardResult.configPath}`);
+      if ('oldVersion' in standardResult) console.log(`  Old: ${standardResult.oldVersion}`);
+      if ('newVersion' in standardResult) console.log(`  New: ${standardResult.newVersion}`);
       console.log();
     }
   }
@@ -113,7 +120,7 @@ export async function main(args: string[]): Promise<void> {
 }
 
 // Run if called directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (require.main === module) {
   main(process.argv.slice(2)).catch((err) => {
     console.error(err);
     process.exit(1);

@@ -1,6 +1,6 @@
 /**
  * @module operating-rules
- * @description Template for .github/AGENT_OPERATING_RULES.md.
+ * @description Template for .roadie/AGENT_OPERATING_RULES.md.
  *   Provides global project constraints and technical laws that all agents 
  *   must follow (e.g., naming standards, architectural anti-patterns).
  */
@@ -8,8 +8,6 @@
 import type { ProjectModel } from '../../types';
 import type { GeneratedSection } from '../section-manager';
 import { renderConventionsString } from './template-utils';
-
-export const OPERATING_RULES_PATH = '.github/AGENT_OPERATING_RULES.md';
 
 export function generateOperatingRules(model: ProjectModel): GeneratedSection[] {
   const sections: GeneratedSection[] = [];
@@ -21,7 +19,7 @@ export function generateOperatingRules(model: ProjectModel): GeneratedSection[] 
     .filter(p => p.category === 'verified_knowledge')
     .map(p => {
       const parts = p.description.split(':');
-      const tech = parts[0].replace('Verified ', '').trim();
+      const tech = (parts[0] ?? 'Unknown').replace('Verified ', '').trim();
       const directive = parts.slice(1).join(':').trim();
       const source = p.evidence.files[0] || 'Unknown';
       return `| **${tech}** | ${source.split('/').pop()?.replace('.md', '') || 'Base'} | ${directive.substring(0, 150)}... | [View Details](${source}) |`;
@@ -141,7 +139,7 @@ export function generateOperatingRules(model: ProjectModel): GeneratedSection[] 
       `- **Git Porcelain Rule:** When checking repository status on large repos, always use \`git status --porcelain -uno\` to avoid IDE/Tool hangups.\n` +
       `- **Surgical Edits:** Prefer small, targeted changes over broad architectural rewrites unless explicitly directed.\n` +
       `- **Read-Before-Edit:** Always read the full content of a file and its relevant neighbors before proposing any modification.\n` +
-      `- **Autonomous Continuity:** Roadie maintains session state in \`.github/.roadie/session-state.json\`. If you detect an interrupted session (status: 'in_progress'), check the \`currentPhase\` and \`filesProcessed\` list to resume accurately.`
+      `- **Autonomous Continuity:** Roadie maintains session state in \`.claude/roadie/session-state.json\`. If you detect an interrupted session (status: 'in_progress'), check the \`currentPhase\` and \`filesProcessed\` list to resume accurately.`
 
   });
 

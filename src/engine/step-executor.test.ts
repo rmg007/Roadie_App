@@ -32,6 +32,7 @@ function makeContext(overrides: Partial<WorkflowContext> = {}): WorkflowContext 
     projectModel: {} as WorkflowContext['projectModel'],
     progress: { report: vi.fn(), reportMarkdown: vi.fn() },
     cancellation: { isCancelled: false, onCancelled: vi.fn() },
+    isAutonomous: false,
     ...overrides,
   };
 }
@@ -145,6 +146,7 @@ describe('StepExecutor', () => {
 
     expect(result.status).toBe('failed');
     expect(result.error).toContain('timed out');
+    expect(result.failureReason).toBe('timeout');
   });
 
   it('returns cancelled when cancellation is requested', async () => {
@@ -156,7 +158,28 @@ describe('StepExecutor', () => {
 
     const result = await executor.executeStep(makeStep(), ctx);
     expect(result.status).toBe('cancelled');
+    expect(result.failureReason).toBe('cancelled');
     expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('applies a sane minimum timeout floor for tiny configured budgets', async () => {
+    const handler: StepHandlerFn = vi.fn().mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve(successResult()), 100)),
+    );
+    const executor = new StepExecutor(handler);
+    const result = await executor.executeStep(
+      makeStep({ timeoutMs: 25 }),
+      makeContext({
+        executionPolicy: {
+          tool: { defaultMs: 15_000, maxMs: 25 },
+          network: { defaultMs: 10_000, maxMs: 30_000 },
+          git: { defaultMs: 8_000, maxMs: 20_000 },
+          deterministicRetries: true,
+        },
+      }),
+    );
+
+    expect(result.status).toBe('success');
   });
 
   it('escalates to two tiers up on attempt 5 (free → premium)', async () => {

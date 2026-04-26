@@ -1,4 +1,5 @@
-import type { ProjectConventions, GeneratedSection } from '../../types';
+import type { ProjectConventions } from '../../types';
+import type { GeneratedSection } from '../section-manager';
 
 /**
  * Render ProjectConventions into Markdown sections.

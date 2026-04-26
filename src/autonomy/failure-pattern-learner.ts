@@ -64,7 +64,8 @@ export class FailurePatternLearner {
       this.failureHistory.set(workflowId, []);
     }
 
-    const workflow = this.failureHistory.get(workflowId)!;
+    const workflow = this.failureHistory.get(workflowId);
+    if (!workflow) return;
     workflow.push({ stepId, failed, model, tokens });
   }
 
@@ -94,7 +95,8 @@ export class FailurePatternLearner {
           });
         }
 
-        const pattern = failureMap.get(execution.stepId)!;
+        const pattern = failureMap.get(execution.stepId);
+        if (!pattern) continue;
         if (execution.failed) {
           pattern.failCount++;
         } else {
@@ -102,7 +104,8 @@ export class FailurePatternLearner {
         }
 
         // Model-level metrics
-        const metrics = modelMetrics.get(execution.model)!;
+        const metrics = modelMetrics.get(execution.model);
+        if (!metrics) continue;
         metrics.total++;
         metrics.tokens += execution.tokens;
         if (execution.failed) {

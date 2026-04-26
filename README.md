@@ -15,20 +15,26 @@ Roadie is designed to be set up once and run forever in the background. It doesn
 ## 🚀 Getting Started
 
 ### 1. Installation
+
 Clone the repository and build the production bundle:
+
 ```powershell
 npm install
 npm run build
 ```
 
-### 2. Quick Launch
-Use the automated bootstrap script to start the server in any project:
+### 2. Start Server
+
+Start the MCP server from npm scripts:
+
 ```powershell
-./run_roadie.bat
+npm run start
 ```
 
 ### 3. MCP Registration
-Register Roadie in your MCP client (e.g., Claude Desktop Config):
+
+Register Roadie in Claude Code:
+
 ```json
 {
   "mcpServers": {
@@ -40,6 +46,8 @@ Register Roadie in your MCP client (e.g., Claude Desktop Config):
 }
 ```
 
+Roadie is designed for Claude Code project-local MCP registration.
+
 ## 🛠️ Integrated Learning Tools
 
 - **`roadie_analyze`**: Performs a deep tech-stack and pattern scan. Returns a rich markdown summary of your project's soul.
@@ -48,8 +56,16 @@ Register Roadie in your MCP client (e.g., Claude Desktop Config):
 ## 📊 Observability & Growth
 
 Roadie is a lifelong learner. You can monitor its progress through:
-- **`roadie.log`**: A persistent diagnostic trace of every thought and action Roadie takes in your project.
+
+- **`.claude/logs/roadie.log`**: A persistent diagnostic trace of every thought and action Roadie takes in your project.
 - **Learning Heartbeat**: On startup, Roadie reports its historical task success rate and total tasks completed, showing you how much it has grown.
+
+## Documentation
+
+- `docs/DEVELOPER_GUIDE.md`: Development rules and conventions.
+- `docs/MCP_REGISTRATION_GUIDE.md`: MCP setup and troubleshooting.
+- `docs/DOCUMENTATION_INDEX.md`: Navigation index for all docs.
+- `docs/PLAN.md`: Current development plan.
 
 ---
 *Roadie: Because you have better things to do than explain your codebase to an AI for the 100th time.*

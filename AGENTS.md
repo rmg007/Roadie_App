@@ -13,9 +13,13 @@ Custom notes added outside markers are preserved across regenerations.
 
 - **build**: `npm run build`
 - **build:watch**: `npm run build:watch`
+- **clean**: `npm run clean`
+- **rebuild**: `npm run rebuild`
+- **verify**: `npm run verify`
 - **lint**: `npm run lint`
 - **lint:fix**: `npm run lint:fix`
 - **format**: `npm run format`
+- **typecheck**: `npm run typecheck`
 - **test**: `npm run test`
 - **test:watch**: `npm run test:watch`
 - **test:coverage**: `npm run test:coverage`
@@ -27,58 +31,59 @@ Custom notes added outside markers are preserved across regenerations.
 
 | Role | Scope | Name in Dropdown |
 |------|-------|------------------|
-| Diagnostician | Bug location and root cause analysis | `agent: diagnostician` |
-| Fixer | Code fixes, minimal changes, pattern-following | `agent: fixer` |
-| Planner | Feature planning, architecture decisions | `agent: planner` |
-| Reviewer | Security, performance, quality, test coverage, standards | `agent: reviewer` |
-| Auditor | Context hygiene and security red-teaming | `agent: auditor` |
-| Documentarian | Documentation generation from source code | `agent: documentarian` |
+| Strategist | Orchestration, planning (Goal-Backward), and architecture | `agent: strategist` |
+| Builder | Core development (Interface-First), Backend, Frontend, DB | `agent: builder` |
+| Critic | Quality auditing, security, and scientific code review | `agent: critic` |
+| Delivery | Deployment, docs, and release integrity | `agent: delivery` |
+| Debugger | Scientific Debugging (Falsifiable Hypotheses) | `agent: debugger` |
 <!-- roadie:end:agent-roles -->
 
 <!-- roadie:start:workflows -->
 ## Available Workflows
 
-| Workflow | Trigger | Steps |
-|----------|---------|-------|
-| Bug Fix | `@roadie fix ...` | 8 |
-| Feature | `@roadie add/create/build ...` | 7 |
-| Refactor | `@roadie refactor/simplify ...` | 5 |
-| Review | `@roadie review ...` | 5 |
-| Audit | `@roadie audit ...` | 4 |
-| Document | `@roadie document/docs ...` | 4 |
-| Dependency | `@roadie upgrade/migrate ...` | 5 |
-| Onboard | `@roadie how does/where do I start ...` | 4 |
+| Workflow | Trigger | Steps | Methodology |
+|----------|---------|-------|-------------|
+| Bug Fix | `@roadie fix ...` | 8 | **EPIC** |
+| Feature | `@roadie add/create/build ...` | 7 | **EPIC** |
+| Refactor | `@roadie refactor/simplify ...` | 5 | **EPIC** |
+| Review | `@roadie review ...` | 5 | **EPIC** |
+| Document | `@roadie document/docs ...` | 4 | **EPIC** |
+| Dependency | `@roadie upgrade/migrate ...` | 5 | **EPIC** |
+| Onboard | `@roadie how does/where do I start ...` | 4 | **EPIC** |
 <!-- roadie:end:workflows -->
+
+<!-- roadie:start:core-principles -->
+## Core Engineering Principles (Level 4 Extreme Rigor)
+
+- **Goal-Backward Planning (Exit-Condition First):** Every task must define an **Observable Truth** before any code is written. Verbs like "improve" or "fix" are forbidden; use "Ensure X returns Y when Z".
+- **Adversarial Red-Teaming:** Before implementing any plan, you MUST list 3 failure modes ("Why this won't work") and their associated mitigations.
+- **Metacognitive Steering:** Every 3 turns, perform a self-audit: "Am I caught in a sunk-cost loop? Is there a simpler 'Wave 0' approach I missed?"
+- **Interface-First (Wave 0):** Define types and exports before implementation logic.
+- **WISC Token Hygiene (Contextual Bankruptcy):** Clean context at 80% saturation. Apply **Write-Isolate-Select-Compress** to all prompts.
+  | Phase | Action |
+  |-------|--------|
+  | **Write** | Externalize memory via progress/decision logs. |
+  | **Isolate** | Use auxiliary agents for research; return compressed summaries. |
+  | **Select** | Load only exact files needed. Use `.roadieignore`. |
+  | **Compress** | Hard-reset context at saturation limits. |
+- **Adaptive Processing:** Economy (Low) → Standard (Med) → Quality (High) → **Max Analytics (Extreme Rigor)**.
+<!-- roadie:end:core-principles -->
+
+<!-- roadie:start:interaction-patterns -->
+## Agent Interaction Patterns
+
+- **Writer-Reviewer:** Implementing agents are paired with an isolated Reviewer agent that audits changes for security and performance in real-time.
+- **Competing Hypotheses:** For complex systemic bugs, multiple agents are spawned on separate worktrees testing different solutions simultaneously.
+- **Structural Checkpoints:** All technical tasks must commit failing tests (TDD) before implementation code is authorized.
+<!-- roadie:end:interaction-patterns -->
 
 <!-- roadie:start:directory-structure -->
 ## Directory Structure
 
-- **Source:** roadie-App, src, analyzer, classifier, dictionary, engine, definitions, generator, __snapshots__, templates, learning, model, shell
-- **Tests:** __tests__
+- **Source:** roadie-App, src, analyzer, autonomy, classifier, cli, dictionary, engine, definitions, generator, __snapshots__, templates, learning, model, observability, platform-adapters, plugins, shell, spawner, tools, src, src, src, src, src, operations
+- **Tests:** __tests__, __tests__, test, benchmarks, e2e, fixtures, intent-classification, mixed-js-ts, nested-monorepo, packages, core, ui, node-js-nextjs, __tests__, ts-calculator, test
+- **Static assets:** assets
 <!-- roadie:end:directory-structure -->
-
-<!-- roadie:start:intelligence -->
-## Roadie Vision Intelligence
-
-Roadie uses a **LanceDB Vector Store** to manage code context and session history semantically.
-
-| Tool | Purpose | Recommendation |
-| :--- | :--- | :--- |
-| `roadie_semantic_search` | Find code by concept or intent | Use before broad grepping in large projects |
-| `roadie_context_audit` | Check token density and session health | Run when performance degrades or context >80% |
-| `roadie_security_audit` | Adversarial code review | Mandatory step after modifying security-sensitive files |
-<!-- roadie:end:intelligence -->
-
-<!-- roadie:start:safety -->
-## Roadie Safety & Rollback
-
-Roadie automatically creates **Git Checkpoints** before every autonomous synchronization cycle.
-
-| Tool | Purpose | Recommendation |
-| :--- | :--- | :--- |
-| `roadie_rollback` | Revert project to last known good state | Use if an autonomous sync breaks the build or architectural integrity |
-| `ROADIE_DRY_RUN` | Simulate changes without writing to disk | Set this environment variable to `1` when testing new templates or risky generators |
-<!-- roadie:end:safety -->
 
 <!-- roadie:start:coding-standards -->
 ## Coding Standards

@@ -9,6 +9,7 @@ import type { GeneratedSection } from '../section-manager';
 
 import * as path from 'node:path';
 import { renderConventionsString } from './template-utils';
+import { OPERATING_RULES_PATH, ROADIE_AGENTS_DIR } from '../output-paths';
 
 export interface GranularAgentFile {
   id: string;
@@ -145,7 +146,7 @@ export function generateGranularAgents(model: ProjectModel): GranularAgentFile[]
         `## Execution Strategy\n` +
         agent.strategy.map(log => `- ${log}`).join('\n') + `\n\n` +
         `## Context Guidance\n` +
-        `- Refer to \`.github/AGENT_OPERATING_RULES.md\` for global constraints.\n` +
+        `- Refer to \`${OPERATING_RULES_PATH}\` for global constraints.\n` +
         `- When starting a task, read the latest context in \`docs/PLAN.md\` (if present).\n` +
         (convString ? `## Project Conventions\n${convString}\n` : '')
     }];
@@ -153,7 +154,7 @@ export function generateGranularAgents(model: ProjectModel): GranularAgentFile[]
     return {
       id: agent.id,
       name: agent.name,
-      filePath: `.github/agents/${agent.id}.agent.md`,
+      filePath: `${ROADIE_AGENTS_DIR}/${agent.id}.agent.md`,
       sections,
       preamble
     };

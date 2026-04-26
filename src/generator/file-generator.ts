@@ -1,9 +1,9 @@
 /**
  * @module file-generator
- * @description Orchestrates generation of all .github/ files and AGENTS.md.
+ * @description Orchestrates generation of all .roadie/ files and AGENTS.md.
  *   Reads project model, calls templates, uses section-manager for markers
  *   and hash comparison. Skips write if content identical. Creates
- *   .github/.roadie/.gitignore on first run.
+ *   .roadie/.gitignore on first run.
  *   Records each written file as a snapshot in LearningDatabase (if available).
  * @inputs ProjectModel, workspace root path, optional LearningDatabase,
  *   optional FileSystemProvider
@@ -16,23 +16,26 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { ProjectModel, GeneratedFile, GeneratedFileType, WriteReason } from '../types';
+import type { LearningDatabase } from '../learning/learning-database';
 import { buildSectionedFile, hashContent, type GeneratedSection } from './section-manager';
-import {
-  generateCopilotInstructions,
-  COPILOT_INSTRUCTIONS_PATH,
-} from './templates/copilot-instructions';
-import { generateAgentDefinitions, AGENTS_MD_PATH } from './templates/agent-definitions';
-import { generateClaudeMd, CLAUDE_MD_PATH } from './templates/claude-md';
-import { generateCursorRules, buildCursorRulesPreamble, CURSOR_RULES_PATH } from './templates/cursor-rules';
-import { generatePathInstructions } from './templates/path-instructions';
-import { generateCursorRulesDir } from './templates/cursor-rules-dir';
-import { generateOperatingRules, OPERATING_RULES_PATH } from './templates/operating-rules';
-import { generateProjectModelJson, PROJECT_MODEL_JSON_PATH } from './templates/project-model-json';
-import { generateMcpConfig, MCP_CONFIG_PATH } from './templates/mcp-config';
-import { generatePromptsMd, PROMPTS_MD_PATH } from './templates/prompts-md';
+import { generateCopilotInstructions } from './templates/copilot-instructions';
+import { generateAgentDefinitions } from './templates/agent-definitions';
+import { generateClaudeMd } from './templates/claude-md';
+import { generateOperatingRules } from './templates/operating-rules';
+import { generateProjectModelJson } from './templates/project-model-json';
+import { generatePromptsMd } from './templates/prompts-md';
 import { generateGranularAgents } from './templates/granular-agents';
 import { FrontendDesignSkill } from './templates/frontend-design';
 import { EngineeringRigorSkill } from './templates/engineering-rigor';
+import {
+  AGENTS_MD_PATH,
+  CLAUDE_MD_PATH,
+  OPERATING_RULES_PATH,
+  PROJECT_MODEL_JSON_PATH,
+  PROMPTS_MD_PATH,
+  ROADIE_INSTRUCTIONS_PATH,
+  ROADIE_OUTPUT_DIR,
+} from './output-paths';
 import type { FileSystemProvider } from '../providers';
 import type { Logger } from '../platform-adapters';
 import { CONSOLE_LOGGER } from '../platform-adapters';
@@ -61,8 +64,8 @@ export class FileGenerator {
     this.fileSystem = fileSystem ?? null;
     this.fileSpecs = [
       {
-        type:     'copilot_instructions',
-        path:     COPILOT_INSTRUCTIONS_PATH,
+        type:     'roadie_instructions',
+        path:     ROADIE_INSTRUCTIONS_PATH,
         generate: (model) => generateCopilotInstructions(model),
       },
       {
@@ -74,12 +77,6 @@ export class FileGenerator {
         type:     'claude_md',
         path:     CLAUDE_MD_PATH,
         generate: (model) => generateClaudeMd(model),
-      },
-      {
-        type:     'cursor_rules',
-        path:     CURSOR_RULES_PATH,
-        generate: (model) => generateCursorRules(model),
-        preamble: buildCursorRulesPreamble,
       },
       {
         type:     'agent_operating_rules',
@@ -113,7 +110,7 @@ export class FileGenerator {
    * and emits an audit event on every write or block.
    */
   private async safeWrite(fullPath: string, content: string, reason: WriteReason): Promise<boolean> {
-    const cfg = getConfig();
+    const cfg = getConfig(this.workspaceRoot);
     const audit = getAuditLog(this.workspaceRoot);
     const relativePath = path.relative(this.workspaceRoot, fullPath);
 
@@ -133,12 +130,12 @@ export class FileGenerator {
       return false;
     }
 
-    // Safe mode: only allow writes inside .github/ (Roadie's own output directory)
+    // Safe mode: only allow writes inside .claude/roadie/ (Roadie's own output directory)
     if (cfg.safeMode) {
-      const isRoadieOwned = relativePath.startsWith('.github') || relativePath.startsWith('.roadie');
+      const isRoadieOwned = relativePath.startsWith(ROADIE_OUTPUT_DIR);
       if (!isRoadieOwned) {
-        this.log.warn(`FileGenerator: SAFE MODE - blocked write to ${relativePath}. Only .github/ and .roadie/ allowed.`);
-        audit.append({ type: 'dry_run_blocked', filePath: relativePath, message: 'safe-mode: write outside .github/ blocked' });
+        this.log.warn(`FileGenerator: SAFE MODE - blocked write to ${relativePath}. Only ${ROADIE_OUTPUT_DIR}/ allowed.`);
+        audit.append({ type: 'dry_run_blocked', filePath: relativePath, message: `safe-mode: write outside ${ROADIE_OUTPUT_DIR}/ blocked` });
         return false;
       }
     }
@@ -164,14 +161,6 @@ export class FileGenerator {
     // Granular agents: multi-file output
     const agentResults = await this.generateGranularAgentFiles(model);
     results.push(...agentResults);
-
-    // Path-instructions: multi-file output
-    const pathResults = await this.generatePathInstructionFiles(model);
-    results.push(...pathResults);
-
-    // Cursor per-directory MDC rules: multi-file output
-    const cursorDirResults = await this.generateCursorRulesDirFiles(model);
-    results.push(...cursorDirResults);
 
     // Skill library: multi-file output
     const skillResults = await this.generateSkillFiles(model);
@@ -199,7 +188,7 @@ export class FileGenerator {
 
       if (existingContent !== null && hashContent(existingContent) === newHash) {
         results.push({
-          type: 'skill' as any,
+          type: 'skill' as unknown as GeneratedFileType,
           path: skill.path,
           content: existingContent,
           contentHash: `sha256:${newHash}`,
@@ -211,7 +200,7 @@ export class FileGenerator {
 
       if (this.isFileOpenInEditor(fullPath)) {
         results.push({
-          type: 'skill' as any,
+          type: 'skill' as unknown as GeneratedFileType,
           path: skill.path,
           content,
           contentHash: `sha256:${newHash}`,
@@ -228,7 +217,7 @@ export class FileGenerator {
       } catch (err: unknown) {
         this.log.warn(`FileGenerator: failed to write skill ${skill.path}`, err);
         results.push({
-          type: 'skill' as any,
+          type: 'skill' as unknown as GeneratedFileType,
           path: skill.path,
           content,
           contentHash: `sha256:${newHash}`,
@@ -240,7 +229,7 @@ export class FileGenerator {
 
       if (written) this.log.info(`FileGenerator: wrote skill ${skill.path} (reason=${writeReason})`);
       results.push({
-        type: 'skill' as any,
+        type: 'skill' as unknown as GeneratedFileType,
         path: skill.path,
         content,
         contentHash: `sha256:${newHash}`,
@@ -326,164 +315,6 @@ export class FileGenerator {
         content,
         contentHash: `sha256:${newHash}`,
         written: agentWritten,
-        writeReason,
-      });
-    }
-
-    return results;
-  }
-
-  /**
-   * Generate per-directory .github/instructions/ files.
-   */
-  private async generatePathInstructionFiles(model: ProjectModel): Promise<GeneratedFile[]> {
-    const files = generatePathInstructions(model, this.workspaceRoot, { simplified: false });
-    const results: GeneratedFile[] = [];
-
-    for (const file of files) {
-      const { buildSectionedFile: bsf } = await import('./section-manager');
-      const content = bsf(file.sections);
-      const fullPath = path.join(this.workspaceRoot, file.filePath);
-      const newHash  = hashContent(content);
-
-      let existingContent: string | null = null;
-      try {
-        existingContent = await fs.readFile(fullPath, 'utf8');
-      } catch { /* new file */ }
-
-      if (existingContent !== null && hashContent(existingContent) === newHash) {
-        results.push({
-          type: 'path_instructions',
-          path: file.filePath,
-          content: existingContent,
-          contentHash: `sha256:${newHash}`,
-          written: false,
-          writeReason: 'unchanged',
-        });
-        continue;
-      }
-
-      if (this.isFileOpenInEditor(fullPath)) {
-        results.push({
-          type: 'path_instructions',
-          path: file.filePath,
-          content,
-          contentHash: `sha256:${newHash}`,
-          written: false,
-          writeReason: 'deferred',
-        });
-        continue;
-      }
-
-      const writeReason: WriteReason = existingContent === null ? 'new' : 'updated';
-      let pathWritten = false;
-      try {
-        pathWritten = await this.safeWrite(fullPath, content, writeReason);
-      } catch (err: unknown) {
-        this.log.warn(`FileGenerator: failed to write ${file.filePath}`, err);
-        results.push({
-          type: 'path_instructions',
-          path: file.filePath,
-          content,
-          contentHash: `sha256:${newHash}`,
-          written: false,
-          writeReason: 'error' as WriteReason,
-        });
-        continue;
-      }
-
-      if (pathWritten) {
-        this.log.info(`FileGenerator: wrote ${file.filePath} (reason=${writeReason})`);
-        if (this.learningDb) {
-          try { this.learningDb.recordSnapshot(file.filePath, content, 'roadie'); } catch { /* non-critical */ }
-        }
-      }
-
-      results.push({
-        type: 'path_instructions',
-        path: file.filePath,
-        content,
-        contentHash: `sha256:${newHash}`,
-        written: pathWritten,
-        writeReason,
-      });
-    }
-
-    return results;
-  }
-
-  /**
-   * Generate per-directory .cursor/rules/ MDC files.
-   */
-  private async generateCursorRulesDirFiles(model: ProjectModel): Promise<GeneratedFile[]> {
-    const files = generateCursorRulesDir(model, { simplified: false });
-    const results: GeneratedFile[] = [];
-
-    for (const file of files) {
-      const { buildSectionedFile: bsf } = await import('./section-manager');
-      const content = file.preamble + bsf(file.sections);
-      const fullPath = path.join(this.workspaceRoot, file.filePath);
-      const newHash  = hashContent(content);
-
-      let existingContent: string | null = null;
-      try {
-        existingContent = await fs.readFile(fullPath, 'utf8');
-      } catch { /* new file */ }
-
-      if (existingContent !== null && hashContent(existingContent) === newHash) {
-        results.push({
-          type: 'cursor_rules_dir' as GeneratedFileType,
-          path: file.filePath,
-          content: existingContent,
-          contentHash: `sha256:${newHash}`,
-          written: false,
-          writeReason: 'unchanged',
-        });
-        continue;
-      }
-
-      if (this.isFileOpenInEditor(fullPath)) {
-        results.push({
-          type: 'cursor_rules_dir' as GeneratedFileType,
-          path: file.filePath,
-          content,
-          contentHash: `sha256:${newHash}`,
-          written: false,
-          writeReason: 'deferred',
-        });
-        continue;
-      }
-
-      const writeReason: WriteReason = existingContent === null ? 'new' : 'updated';
-      let cursorWritten = false;
-      try {
-        cursorWritten = await this.safeWrite(fullPath, content, writeReason);
-      } catch (err: unknown) {
-        this.log.warn(`FileGenerator: failed to write ${file.filePath}`, err);
-        results.push({
-          type: 'cursor_rules_dir' as GeneratedFileType,
-          path: file.filePath,
-          content,
-          contentHash: `sha256:${newHash}`,
-          written: false,
-          writeReason: 'error' as WriteReason,
-        });
-        continue;
-      }
-
-      if (cursorWritten) {
-        this.log.info(`FileGenerator: wrote ${file.filePath} (reason=${writeReason})`);
-        if (this.learningDb) {
-          try { this.learningDb.recordSnapshot(file.filePath, content, 'roadie'); } catch { /* non-critical */ }
-        }
-      }
-
-      results.push({
-        type: 'cursor_rules_dir' as GeneratedFileType,
-        path: file.filePath,
-        content,
-        contentHash: `sha256:${newHash}`,
-        written: cursorWritten,
         writeReason,
       });
     }
@@ -606,17 +437,17 @@ export class FileGenerator {
   }
 
   /**
-   * Ensure .github/.roadie/.gitignore exists with database exclusion.
+   * Ensure .claude/roadie/.gitignore exists with database exclusion.
    */
   private async ensureGitignore(): Promise<void> {
-    const gitignorePath = path.join(this.workspaceRoot, '.github', '.roadie', '.gitignore');
+    const gitignorePath = path.join(this.workspaceRoot, ROADIE_OUTPUT_DIR, '.gitignore');
     try {
       await fs.access(gitignorePath);
-      this.log.debug('FileGenerator: .github/.roadie/.gitignore already exists');
+      this.log.debug(`FileGenerator: ${ROADIE_OUTPUT_DIR}/.gitignore already exists`);
     } catch {
       await fs.mkdir(path.dirname(gitignorePath), { recursive: true });
-      await fs.writeFile(gitignorePath, 'project-model.db\n*.db-journal\n', 'utf8');
-      this.log.info('FileGenerator: created .github/.roadie/.gitignore');
+      await fs.writeFile(gitignorePath, 'project-model.db\n*.db-journal\n*.lance\n', 'utf8');
+      this.log.info(`FileGenerator: created ${ROADIE_OUTPUT_DIR}/.gitignore`);
     }
   }
 }

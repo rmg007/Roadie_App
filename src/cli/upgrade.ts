@@ -5,7 +5,7 @@
  */
 
 import { execSync } from 'node:child_process';
-import * as fs from 'node:fs';
+import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { z } from 'zod';
 
@@ -21,13 +21,12 @@ export type UpgradeResult = z.infer<typeof UpgradeResultSchema>;
 /**
  * Get the current version from package.json
  */
-function getCurrentVersion(): string {
+async function getCurrentVersion(): Promise<string> {
   try {
     const packagePath = path.resolve(__dirname, '..', '..', 'package.json');
-    if (fs.existsSync(packagePath)) {
-      const pkg = JSON.parse(fs.readFileSync(packagePath, 'utf-8'));
-      return pkg.version || '0.0.0';
-    }
+    const pkgRaw = await fs.readFile(packagePath, 'utf-8');
+    const pkg = JSON.parse(pkgRaw) as { version?: string };
+    return pkg.version || '0.0.0';
   } catch {
     // Fallback
   }
@@ -50,7 +49,7 @@ async function getLatestVersion(): Promise<string> {
  * Upgrade Roadie to the latest version
  */
 export async function upgradeRoadie(): Promise<UpgradeResult> {
-  const oldVersion = getCurrentVersion();
+  const oldVersion = await getCurrentVersion();
 
   try {
     const latestVersion = await getLatestVersion();
@@ -76,7 +75,7 @@ export async function upgradeRoadie(): Promise<UpgradeResult> {
     // Attempt upgrade
     execSync('npm install -g roadie@latest', { stdio: 'inherit' });
 
-    const newVersion = getCurrentVersion();
+    const newVersion = await getCurrentVersion();
 
     return {
       success: true,

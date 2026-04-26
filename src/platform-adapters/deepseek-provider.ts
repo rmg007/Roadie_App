@@ -51,9 +51,9 @@ export class DeepSeekProvider implements ModelProvider {
       throw new Error(`DeepSeek API Error: ${response.statusText} - ${err}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as { choices: Array<{ message: { content: string } }>; usage: { prompt_tokens: number; completion_tokens: number } };
     return {
-      text: data.choices[0].message.content,
+      text: data.choices[0]?.message.content ?? '',
       toolCalls: [], // DeepSeek supports tools, but we'll keep it simple for now
       usage: {
         inputTokens: data.usage.prompt_tokens,

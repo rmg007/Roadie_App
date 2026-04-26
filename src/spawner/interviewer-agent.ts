@@ -16,11 +16,11 @@ export interface InterviewResult {
 
 export class InterviewerAgent {
   constructor(
-    private modelProvider: any,
+    private modelProvider: unknown,
     private progress: ProgressReporter,
   ) {}
 
-  async conduct(context: WorkflowContext, modelTier: ModelTier): Promise<InterviewResult> {
+  async conduct(_context: WorkflowContext, _modelTier: ModelTier): Promise<InterviewResult> {
     return {
       transcript: ['[Stub: interview not yet implemented]'],
       requirementsBrief: 'Interview phase deferred to Phase 2.',

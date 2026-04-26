@@ -5,7 +5,7 @@
  *   (7) Quality Review, (8) Commit.
  */
 
-import type { WorkflowDefinition } from '../../types';
+import type { WorkflowDefinition, WorkflowStep } from '../../types';
 
 export const FEATURE_WORKFLOW: WorkflowDefinition = {
   id: 'feature',
@@ -21,7 +21,7 @@ export const FEATURE_WORKFLOW: WorkflowDefinition = {
       timeoutMs: 180_000,
       maxRetries: 0,
       contextScope: 'full' as const,
-    } as any,
+    } as unknown as WorkflowStep,
     {
       id: 'present-plan',
       name: 'Presenting plan for approval',
@@ -65,7 +65,7 @@ export const FEATURE_WORKFLOW: WorkflowDefinition = {
           agentRole: 'database_agent',
           modelTier: 'standard',
           timeoutMs: 120_000,
-        } as any,
+        } as unknown as WorkflowStep,
         {
           id: 'implement-backend',
           name: 'Backend implementation',
@@ -73,7 +73,7 @@ export const FEATURE_WORKFLOW: WorkflowDefinition = {
           agentRole: 'backend_agent',
           modelTier: 'standard',
           timeoutMs: 120_000,
-        } as any,
+        } as unknown as WorkflowStep,
         {
           id: 'build-frontend',
           name: 'Frontend implementation',
@@ -81,7 +81,7 @@ export const FEATURE_WORKFLOW: WorkflowDefinition = {
           agentRole: 'frontend_agent',
           modelTier: 'standard',
           timeoutMs: 120_000,
-        } as any,
+        } as unknown as WorkflowStep,
       ],
     },
     {

@@ -163,7 +163,7 @@ export async function handleRoadieChat(
   const context: WorkflowContext = {
     prompt: message,
     intent: classification,
-    projectModel: {} as any, // TODO: Initialize from container
+    projectModel: {} as WorkflowContext['projectModel'], // TODO: Initialize from container
     progress,
     cancellation,
     isAutonomous: false,
